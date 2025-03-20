@@ -1,0 +1,7 @@
+2024-10-11 22:49:29: FPDF error: Can't open image file: ../public/image/logo.png
+#0 C:\xampp\htdocs\lato\helpers\fpdf\fpdf.php(1276): FPDF->Error('Can't open imag...')
+#1 C:\xampp\htdocs\lato\helpers\fpdf\fpdf.php(890): FPDF->_parsepng('../public/image...')
+#2 C:\xampp\htdocs\lato\views\generate_report.php(23): FPDF->Image('../public/image...', 10, 6, 30)
+#3 C:\xampp\htdocs\lato\helpers\fpdf\fpdf.php(330): PDF->Header()
+#4 C:\xampp\htdocs\lato\views\generate_report.php(104): FPDF->AddPage()
+#5 {main}
