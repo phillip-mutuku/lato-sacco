@@ -292,7 +292,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                                                 <option value="Afya">Afya loan (emergency)</option>
                                                 <option value="Faida">Faida loan (livestock based)</option>
                                                 <option value="Mkulima">Mkulima loan (agri based)</option>
-                                                <option value="Fly">Fly loan (education purposed)</option>
+                                                <option value="Fly">Usafi loan</option>
                                             </select>
                                         </div>
                                         <div class="form-group">
@@ -379,7 +379,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                                                                             <option value="Afya" <?php echo ($product['loan_type'] == 'Afya') ? 'selected' : ''; ?>>Afya loan (emergency)</option>
                                                                             <option value="Faida" <?php echo ($product['loan_type'] == 'Faida') ? 'selected' : ''; ?>>Faida loan (livestock based)</option>
                                                                             <option value="Mkulima" <?php echo ($product['loan_type'] == 'Mkulima') ? 'selected' : ''; ?>>Mkulima loan (agri based)</option>
-                                                                            <option value="Fly" <?php echo ($product['loan_type'] == 'Fly') ? 'selected' : ''; ?>>Fly loan (education purposed)</option>
+                                                                            <option value="Fly" <?php echo ($product['loan_type'] == 'Fly') ? 'selected' : ''; ?>>Usafi loan</option>
                                                                         </select>
                                                                     </div>
                                                                     <div class="form-group">

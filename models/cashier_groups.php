@@ -5,9 +5,9 @@ require_once '../config/class.php';
 $db = new db_class();
 
 // Check if user is logged in and is either an admin or manager
-if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'manager')) {
+if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'cashier' && $_SESSION['role'] !== 'manager')) {
     $_SESSION['error_msg'] = "Unauthorized access";
-    header('Location: index.php');
+    header('Location: ../views/index.php');
     exit();
 }
 
@@ -692,7 +692,7 @@ $groups_result = $db->conn->query($groups_list_query);
                                                     Action
                                                 </button>
                                                 <div class="dropdown-menu">
-                                                    <a class="dropdown-item" href="manage_group.php?id=<?php echo $row['group_id']; ?>">
+                                                    <a class="dropdown-item" href="cashier_manage_group.php?id=<?php echo $row['group_id']; ?>">
                                                         <i class="fas fa-users fa-fw"></i> Manage Group
                                                     </a>
                                                     <button type="button" class="dropdown-item edit-group" data-id="<?php echo $row['group_id']; ?>">

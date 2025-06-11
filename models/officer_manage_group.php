@@ -569,7 +569,6 @@ $monthlyWithdrawals = groupByMonth($withdrawals, 'date_withdrawn', 'amount');
                     <div class="form-group">
                         <label>Receipt Number</label>
                         <input type="text" name="receipt_no" class="form-control" required>
-                        <small class="text-muted">This must be unique</small>
                     </div>
                     <div class="form-group">
                         <label>Select Member</label>
@@ -620,7 +619,6 @@ $monthlyWithdrawals = groupByMonth($withdrawals, 'date_withdrawn', 'amount');
                     <div class="form-group">
                         <label>Receipt Number</label>
                         <input type="text" name="receipt_no" class="form-control" required>
-                        <small class="text-muted">This must be unique</small>
                     </div>
                     <div class="form-group">
                         <label>Select Member</label>
@@ -748,55 +746,6 @@ $monthlyWithdrawals = groupByMonth($withdrawals, 'date_withdrawn', 'amount');
     });
 
 
-     // Check receipt number uniqueness for savings
-     $('#addSavingsForm input[name="receipt_no"]').blur(function() {
-        var receiptNo = $(this).val().trim();
-        if (receiptNo) {
-            checkReceiptNumber(receiptNo, 'savings');
-        }
-    });
-
-    // Check receipt number uniqueness for withdrawals
-    $('#withdrawForm input[name="receipt_no"]').blur(function() {
-        var receiptNo = $(this).val().trim();
-        if (receiptNo) {
-            checkReceiptNumber(receiptNo, 'withdrawal');
-        }
-    });
-
-
-
-    //check receipt number
-    function checkReceiptNumber(receiptNo, type) {
-    if (!receiptNo) return; // Don't check if empty
-    
-    $.ajax({
-        url: '../controllers/groupController.php',
-        method: 'POST',
-        data: {
-            action: 'checkReceiptNo',
-            receipt_no: receiptNo,
-            type: type
-        },
-        dataType: 'json',
-        success: function(response) {
-            if (response.status === 'error') {
-                alert('This receipt number is already in use. Please use a different one.');
-                if (type === 'savings') {
-                    $('#addSavingsForm input[name="receipt_no"]').val('');
-                } else {
-                    $('#withdrawForm input[name="receipt_no"]').val('');
-                }
-            }
-        },
-        error: function() {
-            console.log('Error checking receipt number');
-        }
-    });
-}
-
-
-    // Print Receipt functionality
 // Print Receipt functionality
 $('.print-receipt').click(function() {
     var id = $(this).data('id');

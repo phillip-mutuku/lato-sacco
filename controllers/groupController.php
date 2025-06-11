@@ -622,39 +622,6 @@ class GroupController {
         }
     }
 
-///check receipt no
-public function checkReceiptNumber($receiptNo, $type) {
-    try {
-        // Determine which table to check based on type
-        $table = ($type === 'savings') ? 'group_savings' : 'group_withdrawals';
-        
-        // Check both tables for the receipt number to ensure complete uniqueness
-        $query = "SELECT COUNT(*) as count FROM $table WHERE receipt_no = ?";
-        $stmt = $this->db->conn->prepare($query);
-        $stmt->bind_param("s", $receiptNo);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $count = $result->fetch_assoc()['count'];
-
-        if ($count > 0) {
-            return json_encode([
-                'status' => 'error',
-                'message' => 'Receipt number already exists'
-            ]);
-        }
-
-        return json_encode([
-            'status' => 'success',
-            'message' => 'Receipt number is available'
-        ]);
-    } catch (Exception $e) {
-        return json_encode([
-            'status' => 'error',
-            'message' => $e->getMessage()
-        ]);
-    }
-}
-
 
 
 
@@ -667,15 +634,6 @@ public function checkReceiptNumber($receiptNo, $type) {
     
             // Begin transaction
             $this->db->conn->begin_transaction();
-    
-            // Check receipt number again before saving
-            $check_query = "SELECT id FROM group_savings WHERE receipt_no = ?";
-            $stmt = $this->db->conn->prepare($check_query);
-            $stmt->bind_param("s", $data['receipt_no']);
-            $stmt->execute();
-            if ($stmt->get_result()->num_rows > 0) {
-                throw new Exception("Receipt number already exists");
-            }
     
             // Insert savings record
             $insert_query = "INSERT INTO group_savings 
@@ -722,6 +680,8 @@ public function checkReceiptNumber($receiptNo, $type) {
             return json_encode(['status' => 'error', 'message' => $e->getMessage()]);
         }
     }
+
+
     
     public function withdraw($data) {
         try {
@@ -731,15 +691,7 @@ public function checkReceiptNumber($receiptNo, $type) {
     
             // Begin transaction
             $this->db->conn->begin_transaction();
-    
-            // Check receipt number
-            $check_query = "SELECT id FROM group_withdrawals WHERE receipt_no = ?";
-            $stmt = $this->db->conn->prepare($check_query);
-            $stmt->bind_param("s", $data['receipt_no']);
-            $stmt->execute();
-            if ($stmt->get_result()->num_rows > 0) {
-                throw new Exception("Receipt number already exists");
-            }
+
     
             // Check available balance
             $balance_query = "SELECT 
@@ -1059,20 +1011,6 @@ if (isset($_POST['action']) || isset($_GET['action'])) {
         case 'withdraw':
             echo $groupController->withdraw($_POST);
             break;
-
-        case 'checkReceiptNo':
-                if (isset($_POST['receipt_no']) && isset($_POST['type'])) {
-                    echo $groupController->checkReceiptNumber(
-                        $_POST['receipt_no'],
-                        $_POST['type']
-                    );
-                } else {
-                    echo json_encode([
-                        'status' => 'error',
-                        'message' => 'Missing required parameters'
-                    ]);
-                }
-                break;
 
         case 'getReceiptDetails':
                     if (!isset($_POST['id']) || !isset($_POST['type'])) {
