@@ -624,12 +624,27 @@ class GroupController {
 
 
 
+    private function sanitizeReceiptNumber($receiptNo) {
+        // Remove any potentially harmful characters but keep alphanumeric and common separators
+        $receiptNo = trim($receiptNo);
+        // Allow letters, numbers, hyphens, underscores, and dots
+        $receiptNo = preg_replace('/[^A-Za-z0-9\-_.]/', '', $receiptNo);
+        return $receiptNo;
+    }
+
 
     // Add savings
     public function addSavings($data) {
         try {
             if (!$this->validateAmount($data['amount'])) {
                 throw new Exception("Invalid amount");
+            }
+    
+            // Sanitize the receipt number specifically
+            $receipt_no = $this->sanitizeReceiptNumber($data['receipt_no']);
+            
+            if (empty($receipt_no)) {
+                throw new Exception("Invalid receipt number format");
             }
     
             // Begin transaction
@@ -646,11 +661,11 @@ class GroupController {
                 $data['amount'],
                 $data['payment_mode'],
                 $_SESSION['user_id'],
-                $data['receipt_no']
+                $receipt_no  // Use sanitized receipt number
             );
     
             if ($stmt->execute()) {
-                // Add transaction record with group_id and receipt_no
+                // Add transaction record
                 $transaction_query = "INSERT INTO transactions 
                                     (account_id, group_id, type, amount, description, receipt_no, payment_mode, served_by) 
                                     VALUES (?, ?, 'Group Savings', ?, ?, ?, ?, ?)";
@@ -661,7 +676,7 @@ class GroupController {
                     $data['group_id'],
                     $data['amount'],
                     $description,
-                    $data['receipt_no'],
+                    $receipt_no,
                     $data['payment_mode'],
                     $_SESSION['user_id']
                 );
@@ -689,9 +704,15 @@ class GroupController {
                 throw new Exception("Invalid amount");
             }
     
+            // Sanitize the receipt number specifically
+            $receipt_no = $this->sanitizeReceiptNumber($data['receipt_no']);
+            
+            if (empty($receipt_no)) {
+                throw new Exception("Invalid receipt number format");
+            }
+    
             // Begin transaction
             $this->db->conn->begin_transaction();
-
     
             // Check available balance
             $balance_query = "SELECT 
@@ -722,11 +743,11 @@ class GroupController {
                 $data['amount'],
                 $data['payment_mode'],
                 $_SESSION['user_id'],
-                $data['receipt_no']
+                $receipt_no  // Use sanitized receipt number
             );
     
             if ($stmt->execute()) {
-                // Add transaction record with group_id and receipt_no
+                // Add transaction record
                 $transaction_query = "INSERT INTO transactions 
                                     (account_id, group_id, type, amount, description, receipt_no, payment_mode, served_by) 
                                     VALUES (?, ?, 'Group Withdrawal', ?, ?, ?, ?, ?)";
@@ -737,7 +758,7 @@ class GroupController {
                     $data['group_id'],
                     $data['amount'],
                     $description,
-                    $data['receipt_no'],
+                    $receipt_no,
                     $data['payment_mode'],
                     $_SESSION['user_id']
                 );
@@ -756,6 +777,8 @@ class GroupController {
             return json_encode(['status' => 'error', 'message' => $e->getMessage()]);
         }
     }
+
+
 
     // Get receipt details
     public function getReceiptDetails($id, $type) {

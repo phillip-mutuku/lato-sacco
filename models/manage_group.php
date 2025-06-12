@@ -955,8 +955,41 @@ function showMessage(message, type) {
             });
         });
 
+
+        // Receipt number validation
+            function validateReceiptNumber(input) {
+                const value = input.val().trim();
+                const pattern = /^[A-Za-z0-9\-_.]+$/;
+                
+                if (value && !pattern.test(value)) {
+                    input.addClass('is-invalid');
+                    if (!input.next('.invalid-feedback').length) {
+                        input.after('<div class="invalid-feedback">Use only letters, numbers, hyphens, underscores, and dots</div>');
+                    }
+                    return false;
+                } else {
+                    input.removeClass('is-invalid');
+                    input.next('.invalid-feedback').remove();
+                    return true;
+                }
+            }
+
+            // Apply validation on input
+            $('#addSavingsForm input[name="receipt_no"], #withdrawForm input[name="receipt_no"]').on('input', function() {
+                validateReceiptNumber($(this));
+            });
+
+            // Validate before form submission
+            $('#addSavingsForm, #withdrawForm').on('submit', function(e) {
+                const receiptInput = $(this).find('input[name="receipt_no"]');
+                if (!validateReceiptNumber(receiptInput)) {
+                    e.preventDefault();
+                    alert('Please enter a valid receipt number (letters, numbers, hyphens, underscores, and dots only)');
+                    return false;
+                }
+            });
+
         // Add Savings Form Submit
-         // Update form submission handlers to include receipt number
     $('#addSavingsForm').submit(function(e) {
         e.preventDefault();
         var formData = $(this).serialize() + '&action=addSavings';
