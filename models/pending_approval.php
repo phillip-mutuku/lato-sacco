@@ -26,263 +26,126 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
     <style>
         .modal-lg { max-width: 80% !important; }
         .form-group label { font-weight: bold; }
-        html, body { overflow-x: hidden; }
-        #accordionSidebar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            height: 100vh;
-            z-index: 1000;
-            overflow-y: auto;
-            width: 225px;
-            transition: width 0.3s ease;
-        }
-        #content-wrapper {
-            margin-left: 225px;
-            width: calc(100% - 225px);
-            transition: margin-left 0.3s ease, width 0.3s ease;
-        }
-        .topbar {
-            position: fixed;
-            top: 0;
-            right: 0;
-            left: 225px;
-            z-index: 1000;
-            transition: left 0.3s ease;
-        }
+
         .container-fluid {
             margin-top: 70px;
             padding-left: 1.5rem;
             padding-right: 1.5rem;
-        }
-        @media (max-width: 768px) {
-            #accordionSidebar { width: 100px; }
-            #content-wrapper {
-                margin-left: 100px;
-                width: calc(100% - 100px);
-            }
-            .topbar { left: 100px; }
-            .sidebar .nav-item .nav-link span { display: none; }
         }
         .container-fluid .card {
             box-shadow: rgba(50, 50, 93, 0.25) 0px 13px 27px -5px, rgba(0, 0, 0, 0.3) 0px 8px 16px -8px;
             border: 0;
         }
 
-
-
         .toast-container {
             position: fixed;
-            top: 20px;
+            top: 80px;
             right: 20px;
-            z-index: 1051;
+            z-index: 1055;
+            max-width: 350px;
         }
         
-        /* Custom styles for toasts */
+        /* Enhanced toast styles */
         .toast {
-            min-width: 250px;
+            min-width: 300px;
+            border: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         }
         
         .toast-header {
             color: #fff;
+            border-bottom: none;
+            font-weight: 600;
         }
         
         .toast-header.bg-success {
-            background-color: #28a745 !important;
+            background: linear-gradient(45deg, #28a745, #20c997) !important;
         }
         
         .toast-header.bg-danger {
-            background-color: #dc3545 !important;
+            background: linear-gradient(45deg, #dc3545, #e74c3c) !important;
+        }
+        
+        .toast-header.bg-warning {
+            background: linear-gradient(45deg, #ffc107, #fd7e14) !important;
+        }
+        
+        .toast-body {
+            padding: 1rem;
+            color: #495057;
+            font-size: 0.9rem;
+        }
+
+        /* Payment terms styling */
+        .payment-terms {
+            font-size: 0.85em;
+            color: #495057;
+        }
+        .payment-terms .term-months {
+            font-weight: bold;
+            color: #007bff;
+        }
+        .payment-terms .monthly-amount {
+            font-weight: bold;
+            color: #28a745;
+        }
+
+        /* Total row styling */
+        .total-row {
+            background-color: #f8f9fa !important;
+            font-weight: bold;
+            border-top: 2px solid #007bff !important;
+        }
+        .total-amount {
+            color: #007bff;
+            font-size: 1.1em;
+            font-weight: bold;
+        }
+
+        /* Loading overlay */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        .loading-spinner {
+            color: white;
+            font-size: 2rem;
         }
     </style>
 </head>
 <body id="page-top">
-    <div id="wrapper">
-        <!-- Sidebar -->
-        <ul style="background: #51087E;"  class="navbar-nav sidebar sidebar-dark accordion" id="accordionSidebar">
-            <a class="sidebar-brand d-flex align-items-center justify-content-center" href="index.html">
-                <div class="sidebar-brand-text mx-3">LATO SACCO</div>
-            </a>
-
-            <hr class="sidebar-divider my-0">
-
-            <li class="nav-item">
-                <a class="nav-link" href="../views/home.php">
-                    <i class="fas fa-fw fa-home"></i>
-                    <span>Home</span>
-                </a>
-            </li>
-
-            <hr class="sidebar-divider">
-
-            <div class="sidebar-heading">
-                Management
-            </div>
-
-            <li class="nav-item">
-                <a class="nav-link" href="loan.php">
-                <i class="fas fa-fw fas fa-comment-dollar"></i>
-                    <span>New Loan</span>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link" href="pending_approval.php">
-                <i class="fas fa-fw fas fa-comment-dollar"></i>
-                    <span>Pending Approval</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="disbursement.php">
-                    <i class="fas fa-fw fas fa-coins"></i>
-                    <span>Disbursements</span>
-                </a>
-            </li>
-
-            <li class="nav-item active">
-                <a class="nav-link" href="../views/daily-reconciliation.php">
-                    <i class="fas fa-fw fa-balance-scale"></i>
-                    <span>Daily Reconciliation</span>
-                </a>
-            </li>
-
-            <li class="nav-item active">
-                <a class="nav-link" href="../views/expenses_tracking.php">
-                <i class="fas fa-chart-line fa-2x text-gray-300"></i>
-                    <span>Expenses Tracking</span>
-                </a>
-            </li>
-
-            <li class="nav-item active">
-                <a class="nav-link" href="../views/manage_expenses.php">
-                <i class="fas fa-dollar-sign fa-2x text-gray-300"></i>
-                    <span>Manage Expenses</span>
-                </a>
-            </li>
-
-            <li class="nav-item active">
-                <a class="nav-link" href="arrears.php">
-                <i class="fas fa-users-slash fa-2x text-gray-300"></i>
-                    <span>Arrears</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="../views/receipts.php">
-                <i class="fas fa-receipt fa-2x"></i>
-                    <span>Receipts</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="../views/account.php">
-                <i class="fas fa-fw fa-user"></i>
-                    <span>Client Accounts</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="groups.php">
-                <i class="fas fa-users fa-2x text-gray-300"></i>
-                    <span>Wekeza Groups</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="business_groups.php">
-                <i class="fas fa-users fa-2x text-gray-300"></i>
-                    <span>Business Groups</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="loan_plan.php">
-                    <i class="fas fa-fw fa-piggy-bank"></i>
-                    <span>Loan Products</span>
-                </a>
-            </li>
-
-            <hr class="sidebar-divider">
-
-            <div class="sidebar-heading">
-                System
-            </div>
-
-            <li class="nav-item">
-                <a class="nav-link" href="user.php">
-                    <i class="fas fa-fw fa-user"></i>
-                    <span>Users</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="../views/settings.php">
-                    <i class="fas fa-fw fa-cog"></i>
-                    <span>Settings</span>
-                </a>
-            </li>
-
-            <li class="nav-item active">
-                <a class="nav-link" href="../views/announcements.php">
-                    <i class="fas fa-fw fa-bullhorn"></i>
-                    <span>Announcements</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="../views/notifications.php">
-                    <i class="fas fa-fw fa-bell"></i>
-                    <span>Notifications</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="../views/backup.php">
-                    <i class="fas fa-fw fa-database"></i>
-                    <span>Backup</span>
-                </a>
-            </li>
-        </ul>
-        <!-- End of Sidebar -->
-
-        <!-- Content Wrapper -->
-        <div id="content-wrapper" class="d-flex flex-column">
-            <!-- Main Content -->
-            <div id="content">
-                <!-- Topbar -->
-                <nav class="navbar navbar-expand navbar-light bg-white topbar mb-4 static-top shadow">
-                    <button id="sidebarToggleTop" class="btn btn-link d-md-none rounded-circle mr-3">
-                        <i class="fa fa-bars"></i>
-                    </button>
-                    <ul class="navbar-nav ml-auto">
-                        <li class="nav-item dropdown no-arrow">
-                            <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button"
-                                data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                                <span class="mr-2 d-none d-lg-inline text-gray-600 small"><?php echo $db->user_acc($_SESSION['user_id'])?></span>
-                                <img class="img-profile rounded-circle" src="../public/image/logo.jpg">
-                            </a>
-                            <div class="dropdown-menu dropdown-menu-right shadow animated--grow-in"
-                                aria-labelledby="userDropdown">
-                                <a class="dropdown-item" href="#" data-toggle="modal" data-target="#logoutModal">
-                                    <i class="fas fa-sign-out-alt fa-sm fa-fw mr-2 text-gray-400"></i>
-                                    Logout
-                                </a>
-                            </div>
-                        </li>
-                    </ul>
-                </nav>
-                <!-- End of Topbar -->
-
-
-                  <!-- Toast Container -->
-    <div aria-live="polite" aria-atomic="true" class="toast-container">
-        <!-- Toasts will be inserted here -->
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin"></i>
+        </div>
     </div>
+
+    <div id="wrapper">
+       <!-- Import Sidebar -->
+            <?php require_once '../components/includes/sidebar.php'; ?>
+
+                <!-- Toast Container -->
+                <div class="toast-container" id="toastContainer">
+                    <!-- Toasts will be inserted here -->
+                </div>
 
                 <!-- Begin Page Content -->
                 <div class="container-fluid pt-4">
                     <div class="d-sm-flex align-items-center justify-content-between mb-4">
                         <h1 class="h3 mb-0 text-gray-800">Pending Loan Approvals</h1>
+                        <div class="ml-auto">
+                            <span class="text-muted">Total Pending: </span>
+                            <span class="badge badge-primary badge-pill" id="totalCountBadge">0</span>
+                        </div>
                     </div>
                     <div class="card mb-4">
                         <div class="card-body">
@@ -294,28 +157,52 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                                             <th>Payee Name</th>
                                             <th>Shareholder No</th>
                                             <th>Loan Amount</th>
+                                            <th>Payment Terms</th>
                                             <th>Action</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                     <?php
                                         $pending_loans = $db->get_pending_loans();
+                                        $total_amount = 0;
+                                        $total_count = 0;
                                         while($loan = $pending_loans->fetch_array()){
+                                            $total_amount += $loan['amount'];
+                                            $total_count++;
                                     ?>
                                     <tr>
                                         <td><?php echo $loan['ref_no']?></td>
                                         <td><?php echo $loan['last_name'] . ", " . $loan['first_name']?></td>
                                         <td><?php echo $loan['shareholder_no']?></td>
-                                        <td><?php echo number_format($loan['amount'], 2)?></td>
+                                        <td class="loan-amount"><?php echo number_format($loan['amount'], 2)?></td>
                                         <td>
-                                            <button class="btn btn-success btn-sm approve-loan" data-loan-id="<?php echo $loan['loan_id']?>">Approve</button>
-                                            <button class="btn btn-danger btn-sm deny-loan" data-loan-id="<?php echo $loan['loan_id']?>">Deny</button>
+                                            <div class="payment-terms">
+                                                <div><span class="term-months"><?php echo $loan['loan_term']?> months</span></div>
+                                                <div><span class="monthly-amount">KSh <?php echo number_format($loan['monthly_payment'], 2)?>/month</span></div>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-success btn-sm approve-loan" data-loan-id="<?php echo $loan['loan_id']?>">
+                                                <i class="fas fa-check"></i> Approve
+                                            </button>
+                                            <button class="btn btn-danger btn-sm deny-loan" data-loan-id="<?php echo $loan['loan_id']?>">
+                                                <i class="fas fa-times"></i> Deny
+                                            </button>
                                         </td>
                                     </tr>
                                     <?php
                                         }
                                     ?>
                                 </tbody>
+                                <tfoot>
+                                    <tr class="total-row">
+                                        <td colspan="3" class="text-right"><strong>Total Amount:</strong></td>
+                                        <td class="total-amount" id="totalAmount">KSh <?php echo number_format($total_amount, 2)?></td>
+                                        <td colspan="2" class="text-center">
+                                            <span class="badge badge-info"><?php echo $total_count?> loan(s) pending</span>
+                                        </td>
+                                    </tr>
+                                </tfoot>
                                 </table>
                             </div>
                         </div>
@@ -343,6 +230,51 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
         <a class="scroll-to-top rounded" href="#page-top">
             <i class="fas fa-angle-up"></i>
         </a>
+
+        <!-- Confirmation Modal -->
+        <div class="modal fade" id="confirmationModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow">
+                    <div class="modal-header" id="confirmModalHeader">
+                        <h5 class="modal-title text-white" id="confirmModalTitle">
+                            <i class="fas fa-question-circle mr-2"></i>Confirm Action
+                        </h5>
+                        <button class="close text-white" type="button" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">×</span>
+                        </button>
+                    </div>
+                    <div class="modal-body" id="confirmModalBody">
+                        <div class="text-center">
+                            <div class="mb-3">
+                                <i class="fas fa-user-circle fa-3x text-muted mb-2"></i>
+                                <h6 class="font-weight-bold" id="clientNameDisplay"></h6>
+                            </div>
+                            <div class="row">
+                                <div class="col-6">
+                                    <small class="text-muted">Loan Amount</small>
+                                    <div class="h5 text-primary" id="loanAmountDisplay"></div>
+                                </div>
+                                <div class="col-6">
+                                    <small class="text-muted">Reference No</small>
+                                    <div class="h6 text-secondary" id="refNoDisplay"></div>
+                                </div>
+                            </div>
+                            <div class="mt-3">
+                                <p id="confirmationMessage" class="mb-0"></p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer border-0 justify-content-center">
+                        <button class="btn btn-secondary" type="button" data-dismiss="modal">
+                            <i class="fas fa-times mr-1"></i> Cancel
+                        </button>
+                        <button class="btn" type="button" id="confirmActionBtn">
+                            <i class="fas fa-check mr-1"></i> Confirm
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- Logout Modal-->
         <div class="modal fade" id="logoutModal" tabindex="-1" aria-hidden="true">
@@ -379,82 +311,233 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
 
         <script>
         $(document).ready(function() {
-            // Initialize DataTable
-            $('#dataTable').DataTable();
+            // Initialize DataTable with custom configuration
+            var table = $('#dataTable').DataTable({
+                "footerCallback": function (row, data, start, end, display) {
+                    var api = this.api();
+                    
+                    // Calculate total amount for visible/filtered rows
+                    var total = 0;
+                    var count = 0;
+                    
+                    api.column(3, { page: 'current' }).data().each(function (value, index) {
+                        // Remove currency formatting and convert to number
+                        var numValue = parseFloat(value.replace(/[^\d.-]/g, ''));
+                        if (!isNaN(numValue)) {
+                            total += numValue;
+                            count++;
+                        }
+                    });
+                    
+                    // Update the footer
+                    $('#totalAmount').html('KSh ' + total.toLocaleString('en-US', { minimumFractionDigits: 2 }));
+                    $('.total-row td:last-child').html('<span class="badge badge-info">' + count + ' loan(s) pending</span>');
+                    $('#totalCountBadge').text(count);
+                },
+                "language": {
+                    "search": "Search loans:",
+                    "lengthMenu": "Show _MENU_ loans per page",
+                    "info": "Showing _START_ to _END_ of _TOTAL_ pending loans",
+                    "infoEmpty": "No pending loans found",
+                    "infoFiltered": "(filtered from _MAX_ total loans)",
+                    "emptyTable": "No pending loans available"
+                },
+                "pageLength": 10,
+                "order": [[0, "desc"]]
+            });
 
+            // Update initial count
+            $('#totalCountBadge').text($('#dataTable tbody tr').length);
 
-
-        // Function to show a toast notification
-        function showToast(message, type) {
-            var toastId = 'toast-' + Date.now();
-            var toastHtml = `
-                <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="5000">
-                    <div class="toast-header bg-${type} text-white">
-                        <strong class="mr-auto">${type === 'success' ? 'Success' : 'Error'}</strong>
-                        <button type="button" class="ml-2 mb-1 close" data-dismiss="toast" aria-label="Close">
-                            <span aria-hidden="true">&times;</span>
-                        </button>
+            // Enhanced toast notification function
+            function showToast(message, type, title, duration = 5000) {
+                var toastId = 'toast-' + Date.now();
+                var iconClass = '';
+                var titleText = title || '';
+                
+                switch(type) {
+                    case 'success':
+                        iconClass = 'fas fa-check-circle';
+                        titleText = titleText || 'Success';
+                        break;
+                    case 'danger':
+                    case 'error':
+                        iconClass = 'fas fa-exclamation-circle';
+                        titleText = titleText || 'Error';
+                        type = 'danger';
+                        break;
+                    case 'warning':
+                        iconClass = 'fas fa-exclamation-triangle';
+                        titleText = titleText || 'Warning';
+                        break;
+                    case 'info':
+                        iconClass = 'fas fa-info-circle';
+                        titleText = titleText || 'Information';
+                        break;
+                }
+                
+                var toastHtml = `
+                    <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="${duration}">
+                        <div class="toast-header bg-${type} text-white">
+                            <i class="${iconClass} mr-2"></i>
+                            <strong class="mr-auto">${titleText}</strong>
+                            <small class="text-light">${new Date().toLocaleTimeString()}</small>
+                            <button type="button" class="ml-2 mb-1 close text-white" data-dismiss="toast" aria-label="Close">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                        </div>
+                        <div class="toast-body">
+                            ${message}
+                        </div>
                     </div>
-                    <div class="toast-body">
-                        ${message}
-                    </div>
-                </div>
-            `;
-            $('.toast-container').append(toastHtml);
-            $(`#${toastId}`).toast('show');
-        }
+                `;
+                
+                $('#toastContainer').append(toastHtml);
+                $(`#${toastId}`).toast('show');
+                
+                // Auto remove after hiding
+                $(`#${toastId}`).on('hidden.bs.toast', function () {
+                    $(this).remove();
+                });
+            }
 
-        // Approve loan
-        $('.approve-loan').click(function() {
-            var loanId = $(this).data('loan-id');
-            if (confirm('Are you sure you want to approve this loan?')) {
+            // Show loading overlay
+            function showLoading() {
+                $('#loadingOverlay').css('display', 'flex');
+            }
+
+            // Hide loading overlay
+            function hideLoading() {
+                $('#loadingOverlay').hide();
+            }
+
+            // Global variables for confirmation modal
+            var currentLoanId = null;
+            var currentAction = null;
+            var currentButton = null;
+
+            // Function to show custom confirmation modal
+            function showConfirmationModal(action, loanId, button) {
+                var row = button.closest('tr');
+                var clientName = row.find('td:eq(1)').text().trim();
+                var loanAmount = row.find('td:eq(3)').text().trim();
+                var refNo = row.find('td:eq(0)').text().trim();
+                
+                currentLoanId = loanId;
+                currentAction = action;
+                currentButton = button;
+                
+                // Update modal content based on action
+                var modalHeader = $('#confirmModalHeader');
+                var modalTitle = $('#confirmModalTitle');
+                var confirmBtn = $('#confirmActionBtn');
+                var message = $('#confirmationMessage');
+                
+                if (action === 'approve') {
+                    modalHeader.removeClass('bg-danger').addClass('bg-success');
+                    modalTitle.html('<i class="fas fa-check-circle mr-2"></i>Approve Loan');
+                    confirmBtn.removeClass('btn-danger').addClass('btn-success');
+                    confirmBtn.html('<i class="fas fa-check mr-1"></i> Approve Loan');
+                    message.html('Are you sure you want to <strong class="text-success">approve</strong> this loan application?');
+                } else {
+                    modalHeader.removeClass('bg-success').addClass('bg-danger');
+                    modalTitle.html('<i class="fas fa-times-circle mr-2"></i>Deny Loan');
+                    confirmBtn.removeClass('btn-success').addClass('btn-danger');
+                    confirmBtn.html('<i class="fas fa-times mr-1"></i> Deny Loan');
+                    message.html('Are you sure you want to <strong class="text-danger">deny</strong> this loan application?<br><small class="text-muted">This action cannot be undone.</small>');
+                }
+                
+                // Update client details
+                $('#clientNameDisplay').text(clientName);
+                $('#loanAmountDisplay').text(loanAmount);
+                $('#refNoDisplay').text(refNo);
+                
+                // Show modal
+                $('#confirmationModal').modal('show');
+            }
+
+            // Handle confirmation modal confirm button
+            $('#confirmActionBtn').click(function() {
+                $('#confirmationModal').modal('hide');
+                
+                if (currentAction === 'approve') {
+                    processLoanAction(currentLoanId, 1, currentButton, 'approve');
+                } else {
+                    processLoanAction(currentLoanId, 4, currentButton, 'deny');
+                }
+            });
+
+            // Function to process loan action
+            function processLoanAction(loanId, status, button, actionType) {
+                var row = button.closest('tr');
+                var clientName = row.find('td:eq(1)').text();
+                var loanAmount = row.find('td:eq(3)').text();
+                var actionText = actionType === 'approve' ? 'Approving' : 'Denying';
+                var actionPast = actionType === 'approve' ? 'approved' : 'denied';
+                
+                button.prop('disabled', true).html(`<i class="fas fa-spinner fa-spin"></i> ${actionText}...`);
+                showLoading();
+                
                 $.ajax({
                     url: '../controllers/update_loan_status.php',
                     type: 'POST',
-                    data: { loan_id: loanId, status: 1 },
+                    data: { loan_id: loanId, status: status },
                     dataType: 'json',
+                    timeout: 10000,
                     success: function(response) {
+                        hideLoading();
                         if (response.success) {
-                            showToast('Loan approved successfully', 'success');
+                            var toastType = actionType === 'approve' ? 'success' : 'warning';
+                            var toastTitle = actionType === 'approve' ? 'Loan Approved' : 'Loan Denied';
+                            
+                            showToast(
+                                `Loan for ${clientName} (${loanAmount}) has been ${actionPast} successfully.`,
+                                toastType,
+                                toastTitle
+                            );
                             setTimeout(function() {
                                 location.reload();
                             }, 2000);
                         } else {
-                            showToast('Error approving loan: ' + response.message, 'danger');
+                            var originalText = actionType === 'approve' ? 
+                                '<i class="fas fa-check"></i> Approve' : 
+                                '<i class="fas fa-times"></i> Deny';
+                            button.prop('disabled', false).html(originalText);
+                            showToast(
+                                `Failed to ${actionType} loan: ${response.message || 'Unknown error occurred'}`,
+                                'error',
+                                `${actionType.charAt(0).toUpperCase() + actionType.slice(1)} Failed`
+                            );
                         }
                     },
-                    error: function() {
-                        showToast('Error approving loan', 'danger');
+                    error: function(xhr, status, error) {
+                        hideLoading();
+                        var originalText = actionType === 'approve' ? 
+                            '<i class="fas fa-check"></i> Approve' : 
+                            '<i class="fas fa-times"></i> Deny';
+                        button.prop('disabled', false).html(originalText);
+                        
+                        var errorMessage = 'Network error occurred. Please check your connection and try again.';
+                        if (status === 'timeout') {
+                            errorMessage = 'Request timed out. Please try again.';
+                        }
+                        
+                        showToast(errorMessage, 'error', 'Connection Error');
                     }
                 });
             }
-        });
 
-        // Deny loan
-        $('.deny-loan').click(function() {
-            var loanId = $(this).data('loan-id');
-            if (confirm('Are you sure you want to deny this loan?')) {
-                $.ajax({
-                    url: '../controllers/update_loan_status.php',
-                    type: 'POST',
-                    data: { loan_id: loanId, status: 4 },
-                    dataType: 'json',
-                    success: function(response) {
-                        if (response.success) {
-                            showToast('Loan denied successfully', 'success');
-                            setTimeout(function() {
-                                location.reload();
-                            }, 2000);
-                        } else {
-                            showToast('Error denying loan: ' + response.message, 'danger');
-                        }
-                    },
-                    error: function() {
-                        showToast('Error denying loan', 'danger');
-                    }
-                });
-            }
-        });
+            // Approve loan with custom modal
+            $(document).on('click', '.approve-loan', function() {
+                var loanId = $(this).data('loan-id');
+                showConfirmationModal('approve', loanId, $(this));
+            });
+
+            // Deny loan with custom modal
+            $(document).on('click', '.deny-loan', function() {
+                var loanId = $(this).data('loan-id');
+                showConfirmationModal('deny', loanId, $(this));
+            });
 
             // Toggle the side navigation
             $("#sidebarToggleTop").on('click', function(e) {
@@ -484,6 +567,8 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                 };
             });
 
+            // Show welcome message
+            showToast('Pending loans loaded successfully. Use the search to filter by client name or reference number.', 'info', 'Welcome', 3000);
         });
     </script>
 </body>

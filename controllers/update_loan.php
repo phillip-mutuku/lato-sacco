@@ -102,7 +102,7 @@ if(isset($_POST['update'])) {
     if ($result === true) {
         // Add notification for status change
         if ($current_status != $status) {
-            $status_texts = ['Pending Approval', 'Approved', 'Released', 'Completed', 'Denied'];
+            $status_texts = ['Pending Approval', 'Approved', 'Disbursed', 'Completed', 'Denied'];
             $new_status_text = $status_texts[$status] ?? 'Unknown';
             $status_message = "Loan status for $client_name changed to $new_status_text";
             $db->addNotification($status_message, 'loan', $loan_id);

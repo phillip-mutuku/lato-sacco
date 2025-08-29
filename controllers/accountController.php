@@ -18,10 +18,10 @@ class AccountController {
         $this->model = new AccountModel();
     }
 
-
     public function getModel() {
         return $this->model;
     }
+
     /**
      * Create a new account
      * 
@@ -49,7 +49,6 @@ class AccountController {
         }
         return ['status' => 'success', 'message' => 'Account updated successfully'];
     }
-    
 
     /**
      * Delete an account
@@ -65,17 +64,6 @@ class AccountController {
         return ['status' => 'success', 'message' => 'Account deleted successfully'];
     }
 
-
-
-
-    /**
-     * Get account details by ID
-     * 
-     * @param int $accountId ID of the account
-     * @return array|bool Account details array or false if not found
-     */
-
-
     /**
      * Get all accounts
      * 
@@ -89,50 +77,66 @@ class AccountController {
      * Get account transactions
      * 
      * @param int $accountId ID of the account
+     * @param string $accountType Filter by account type
      * @return array Array of transactions
      */
-    public function getAccountTransactions($accountId) {
-        return $this->model->getAccountTransactions($accountId);
+    public function getAccountTransactions($accountId, $accountType = 'all') {
+        return $this->model->getAccountTransactions($accountId, $accountType);
     }
 
     /**
      * Get account loans
      * 
      * @param int $accountId ID of the account
+     * @param string $accountType Filter by account type
      * @return array Array of loans
      */
-    public function getAccountLoans($accountId) {
-        return $this->model->getAccountLoans($accountId);
+    public function getAccountLoans($accountId, $accountType = 'all') {
+        return $this->model->getAccountLoans($accountId, $accountType);
     }
 
     /**
      * Get account savings
      * 
      * @param int $accountId ID of the account
+     * @param string $accountType Filter by account type
      * @return array Array of savings records
      */
-    public function getAccountSavings($accountId) {
-        return $this->model->getAccountSavings($accountId);
+    public function getAccountSavings($accountId, $accountType = 'all') {
+        return $this->model->getAccountSavings($accountId, $accountType);
     }
 
     /**
      * Get total savings for an account
      * 
      * @param int $accountId ID of the account
+     * @param string $accountType Filter by account type
      * @return float Total savings amount
      */
-    public function getTotalSavings($accountId) {
-        return $this->model->getTotalSavings($accountId);
+    public function getTotalSavings($accountId, $accountType = 'all') {
+        return $this->model->getTotalSavings($accountId, $accountType);
+    }
+
+    /**
+     * Get total withdrawals for an account
+     * 
+     * @param int $accountId ID of the account
+     * @param string $accountType Filter by account type
+     * @return float Total withdrawals amount
+     */
+    public function getTotalWithdrawals($accountId, $accountType = 'all') {
+        return $this->model->getTotalWithdrawals($accountId, $accountType);
     }
 
     /**
      * Get total loans for an account
      * 
      * @param int $accountId ID of the account
+     * @param string $accountType Filter by account type
      * @return float Total loans amount
      */
-    public function getTotalLoans($accountId) {
-        return $this->model->getTotalLoans($accountId);
+    public function getTotalLoans($accountId, $accountType = 'all') {
+        return $this->model->getTotalLoans($accountId, $accountType);
     }
 
     /**
@@ -348,22 +352,21 @@ class AccountController {
         }
     }
 
-
-//loan schedule
-public function getDueAmount($loanId) {
-    $loanDetails = $this->model->getLoanDetailsForRepayment($loanId);
-    if ($loanDetails) {
-        $dueAmount = $this->model->getDueAmount($loanId);
-        return [
-            'status' => 'success',
-            'dueAmount' => $dueAmount,
-            'outstandingBalance' => $loanDetails['outstanding_balance'],
-            'refNo' => $loanDetails['ref_no']
-        ];
-    } else {
-        return ['status' => 'error', 'message' => 'Loan not found'];
+    //loan schedule
+    public function getDueAmount($loanId) {
+        $loanDetails = $this->model->getLoanDetailsForRepayment($loanId);
+        if ($loanDetails) {
+            $dueAmount = $this->model->getDueAmount($loanId);
+            return [
+                'status' => 'success',
+                'dueAmount' => $dueAmount,
+                'outstandingBalance' => $loanDetails['outstanding_balance'],
+                'refNo' => $loanDetails['ref_no']
+            ];
+        } else {
+            return ['status' => 'error', 'message' => 'Loan not found'];
+        }
     }
-}
     
     public function getLoanRepayments($accountId) {
         return $this->model->getLoanRepayments($accountId);
@@ -376,8 +379,6 @@ public function getDueAmount($loanId) {
     public function getSavingsDetails($savingsId) {
         return $this->model->getSavingsDetails($savingsId);
     }
-
-
 
     public function getLoanSchedule($loanId) {
         $schedule = $this->model->getLoanSchedule($loanId);
@@ -396,53 +397,78 @@ public function getDueAmount($loanId) {
         ];
     }
 
-
     //filtered date
     public function getOutstandingPrincipalForAccount($accountId, $accountType = 'all') {
         return $this->getModel()->getTotalOutstandingPrincipal($accountId, $accountType);
     }
     
-  // Update the getFilteredSummary method
-  public function getAccountById($accountId) {
-    try {
-        $accountDetails = $this->model->getAccountById($accountId);
-        if ($accountDetails) {
-            // Get total loan amount
-            $totalLoanAmount = $this->model->getTotalLoanAmount($accountId);
-            $accountDetails['total_loan_amount'] = $totalLoanAmount; // Change this line
-            
-            // Log for debugging
-            error_log("Account details for ID $accountId: " . json_encode($accountDetails));
+    // Update the getFilteredSummary method
+    public function getAccountById($accountId) {
+        try {
+            $accountDetails = $this->model->getAccountById($accountId);
+            if ($accountDetails) {
+                // Get total loan amount
+                $totalLoanAmount = $this->model->getTotalLoanAmount($accountId);
+                $accountDetails['total_loan_amount'] = $totalLoanAmount;
+                
+                // Log for debugging
+                error_log("Account details for ID $accountId: " . json_encode($accountDetails));
+            }
+            return $accountDetails;
+        } catch (Exception $e) {
+            error_log("Error in getAccountById: " . $e->getMessage());
+            throw $e;
         }
-        return $accountDetails;
-    } catch (Exception $e) {
-        error_log("Error in getAccountById: " . $e->getMessage());
-        throw $e;
     }
+
+
+    /**
+ * Get total outstanding loans using the corrected calculation
+ * This gets the current principal balance from loan schedule
+ */
+public function getTotalOutstandingLoans($accountId, $accountType = 'all') {
+    return $this->model->getTotalOutstandingLoans($accountId, $accountType);
 }
 
-// Update the getFilteredSummary method in AccountController
-public function getFilteredSummary($accountId, $accountType) {
+/**
+ * Get active loans count
+ */
+public function getActiveLoansCount($accountId, $accountType = 'all') {
+    return $this->model->getActiveLoansCount($accountId, $accountType);
+}
+
+/**
+ * Get total group savings
+ */
+public function getTotalGroupSavings($accountId, $accountType = 'all') {
+    return $this->model->getTotalGroupSavings($accountId, $accountType);
+}
+
+    // Updated getFilteredSummary method with withdrawal support
+    public function getFilteredSummary($accountId, $accountType) {
     try {
         $totalSavings = $this->model->getFilteredTotalSavings($accountId, $accountType);
-        $totalLoans = $this->model->getFilteredTotalLoans($accountId, $accountType);
-        $totalLoanAmount = $this->model->getTotalLoanAmount($accountId); // Add this line
-        $netBalance = $totalSavings - $totalLoans;
+        $totalWithdrawals = $this->model->getTotalWithdrawals($accountId, $accountType);
+        $outstandingLoans = $this->model->getTotalOutstandingLoans($accountId, $accountType);
+        $activeLoansCount = $this->model->getActiveLoansCount($accountId, $accountType);
+        $totalGroupSavings = $this->model->getTotalGroupSavings($accountId, $accountType);
         
         return [
             'status' => 'success',
             'totalSavings' => $totalSavings,
-            'totalLoans' => $totalLoans,
-            'totalLoanAmount' => $totalLoanAmount, // Change this line
-            'netBalance' => $netBalance
+            'totalWithdrawals' => $totalWithdrawals,
+            'outstandingLoans' => $outstandingLoans,
+            'activeLoansCount' => $activeLoansCount,
+            'totalGroupSavings' => $totalGroupSavings
         ];
     } catch (Exception $e) {
         return ['status' => 'error', 'message' => $e->getMessage()];
     }
 }
 
-// Update the handleGetFilteredSummary method in AccountController
-private function handleGetFilteredSummary() {
+
+    // Update the handleGetFilteredSummary method
+    private function handleGetFilteredSummary() {
     try {
         $accountId = $_GET['accountId'] ?? null;
         $accountType = $_GET['accountType'] ?? 'all';
@@ -453,13 +479,18 @@ private function handleGetFilteredSummary() {
 
         $summary = $this->getFilteredSummary($accountId, $accountType);
         
-        echo json_encode([
-            'status' => 'success',
-            'totalSavings' => $summary['totalSavings'],
-            'totalLoans' => $summary['totalLoans'],
-            'totalLoanAmount' => $summary['totalLoanAmount'], // Change this line
-            'netBalance' => $summary['netBalance']
-        ]);
+        if ($summary['status'] === 'success') {
+            echo json_encode([
+                'status' => 'success',
+                'totalSavings' => $summary['totalSavings'],
+                'totalWithdrawals' => $summary['totalWithdrawals'],
+                'outstandingLoans' => $summary['outstandingLoans'],
+                'activeLoansCount' => $summary['activeLoansCount'],
+                'totalGroupSavings' => $summary['totalGroupSavings']
+            ]);
+        } else {
+            echo json_encode($summary);
+        }
     } catch (Exception $e) {
         echo json_encode([
             'status' => 'error',
@@ -468,14 +499,29 @@ private function handleGetFilteredSummary() {
     }
 }
 
-// Add this helper method to your AccountModel class
-public function getConnection() {
-    return $this->conn;
+
+/**
+ * Helper method to get all current stats for an account
+ */
+public function getAllAccountStats($accountId, $accountType = 'all') {
+    try {
+        return [
+            'totalSavings' => $this->model->getFilteredTotalSavings($accountId, $accountType),
+            'totalWithdrawals' => $this->model->getTotalWithdrawals($accountId, $accountType),
+            'outstandingLoans' => $this->model->getTotalOutstandingLoans($accountId, $accountType),
+            'activeLoansCount' => $this->model->getActiveLoansCount($accountId, $accountType),
+            'totalGroupSavings' => $this->model->getTotalGroupSavings($accountId, $accountType)
+        ];
+    } catch (Exception $e) {
+        error_log("Error getting account stats: " . $e->getMessage());
+        return null;
+    }
 }
-    
 
-
-
+    // Add this helper method to your AccountModel class
+    public function getConnection() {
+        return $this->conn;
+    }
 
     //getaccountsummary
     private function getAccountSummary($accountId) {
@@ -489,7 +535,6 @@ public function getConnection() {
             'netBalance' => $netBalance
         ];
     }
-
 
     //handle withdraw
     private function handleWithdraw() {
@@ -548,20 +593,59 @@ public function getConnection() {
             ]);
         }
     }
-    
 
+    public function handleGetAvailableBalance() {
+        try {
+            $accountId = $_GET['accountId'] ?? null;
+            $accountType = $_GET['accountType'] ?? null;
 
-public function handleGetAvailableBalance() {
-    try {
-        $accountId = $_GET['accountId'] ?? null;
-        $accountType = $_GET['accountType'] ?? null;
+            if (!$accountId || !$accountType) {
+                throw new Exception("Missing required parameters");
+            }
 
-        if (!$accountId || !$accountType) {
-            throw new Exception("Missing required parameters");
+            $result = $this->model->getAvailableBalance($accountId, $accountType);
+            echo json_encode($result);
+        } catch (Exception $e) {
+            echo json_encode([
+                'status' => 'error',
+                'message' => $e->getMessage()
+            ]);
         }
+    }
 
-        $result = $this->model->getAvailableBalance($accountId, $accountType);
+    public function handleGetTransactionReceipt() {
+        try {
+            $transactionId = $_GET['transactionId'] ?? null;
+            $type = $_GET['type'] ?? null;
+
+            if (!$transactionId || !$type) {
+                throw new Exception("Missing required parameters");
+            }
+
+            $result = $this->model->getTransactionReceipt($transactionId, $type);
+            echo json_encode($result);
+        } catch (Exception $e) {
+            echo json_encode([
+                'status' => 'error',
+                'message' => $e->getMessage()
+            ]);
+        }
+    }
+
+
+    private function handleDeleteRepayment() {
+    try {
+        $repaymentId = $_POST['repaymentId'] ?? null;
+        $loanId = $_POST['loanId'] ?? null;
+        $amount = $_POST['amount'] ?? null;
+        
+        if (!$repaymentId || !$loanId || !$amount) {
+            throw new Exception('Missing required parameters');
+        }
+        
+        $result = $this->model->deleteRepayment($repaymentId, $loanId, $amount);
         echo json_encode($result);
+        
     } catch (Exception $e) {
         echo json_encode([
             'status' => 'error',
@@ -569,29 +653,6 @@ public function handleGetAvailableBalance() {
         ]);
     }
 }
-
-public function handleGetTransactionReceipt() {
-    try {
-        $transactionId = $_GET['transactionId'] ?? null;
-        $type = $_GET['type'] ?? null;
-
-        if (!$transactionId || !$type) {
-            throw new Exception("Missing required parameters");
-        }
-
-        $result = $this->model->getTransactionReceipt($transactionId, $type);
-        echo json_encode($result);
-    } catch (Exception $e) {
-        echo json_encode([
-            'status' => 'error',
-            'message' => $e->getMessage()
-        ]);
-    }
-}
-
-
-
-
 
     /**
      * Handle various account actions based on GET parameters
@@ -603,8 +664,6 @@ public function handleGetTransactionReceipt() {
     
         $action = $_GET['action'] ?? 'unknown';
         error_log("Received action: " . $action);
-
-
 
         switch ($action) {
             case 'create':
@@ -679,6 +738,9 @@ public function handleGetTransactionReceipt() {
             case 'getAvailableBalance':
                             $this->handleGetAvailableBalance();
                             break;
+            case 'deleteRepayment':
+                            $this->handleDeleteRepayment();
+                            break;
             case 'getTransactionReceipt':
                             $this->handleGetTransactionReceipt();
                             break;
@@ -732,10 +794,6 @@ public function handleGetTransactionReceipt() {
     echo json_encode($result);
 }
 
-
-
-
-
     private function handleGetAccount() {
         $accountId = $_POST['account_id'] ?? '';
         if (empty($accountId)) {
@@ -757,8 +815,6 @@ public function handleGetTransactionReceipt() {
             ]);
         }
     }
-
-    
 
     private function handleUpdateAccount() {
         try {
@@ -814,11 +870,6 @@ public function handleGetTransactionReceipt() {
             ]);
         }
     }
- 
-
-
-    
-    
 
     private function handleDeleteAccount() {
         $accountId = $_POST['account_id'] ?? '';
@@ -858,7 +909,7 @@ public function handleGetTransactionReceipt() {
     
             if ($result['status'] === 'success' && isset($result['savingsId'])) {
                 // Get receipt details for printing
-                $receiptDetails = $this->model->getSavingsReceiptDetails($result['savingsId']);
+                ReceiptDetails($result['savingsId']);
                 $result['receiptDetails'] = $receiptDetails;
             }
     
@@ -875,8 +926,6 @@ public function handleGetTransactionReceipt() {
         }
     }
 
-
-
     //loan schedule 
     private function handleGetLoanSchedule() {
         $loanId = $_GET['loanId'] ?? '';
@@ -889,7 +938,6 @@ public function handleGetTransactionReceipt() {
     }
 
     //loan repayment
-    
     private function handleGetDueAmount() {
         $loanId = $_GET['loanId'] ?? '';
         if (empty($loanId)) {
@@ -909,7 +957,6 @@ public function handleGetTransactionReceipt() {
         $result = $this->getRepaymentDetails($repaymentId);
         echo json_encode($result);
     }
-
     
 private function handleGetSavingsDetails() {
     $savingsId = $_GET['savingsId'] ?? '';
@@ -920,7 +967,6 @@ private function handleGetSavingsDetails() {
     $result = $this->getSavingsDetails($savingsId);
     echo json_encode($result);
 }
-
 
 //handle reload accountrepayments table
 private function handleGetAccountRepayments() {
@@ -933,9 +979,7 @@ private function handleGetAccountRepayments() {
     echo json_encode($result);
 }
 
-
 // Update these methods in your AccountController class:
-
 private function updateLoanSchedule($loanId, $repayAmount, $paymentDate) {
     try {
         // Use the model to get schedule entries
@@ -1052,7 +1096,6 @@ private function handleRepayLoan() {
         ]);
     }
 }
-
 
     private function handleAddLoan() {
         $accountId = $_POST['accountId'] ?? '';
@@ -1179,3 +1222,4 @@ if (php_sapi_name() !== 'cli') {
     $controller->handleAction();
 }
 ?>
+                

@@ -362,9 +362,6 @@ $backups = getBackups();
     <link href="https://cdn.datatables.net/1.10.22/css/dataTables.bootstrap4.min.css" rel="stylesheet">
     <!-- Custom CSS -->
     <style>
-        html, body {
-            overflow-x: hidden;
-        }
         .backup-card {
             border: none;
             border-radius: 8px;
@@ -389,66 +386,10 @@ $backups = getBackups();
         .progress-bar {
             line-height: 25px;
         }
-        #accordionSidebar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            height: 100vh;
-            z-index: 1000;
-            overflow-y: auto;
-            width: 225px;
-            transition: width 0.3s ease;
-        }
-        .sidebar .nav-item .nav-link {
-            text-align: left;
-            padding: 1rem;
-        }
-        .sidebar .nav-item .nav-link span {
-            font-size: 0.85rem;
-            display: inline;
-        }
-        .sidebar-divider {
-            border-top: 1px solid rgba(255,255,255,.15);
-        }
-        .sidebar-heading {
-            text-align: left;
-            padding: 0 1rem;
-            font-weight: 800;
-            font-size: 0.65rem;
-            color: rgba(255,255,255,.4);
-        }
-        #content-wrapper {
-            margin-left: 225px;
-            width: calc(100% - 225px);
-            transition: margin-left 0.3s ease, width 0.3s ease;
-        }
-        .topbar {
-            position: fixed;
-            top: 0;
-            right: 0;
-            left: 225px;
-            z-index: 1000;
-            transition: left 0.3s ease;
-        }
         .container-fluid {
             margin-top: 70px;
             padding-left: 1.5rem;
             padding-right: 1.5rem;
-        }
-        @media (max-width: 768px) {
-            #accordionSidebar {
-                width: 100px;
-            }
-            #content-wrapper {
-                margin-left: 100px;
-                width: calc(100% - 100px);
-            }
-            .topbar {
-                left: 100px;
-            }
-            .sidebar .nav-item .nav-link span {
-                display: none;
-            }
         }
     </style>
 </head>
@@ -458,185 +399,8 @@ $backups = getBackups();
     <!-- Page Wrapper -->
     <div id="wrapper">
 
-               <!-- Sidebar -->
-        <ul style="background: #51087E;"  class="navbar-nav sidebar sidebar-dark accordion" id="accordionSidebar">
-            <a class="sidebar-brand d-flex align-items-center justify-content-center" href="index.html">
-                <div class="sidebar-brand-text mx-3">LATO SACCO</div>
-            </a>
-
-            <hr class="sidebar-divider my-0">
-
-            <li class="nav-item">
-                <a class="nav-link" href="home.php">
-                    <i class="fas fa-fw fa-home"></i>
-                    <span>Home</span>
-                </a>
-            </li>
-
-            <hr class="sidebar-divider">
-
-            <div class="sidebar-heading">
-                Management
-            </div>
-
-            <li class="nav-item">
-                <a class="nav-link" href="../models/loan.php">
-                <i class="fas fa-fw fas fa-comment-dollar"></i>
-                    <span>New Loan</span>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link" href="../models/pending_approval.php">
-                <i class="fas fa-fw fas fa-comment-dollar"></i>
-                    <span>Pending Approval</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="../models/disbursement.php">
-                    <i class="fas fa-fw fas fa-coins"></i>
-                    <span>Disbursements</span>
-                </a>
-            </li>
-
-            <li class="nav-item active">
-                <a class="nav-link" href="daily-reconciliation.php">
-                    <i class="fas fa-fw fa-balance-scale"></i>
-                    <span>Daily Reconciliation</span>
-                </a>
-            </li>
-
-            <li class="nav-item active">
-                <a class="nav-link" href="expenses_tracking.php">
-                <i class="fas fa-chart-line fa-2x text-gray-300"></i>
-                    <span>Expenses Tracking</span>
-                </a>
-            </li>
-
-            <li class="nav-item active">
-                <a class="nav-link" href="manage_expenses.php">
-                <i class="fas fa-dollar-sign fa-2x text-gray-300"></i>
-                    <span>Manage Expenses</span>
-                </a>
-            </li>
-
-            <li class="nav-item active">
-                <a class="nav-link" href="../models/arrears.php">
-                <i class="fas fa-users-slash fa-2x text-gray-300"></i>
-                    <span>Arrears</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="receipts.php">
-                <i class="fas fa-receipt fa-2x"></i>
-                    <span>Receipts</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="account.php">
-                <i class="fas fa-fw fa-user"></i>
-                    <span>Client Accounts</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="../models/groups.php">
-                <i class="fas fa-users fa-2x text-gray-300"></i>
-                    <span>Wekeza Groups</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="../models/business_groups.php">
-                <i class="fas fa-users fa-2x text-gray-300"></i>
-                    <span>Business Groups</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="../models/loan_plan.php">
-                    <i class="fas fa-fw fa-piggy-bank"></i>
-                    <span>Loan Products</span>
-                </a>
-            </li>
-
-            <hr class="sidebar-divider">
-
-            <div class="sidebar-heading">
-                System
-            </div>
-
-            <li class="nav-item">
-                <a class="nav-link" href="../models/user.php">
-                    <i class="fas fa-fw fa-user"></i>
-                    <span>Users</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="settings.php">
-                    <i class="fas fa-fw fa-cog"></i>
-                    <span>Settings</span>
-                </a>
-            </li>
-
-            <li class="nav-item active">
-                <a class="nav-link" href="announcements.php">
-                    <i class="fas fa-fw fa-bullhorn"></i>
-                    <span>Announcements</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="notifications.php">
-                    <i class="fas fa-fw fa-bell"></i>
-                    <span>Notifications</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="backup.php">
-                    <i class="fas fa-fw fa-database"></i>
-                    <span>Backup</span>
-                </a>
-            </li>
-        </ul>
-        <!-- End of Sidebar -->
-
-        <!-- Content Wrapper -->
-        <div id="content-wrapper" class="d-flex flex-column">
-
-            <!-- Main Content -->
-            <div id="content">
-
-                <!-- Topbar -->
-                <nav class="navbar navbar-expand navbar-light bg-white topbar mb-4 static-top shadow">
-                    <button id="sidebarToggleTop" class="btn btn-link d-md-none rounded-circle mr-3">
-                        <i class="fa fa-bars"></i>
-                    </button>
-
-                    <ul class="navbar-nav ml-auto">
-                        <li class="nav-item dropdown no-arrow">
-                            <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button"
-                                data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                                <span class="mr-2 d-none d-lg-inline text-gray-600 small">
-                                    <?php echo $db->user_acc($_SESSION['user_id']); ?>
-                                </span>
-                                <img class="img-profile rounded-circle" src="../public/image/logo.jpg">
-                            </a>
-                            <div class="dropdown-menu dropdown-menu-right shadow animated--grow-in"
-                                aria-labelledby="userDropdown">
-                                <a class="dropdown-item" href="#" data-toggle="modal" data-target="#logoutModal">
-                                    <i class="fas fa-sign-out-alt fa-sm fa-fw mr-2 text-gray-400"></i>
-                                    Logout
-                                </a>
-                            </div>
-                        </li>
-                    </ul>
-                </nav>
-                <!-- End of Topbar -->
+   <!-- Import Sidebar -->
+    <?php require_once '../components/includes/sidebar.php'; ?>
 
                 <!-- Begin Page Content -->
                 <div class="container-fluid pt-4">

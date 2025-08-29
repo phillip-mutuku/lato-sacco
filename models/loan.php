@@ -33,51 +33,11 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
         #loan_calculation_results p { margin-bottom: 5px; }
         .modal-body .row { margin-bottom: 15px; }
 
-        html, body {
-            overflow-x: hidden;
-        }
-        #accordionSidebar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            height: 100vh;
-            z-index: 1000;
-            overflow-y: auto;
-            width: 225px;
-            transition: width 0.3s ease;
-        }
-        #content-wrapper {
-            margin-left: 225px;
-            width: calc(100% - 225px);
-            transition: margin-left 0.3s ease, width 0.3s ease;
-        }
-        .topbar {
-            position: fixed;
-            top: 0;
-            right: 0;
-            left: 225px;
-            z-index: 1000;
-            transition: left 0.3s ease;
-        }
+        
         .container-fluid {
             margin-top: 70px;
             padding-left: 1.5rem;
             padding-right: 1.5rem;
-        }
-        @media (max-width: 768px) {
-            #accordionSidebar {
-                width: 100px;
-            }
-            #content-wrapper {
-                margin-left: 100px;
-                width: calc(100% - 100px);
-            }
-            .topbar {
-                left: 100px;
-            }
-            .sidebar .nav-item .nav-link span {
-                display: none;
-            }
         }
 
         .container-fluid .card{
@@ -111,181 +71,8 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
 <body id="page-top">
     <div id="wrapper">
 
-        <!-- Sidebar -->
-        <ul style="background: #51087E;"  class="navbar-nav sidebar sidebar-dark accordion" id="accordionSidebar">
-            <a class="sidebar-brand d-flex align-items-center justify-content-center" href="index.html">
-                <div class="sidebar-brand-text mx-3">LATO SACCO</div>
-            </a>
-
-            <hr class="sidebar-divider my-0">
-
-            <li class="nav-item">
-                <a class="nav-link" href="../views/home.php">
-                    <i class="fas fa-fw fa-home"></i>
-                    <span>Home</span>
-                </a>
-            </li>
-
-            <hr class="sidebar-divider">
-
-            <div class="sidebar-heading">
-                Management
-            </div>
-
-            <li class="nav-item">
-                <a class="nav-link" href="loan.php">
-                <i class="fas fa-fw fas fa-comment-dollar"></i>
-                    <span>New Loan</span>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link" href="pending_approval.php">
-                <i class="fas fa-fw fas fa-comment-dollar"></i>
-                    <span>Pending Approval</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="disbursement.php">
-                    <i class="fas fa-fw fas fa-coins"></i>
-                    <span>Disbursements</span>
-                </a>
-            </li>
-
-            <li class="nav-item active">
-                <a class="nav-link" href="../views/daily-reconciliation.php">
-                    <i class="fas fa-fw fa-balance-scale"></i>
-                    <span>Daily Reconciliation</span>
-                </a>
-            </li>
-
-            <li class="nav-item active">
-                <a class="nav-link" href="../views/expenses_tracking.php">
-                <i class="fas fa-chart-line fa-2x text-gray-300"></i>
-                    <span>Expenses Tracking</span>
-                </a>
-            </li>
-
-            <li class="nav-item active">
-                <a class="nav-link" href="../views/manage_expenses.php">
-                <i class="fas fa-dollar-sign fa-2x text-gray-300"></i>
-                    <span>Manage Expenses</span>
-                </a>
-            </li>
-
-            <li class="nav-item active">
-                <a class="nav-link" href="arrears.php">
-                <i class="fas fa-users-slash fa-2x text-gray-300"></i>
-                    <span>Arrears</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="../views/receipts.php">
-                <i class="fas fa-receipt fa-2x"></i>
-                    <span>Receipts</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="../views/account.php">
-                <i class="fas fa-fw fa-user"></i>
-                    <span>Client Accounts</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="groups.php">
-                <i class="fas fa-users fa-2x text-gray-300"></i>
-                    <span>Wekeza Groups</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="business_groups.php">
-                <i class="fas fa-users fa-2x text-gray-300"></i>
-                    <span>Business Groups</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="loan_plan.php">
-                    <i class="fas fa-fw fa-piggy-bank"></i>
-                    <span>Loan Products</span>
-                </a>
-            </li>
-
-            <hr class="sidebar-divider">
-
-            <div class="sidebar-heading">
-                System
-            </div>
-
-            <li class="nav-item">
-                <a class="nav-link" href="user.php">
-                    <i class="fas fa-fw fa-user"></i>
-                    <span>Users</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="../views/settings.php">
-                    <i class="fas fa-fw fa-cog"></i>
-                    <span>Settings</span>
-                </a>
-            </li>
-
-            <li class="nav-item active">
-                <a class="nav-link" href="../views/announcements.php">
-                    <i class="fas fa-fw fa-bullhorn"></i>
-                    <span>Announcements</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="../views/notifications.php">
-                    <i class="fas fa-fw fa-bell"></i>
-                    <span>Notifications</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="../views/backup.php">
-                    <i class="fas fa-fw fa-database"></i>
-                    <span>Backup</span>
-                </a>
-            </li>
-        </ul>
-        <!-- End of Sidebar -->
-
-        
-        <!-- Content Wrapper -->
-        <div id="content-wrapper" class="d-flex flex-column">
-            <!-- Main Content -->
-            <div id="content">
-                <!-- Topbar -->
-                <nav class="navbar navbar-expand navbar-light bg-white topbar mb-4 static-top shadow">
-                    <button id="sidebarToggleTop" class="btn btn-link d-md-none rounded-circle mr-3">
-                        <i class="fa fa-bars"></i>
-                    </button>
-                    <ul class="navbar-nav ml-auto">
-                        <li class="nav-item dropdown no-arrow">
-                            <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button"
-                                data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                                <span class="mr-2 d-none d-lg-inline text-gray-600 small"><?php echo $db->user_acc($_SESSION['user_id'])?></span>
-                                <img class="img-profile rounded-circle" src="../public/image/logo.jpg">
-                            </a>
-                            <div class="dropdown-menu dropdown-menu-right shadow animated--grow-in"
-                                aria-labelledby="userDropdown">
-                                <a class="dropdown-item" href="#" data-toggle="modal" data-target="#logoutModal">
-                                    <i class="fas fa-sign-out-alt fa-sm fa-fw mr-2 text-gray-400"></i>
-                                    Logout
-                                </a>
-                            </div>
-                        </li>
-                    </ul>
-                </nav>
-                <!-- End of Topbar -->
+    <!-- Import Sidebar -->
+            <?php require_once '../components/includes/sidebar.php'; ?>
 
                 <!-- Begin Page Content -->
                 <div class="container-fluid pt-4">
@@ -812,7 +599,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                    { data: 'actions', orderable: false }
                ],
                order: [[2, 'desc']], // Sort by date applied descending
-               pageLength: 15,
+               pageLength: 10,
                lengthMenu: [[10, 15, 25, 50, -1], [10, 15, 25, 50, "All"]],
                language: {
                    processing: '<div class="d-flex justify-content-center"><div class="spinner-border text-primary" role="status"><span class="sr-only">Loading...</span></div></div>'
@@ -1144,7 +931,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                            break;
                        case 2:
                            statusClass = 'badge-primary';
-                           statusText = 'Released';
+                           statusText = 'Disbursed';
                            break;
                        case 3:
                            statusClass = 'badge-success';
@@ -1388,7 +1175,7 @@ function generateLoanModals(loanId) {
                                     <select name="status" class="form-control" required>
                                         <option value="0" ${loan.status == 0 ? 'selected' : ''}>Pending Approval</option>
                                         <option value="1" ${loan.status == 1 ? 'selected' : ''}>Approved</option>
-                                        <option value="2" ${loan.status == 2 ? 'selected' : ''}>Released</option>
+                                        <option value="2" ${loan.status == 2 ? 'selected' : ''}>Disbursed</option>
                                         <option value="3" ${loan.status == 3 ? 'selected' : ''}>Completed</option>
                                         <option value="4" ${loan.status == 4 ? 'selected' : ''}>Denied</option>
                                     </select>

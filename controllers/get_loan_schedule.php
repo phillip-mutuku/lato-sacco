@@ -50,11 +50,11 @@ try {
     $repayment_result = $repayment_stmt->get_result();
     $repayments = $repayment_result->fetch_all(MYSQLI_ASSOC);
 
-    // Initialize loan parameters
+    // Initialize loan parameters - KEEP DECIMALS
     $total_amount = floatval($loan['amount']);
     $term = intval($loan['loan_term']);
     $interest_rate = floatval($loan['interest_rate']);
-    $monthly_principal = round($total_amount / $term, 2);
+    $monthly_principal = round($total_amount / $term, 2); // Keep 2 decimal places
 
     // Start from meeting date or loan date
     $payment_date = new DateTime($loan['meeting_date'] ?? $loan['date_created']);
@@ -69,7 +69,7 @@ try {
     $lookup_data = [];
 
     for ($i = 0; $i < $term; $i++) {
-        // Calculate interest on remaining principal
+        // Calculate interest on remaining principal - KEEP DECIMALS
         $interest = round($remaining_principal * ($interest_rate / 100), 2);
         $due_amount = $monthly_principal + $interest;
         $due_date = $payment_date->format('Y-m-d');
@@ -83,9 +83,17 @@ try {
             if ($repayment['due_date'] == $due_date) {
                 $repaid_amount = floatval($repayment['repaid_amount']);
                 $paid_date = $repayment['paid_date'];
-                $status = ($repaid_amount >= $due_amount) ? 'paid' : 'partial';
+                // IMPROVED PAYMENT STATUS CHECK - Allow small differences
+                $status = (abs($repaid_amount - $due_amount) <= 0.50) ? 'paid' : (($repaid_amount > 0) ? 'partial' : 'unpaid');
                 break;
             }
+        }
+
+        // FIXED DEFAULT CALCULATION: Only calculate if past due date
+        $default_amount = 0;
+        $today = new DateTime();
+        if ($today > new DateTime($due_date) && $status !== 'paid') {
+            $default_amount = max(0, $due_amount - $repaid_amount);
         }
 
         // Add to lookup data for use by getLoanDetails method
@@ -93,18 +101,19 @@ try {
             'due_date' => $due_date,
             'amount' => $due_amount,
             'repaid_amount' => $repaid_amount,
+            'default_amount' => $default_amount,
             'status' => $status
         ];
 
-        // Add to schedule array for response
+        // Add to schedule array for response - KEEP DECIMALS
         $schedule[] = array(
             'due_date' => $due_date,
-            'principal' => number_format($monthly_principal, 2),
-            'interest' => number_format($interest, 2),
-            'amount' => number_format($due_amount, 2),
-            'balance' => number_format($remaining_balance, 2),
-            'repaid_amount' => number_format($repaid_amount, 2),
-            'default_amount' => "0.00",
+            'principal' => number_format($monthly_principal, 2), // Keep 2 decimals
+            'interest' => number_format($interest, 2), // Keep 2 decimals
+            'amount' => number_format($due_amount, 2), // Keep 2 decimals
+            'balance' => number_format($remaining_balance, 2), // Keep 2 decimals
+            'repaid_amount' => number_format($repaid_amount, 2), // Keep 2 decimals
+            'default_amount' => number_format($default_amount, 2), // Keep 2 decimals
             'status' => $status,
             'paid_date' => $paid_date
         );
@@ -136,16 +145,17 @@ try {
             interest = VALUES(interest),
             amount = VALUES(amount),
             balance = VALUES(balance),
+            default_amount = VALUES(default_amount),
             status = VALUES(status)
         ");
         
         foreach ($lookup_data as $index => $entry) {
             // Parse the formatted values back to raw numbers
             $principal = $monthly_principal;
-            $interest_val = round($remaining_principal * ($interest_rate / 100), 2);
+            $interest_val = round(($total_amount - ($index * $monthly_principal)) * ($interest_rate / 100));
             $amount_val = $entry['amount'];
             $balance_val = $remaining_balance - ($index * $amount_val);
-            $default_val = 0;
+            $default_val = $entry['default_amount'];
             
             $insert_stmt->bind_param(
                 "isdddddsss",
@@ -162,6 +172,21 @@ try {
             );
             
             $insert_stmt->execute();
+        }
+        
+        // CHECK IF LOAN IS FULLY PAID AND UPDATE STATUS
+        $all_paid = true;
+        foreach ($lookup_data as $entry) {
+            if ($entry['status'] !== 'paid') {
+                $all_paid = false;
+                break;
+            }
+        }
+        
+        if ($all_paid) {
+            $complete_loan_stmt = $db->conn->prepare("UPDATE loan SET status = 3 WHERE loan_id = ?");
+            $complete_loan_stmt->bind_param("i", $loan_id);
+            $complete_loan_stmt->execute();
         }
         
         $db->conn->commit();

@@ -11,7 +11,6 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
     exit();
 }
 
-
     // Initialize filter conditions
     $loan_where_clause = "1=1";
     $payment_where_clause = "1=1";
@@ -108,14 +107,16 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
     $stmt->execute();
     $filtered_totals = $stmt->get_result()->fetch_assoc();
 
-    // Get pending loans with filters
-    $pending_loans_query = "SELECT l.*, c.first_name, c.last_name 
+    // Get pending loans with filters - Fixed to include payment terms and proper date
+    $pending_loans_query = "SELECT l.*, c.first_name, c.last_name,
+                           COALESCE(l.date_released, l.date_applied) as approval_date
                            FROM loan l 
                            INNER JOIN client_accounts c ON l.account_id = c.account_id 
                            WHERE l.status = 1";
     if ($loan_where_clause !== "1=1") {
         $pending_loans_query .= " AND " . $loan_where_clause;
     }
+    $pending_loans_query .= " ORDER BY l.loan_id DESC";
     $stmt = $db->conn->prepare($pending_loans_query);
     if (!empty($loan_params)) {
         $stmt->bind_param($loan_types, ...$loan_params);
@@ -124,7 +125,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
     $pending_loans = $stmt->get_result();
 
     // Get all disbursed loans with filters
-    $disbursed_loans_query = "SELECT p.*, l.ref_no, l.status, u.username as disbursed_by 
+    $disbursed_loans_query = "SELECT p.*, l.ref_no, l.status, l.loan_term, l.monthly_payment, u.username as disbursed_by 
                              FROM payment p 
                              INNER JOIN loan l ON p.loan_id = l.loan_id 
                              LEFT JOIN user u ON p.user_id = u.user_id
@@ -139,19 +140,6 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
     }
     $stmt->execute();
     $tbl_payment = $stmt->get_result();
-
-    // Debug information
-    if (isset($_GET['debug'])) {
-        echo "<pre>";
-        echo "Loan Where Clause: " . $loan_where_clause . "\n";
-        echo "Loan Params: " . print_r($loan_params, true) . "\n";
-        echo "Loan Types: " . $loan_types . "\n";
-        echo "Payment Where Clause: " . $payment_where_clause . "\n";
-        echo "Payment Params: " . print_r($payment_params, true) . "\n";
-        echo "Payment Types: " . $payment_types . "\n";
-        echo "</pre>";
-    }
-
 
 ?>
 <!DOCTYPE html>
@@ -182,72 +170,222 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
             box-shadow: rgba(50, 50, 93, 0.25) 0px 13px 27px -5px, rgba(0, 0, 0, 0.3) 0px 8px 16px -8px;
             border: 0;
         }
-        html, body {
-            overflow-x: hidden;
-        }
-        #accordionSidebar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            height: 100vh;
-            z-index: 1000;
-            overflow-y: auto;
-            width: 225px;
-            transition: width 0.3s ease;
-        }
-        #content-wrapper {
-            margin-left: 225px;
-            width: calc(100% - 225px);
-            transition: margin-left 0.3s ease, width 0.3s ease;
-        }
-        .topbar {
-            position: fixed;
-            top: 0;
-            right: 0;
-            left: 225px;
-            z-index: 1000;
-            transition: left 0.3s ease;
-        }
         .container-fluid {
             margin-top: 70px;
             padding-left: 1.5rem;
             padding-right: 1.5rem;
         }
-        @media (max-width: 768px) {
-            #accordionSidebar {
-                width: 100px;
-            }
-            #content-wrapper {
-                margin-left: 100px;
-                width: calc(100% - 100px);
-            }
-            .topbar {
-                left: 100px;
-            }
-            .sidebar .nav-item .nav-link span {
-                display: none;
-            }
+        
+        /* Enhanced Filtered Results Summary Styling */
+        .filtered-results-section {
+            background: linear-gradient(135deg, #51087E 0%, #6B46C1 50%, #8B5CF6 100%);
+            border-radius: 16px;
+            padding: 30px 20px;
+            margin-bottom: 30px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 
+                0 20px 40px rgba(81, 8, 126, 0.15),
+                0 10px 20px rgba(81, 8, 126, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
         }
-        .summary-card {
-            background-color: #f8f9fc;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: rgba(50, 50, 93, 0.25) 0px 13px 27px -5px, rgba(0, 0, 0, 0.3) 0px 8px 16px -8px;
-            border-radius: 8px;
+
+        /* Background pattern overlay */
+        .filtered-results-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.05) 0%, transparent 50%);
+            pointer-events: none;
         }
-        .summary-card h4 {
-            margin: 0;
-            color: #4e73df;
-            font-size: 1rem;
-            font-weight: 700;
-            text-transform: uppercase;
-        }
-        .summary-card p {
+
+        /* Section header styling */
+        .filtered-results-header {
+            color: #ffffff;
             font-size: 1.5rem;
-            font-weight: bold;
-            margin: 10px 0 0;
-            color: #5a5c69;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 25px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            position: relative;
+            z-index: 2;
         }
+
+        /* Card container */
+        .summary-cards-container {
+            position: relative;
+            z-index: 2;
+        }
+
+        /* Enhanced summary cards */
+        .summary-card {
+            background: rgba(255, 255, 255, 0.12);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            border-radius: 16px;
+            padding: 25px 20px;
+            margin-bottom: 20px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            box-shadow: 
+                0 8px 32px rgba(0, 0, 0, 0.1),
+                0 4px 16px rgba(0, 0, 0, 0.05),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+
+        /* Card hover effects */
+        .summary-card:hover {
+            transform: translateY(-4px);
+            background: rgba(255, 255, 255, 0.18);
+            box-shadow: 
+                0 16px 48px rgba(0, 0, 0, 0.15),
+                0 8px 24px rgba(0, 0, 0, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.25);
+        }
+
+        /* Card shimmer effect */
+        .summary-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                90deg,
+                transparent,
+                rgba(255, 255, 255, 0.1),
+                transparent
+            );
+            transition: left 0.6s;
+        }
+
+        .summary-card:hover::before {
+            left: 100%;
+        }
+
+        /* Card headers */
+        .summary-card h4 {
+            margin: 0 0 15px 0;
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: rgba(255, 255, 255, 0.9);
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Card values */
+        .summary-card p {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin: 0;
+            color: #ffffff;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            line-height: 1.2;
+        }
+
+        /* Color-coded left borders for different card types */
+        .summary-card.border-left-primary {
+            border-left: 4px solid #4e73df;
+            background: rgba(78, 115, 223, 0.1);
+        }
+
+        .summary-card.border-left-warning {
+            border-left: 4px solid #f6c23e;
+            background: rgba(246, 194, 62, 0.1);
+        }
+
+        .summary-card.border-left-success {
+            border-left: 4px solid #1cc88a;
+            background: rgba(28, 200, 138, 0.1);
+        }
+
+        .summary-card.border-left-info {
+            border-left: 4px solid #36b9cc;
+            background: rgba(54, 185, 204, 0.1);
+        }
+
+        /* Specific text colors for different metrics */
+        .summary-card.border-left-primary h4 {
+            color: rgba(78, 115, 223, 0.9);
+        }
+
+        .summary-card.border-left-warning h4 {
+            color: rgba(246, 194, 62, 0.9);
+        }
+
+        .summary-card.border-left-success h4 {
+            color: rgba(28, 200, 138, 0.9);
+        }
+
+        .summary-card.border-left-info h4 {
+            color: rgba(54, 185, 204, 0.9);
+        }
+
+        /* Icon styling for cards */
+        .summary-card-icon {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            font-size: 2rem;
+            color: rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .summary-card:hover .summary-card-icon {
+            color: rgba(255, 255, 255, 0.3);
+            transform: scale(1.1);
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .filtered-results-section {
+                padding: 20px 15px;
+                border-radius: 12px;
+            }
+            
+            .summary-card {
+                padding: 20px 15px;
+                margin-bottom: 15px;
+            }
+            
+            .summary-card p {
+                font-size: 1.5rem;
+            }
+            
+            .filtered-results-header {
+                font-size: 1.3rem;
+                margin-bottom: 20px;
+            }
+        }
+
+        /* Loading animation for cards */
+        @keyframes cardFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .summary-card {
+            animation: cardFadeIn 0.6s ease-out;
+        }
+
+        .summary-card:nth-child(1) { animation-delay: 0.1s; }
+        .summary-card:nth-child(2) { animation-delay: 0.2s; }
+        .summary-card:nth-child(3) { animation-delay: 0.3s; }
+        .summary-card:nth-child(4) { animation-delay: 0.4s; }
         .receipt {
             font-family: Arial, sans-serif;
             max-width: 400px;
@@ -274,218 +412,109 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
             color: #777;
         }
         .loading-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(255, 255, 255, 0.8);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 9999;
-}
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
 
-.spinner {
-    width: 50px;
-    height: 50px;
-    border: 5px solid #f3f3f3;
-    border-top: 5px solid #51087E;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-}
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #51087E;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
 
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Toast container styles */
+        .toast-container {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            z-index: 1055;
+            max-width: 350px;
+        }
+        
+        .toast {
+            min-width: 300px;
+            border: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .toast-header {
+            color: #fff;
+            border-bottom: none;
+            font-weight: 600;
+        }
+        
+        .toast-header.bg-success {
+            background: linear-gradient(45deg, #28a745, #20c997) !important;
+        }
+        
+        .toast-header.bg-danger {
+            background: linear-gradient(45deg, #dc3545, #e74c3c) !important;
+        }
+        
+        .toast-header.bg-warning {
+            background: linear-gradient(45deg, #ffc107, #fd7e14) !important;
+        }
+        
+        .toast-body {
+            padding: 1rem;
+            color: #495057;
+            font-size: 0.9rem;
+        }
+
+        /* Payment terms styling */
+        .payment-terms {
+            font-size: 0.85em;
+            color: #495057;
+        }
+        .payment-terms .term-months {
+            font-weight: bold;
+            color: #007bff;
+        }
+        .payment-terms .monthly-amount {
+            font-weight: bold;
+            color: #28a745;
+        }
+
+        /* Total row styling */
+        .total-row {
+            background-color: #f8f9fa !important;
+            font-weight: bold;
+            border-top: 2px solid #007bff !important;
+        }
+        .total-amount {
+            color: #007bff;
+            font-size: 1.1em;
+            font-weight: bold;
+        }
     </style>
 </head>
 
 <body id="page-top">
     <!-- Page Wrapper -->
     <div id="wrapper">
-        <!-- Sidebar -->
-        <ul style="background: #51087E;"  class="navbar-nav sidebar sidebar-dark accordion" id="accordionSidebar">
-            <a class="sidebar-brand d-flex align-items-center justify-content-center" href="index.html">
-                <div class="sidebar-brand-text mx-3">LATO SACCO</div>
-            </a>
+         <!-- Import Sidebar -->
+            <?php require_once '../components/includes/sidebar.php'; ?>
 
-            <hr class="sidebar-divider my-0">
-
-            <li class="nav-item">
-                <a class="nav-link" href="../views/home.php">
-                    <i class="fas fa-fw fa-home"></i>
-                    <span>Home</span>
-                </a>
-            </li>
-
-            <hr class="sidebar-divider">
-
-            <div class="sidebar-heading">
-                Management
-            </div>
-
-            <li class="nav-item">
-                <a class="nav-link" href="loan.php">
-                <i class="fas fa-fw fas fa-comment-dollar"></i>
-                    <span>New Loan</span>
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link" href="pending_approval.php">
-                <i class="fas fa-fw fas fa-comment-dollar"></i>
-                    <span>Pending Approval</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="disbursement.php">
-                    <i class="fas fa-fw fas fa-coins"></i>
-                    <span>Disbursements</span>
-                </a>
-            </li>
-
-            <li class="nav-item active">
-                <a class="nav-link" href="../views/daily-reconciliation.php">
-                    <i class="fas fa-fw fa-balance-scale"></i>
-                    <span>Daily Reconciliation</span>
-                </a>
-            </li>
-
-            <li class="nav-item active">
-                <a class="nav-link" href="../views/expenses_tracking.php">
-                <i class="fas fa-chart-line fa-2x text-gray-300"></i>
-                    <span>Expenses Tracking</span>
-                </a>
-            </li>
-
-            <li class="nav-item active">
-                <a class="nav-link" href="../views/manage_expenses.php">
-                <i class="fas fa-dollar-sign fa-2x text-gray-300"></i>
-                    <span>Manage Expenses</span>
-                </a>
-            </li>
-
-            <li class="nav-item active">
-                <a class="nav-link" href="arrears.php">
-                <i class="fas fa-users-slash fa-2x text-gray-300"></i>
-                    <span>Arrears</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="../views/receipts.php">
-                <i class="fas fa-receipt fa-2x"></i>
-                    <span>Receipts</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="../views/account.php">
-                <i class="fas fa-fw fa-user"></i>
-                    <span>Client Accounts</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="groups.php">
-                <i class="fas fa-users fa-2x text-gray-300"></i>
-                    <span>Wekeza Groups</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="business_groups.php">
-                <i class="fas fa-users fa-2x text-gray-300"></i>
-                    <span>Business Groups</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="loan_plan.php">
-                    <i class="fas fa-fw fa-piggy-bank"></i>
-                    <span>Loan Products</span>
-                </a>
-            </li>
-
-            <hr class="sidebar-divider">
-
-            <div class="sidebar-heading">
-                System
-            </div>
-
-            <li class="nav-item">
-                <a class="nav-link" href="user.php">
-                    <i class="fas fa-fw fa-user"></i>
-                    <span>Users</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="../views/settings.php">
-                    <i class="fas fa-fw fa-cog"></i>
-                    <span>Settings</span>
-                </a>
-            </li>
-
-            <li class="nav-item active">
-                <a class="nav-link" href="../views/announcements.php">
-                    <i class="fas fa-fw fa-bullhorn"></i>
-                    <span>Announcements</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="../views/notifications.php">
-                    <i class="fas fa-fw fa-bell"></i>
-                    <span>Notifications</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="../views/backup.php">
-                    <i class="fas fa-fw fa-database"></i>
-                    <span>Backup</span>
-                </a>
-            </li>
-        </ul>
-        <!-- End of Sidebar -->
-
-
-        <!-- Content Wrapper -->
-        <div id="content-wrapper" class="d-flex flex-column">
-            <!-- Main Content -->
-            <div id="content">
-                <!-- Topbar -->
-                <nav class="navbar navbar-expand navbar-light bg-white topbar mb-4 static-top shadow">
-                    <!-- Sidebar Toggle (Topbar) -->
-                    <button id="sidebarToggleTop" class="btn btn-link d-md-none rounded-circle mr-3">
-                        <i class="fa fa-bars"></i>
-                    </button>
-                    
-                    <!-- Topbar Navbar -->
-                    <ul class="navbar-nav ml-auto">
-                        <!-- Nav Item - User Information -->
-                        <li class="nav-item dropdown no-arrow">
-                            <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button"
-                                data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                                <span class="mr-2 d-none d-lg-inline text-gray-600 small"><?php echo $db->user_acc($_SESSION['user_id'])?></span>
-                                <img class="img-profile rounded-circle"
-                                    src="../public/image/logo.jpg">
-                            </a>
-                            <!-- Dropdown - User Information -->
-                            <div class="dropdown-menu dropdown-menu-right shadow animated--grow-in"
-                                aria-labelledby="userDropdown">
-                                <a class="dropdown-item" href="#" data-toggle="modal" data-target="#logoutModal">
-                                    <i class="fas fa-sign-out-alt fa-sm fa-fw mr-2 text-gray-400"></i>
-                                    Logout
-                                </a>
-                            </div>
-                        </li>
-                    </ul>
-                </nav>
-                <!-- End of Topbar -->
+                <!-- Toast Container -->
+                <div class="toast-container" id="toastContainer">
+                    <!-- Toasts will be inserted here -->
+                </div>
 
                 <!-- Begin Page Content -->
                 <div class="container-fluid pt-4">
@@ -496,7 +525,6 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                         <i class="fas fa-download fa-sm text-white-50"></i> Generate Report
                         </button>
                     </div>
-
 
     <!--filtering-->
     <div class="card mb-4">
@@ -544,45 +572,57 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
     </div>
 </div>
 
-<!--Filtered results cards-->
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header py-3">
-                <h6 style="color: #51087E;" class="m-0 font-weight-bold">Filtered Results Summary</h6>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-3">
-                        <div class="summary-card border-left-primary">
-                            <h4 class="text-primary">Total Loans</h4>
-                            <p><?= number_format($filtered_totals['total_loans']) ?></p>
+    <!--Filtered results cards with enhanced styling-->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="filtered-results-section">
+                <h6 class="filtered-results-header">
+                    <i class="fas fa-chart-bar mr-2"></i>
+                    Filtered Results Summary
+                </h6>
+                <div class="summary-cards-container">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="summary-card border-left-primary">
+                                <div class="summary-card-icon">
+                                    <i class="fas fa-list-alt"></i>
+                                </div>
+                                <h4 class="text-primary">Total Loans</h4>
+                                <p><?= number_format($filtered_totals['total_loans']) ?></p>
+                            </div>
                         </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="summary-card border-left-warning">
-                            <h4 class="text-warning">Pending Amount</h4>
-                            <p>KSh <?= number_format($filtered_totals['pending_amount'], 2) ?></p>
+                        <div class="col-md-3">
+                            <div class="summary-card border-left-warning">
+                                <div class="summary-card-icon">
+                                    <i class="fas fa-clock"></i>
+                                </div>
+                                <h4 class="text-warning">Pending Amount</h4>
+                                <p>KSh <?= number_format($filtered_totals['pending_amount'], 2) ?></p>
+                            </div>
                         </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="summary-card border-left-success">
-                            <h4 class="text-success">Disbursed Amount</h4>
-                            <p>KSh <?= number_format($filtered_totals['disbursed_amount'], 2) ?></p>
+                        <div class="col-md-3">
+                            <div class="summary-card border-left-success">
+                                <div class="summary-card-icon">
+                                    <i class="fas fa-check-circle"></i>
+                                </div>
+                                <h4 class="text-success">Disbursed Amount</h4>
+                                <p>KSh <?= number_format($filtered_totals['disbursed_amount'], 2) ?></p>
+                            </div>
                         </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="summary-card border-left-info">
-                            <h4 class="text-info">Total Amount</h4>
-                            <p>KSh <?= number_format($filtered_totals['total_amount'], 2) ?></p>
+                        <div class="col-md-3">
+                            <div class="summary-card border-left-info">
+                                <div class="summary-card-icon">
+                                    <i class="fas fa-calculator"></i>
+                                </div>
+                                <h4 class="text-info">Total Amount</h4>
+                                <p>KSh <?= number_format($filtered_totals['total_amount'], 2) ?></p>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-</div>
-
 
                     <!-- Summary Cards -->
                     <div class="row mb-4">
@@ -599,8 +639,6 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                         </div>
                     </div>
                     </div>
-
-
 
                     <!-- New Disbursement Button -->
                     <div class="row">
@@ -620,27 +658,51 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                                             <th>Ref No</th>
                                             <th>Borrower</th>
                                             <th>Amount</th>
+                                            <th>Payment Terms</th>
                                             <th>Date Approved</th>
                                             <th>Action</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <?php while($loan = $pending_loans->fetch_assoc()): ?>
+                                        <?php 
+                                        $pending_total = 0;
+                                        while($loan = $pending_loans->fetch_assoc()): 
+                                            $pending_total += $loan['amount'];
+                                        ?>
                                         <tr>
                                             <td><?= $loan['ref_no'] ?></td>
                                             <td><?= $loan['first_name'] . ' ' . $loan['last_name'] ?></td>
-                                            <td>KSh <?= number_format($loan['amount'], 2) ?></td>
-                                            <td><?= $loan['date_approved'] ? date('M d, Y', strtotime($loan['date_approved'])) : 'Not set' ?></td>
+                                            <td class="loan-amount">KSh <?= number_format($loan['amount'], 2) ?></td>
                                             <td>
-                                                <button class="btn btn-success btn-sm disburse-loan" data-toggle="modal" data-target="#addModal" 
+                                                <div class="payment-terms">
+                                                    <div><span class="term-months"><?= $loan['loan_term'] ?> months</span></div>
+                                                    <div><span class="monthly-amount">KSh <?= number_format($loan['monthly_payment'], 2) ?>/month</span></div>
+                                                </div>
+                                            </td>
+                                            <td><?= $loan['approval_date'] ? date('M d, Y', strtotime($loan['approval_date'])) : 'Not set' ?></td>
+                                            <td>
+                                                <button class="btn btn-success btn-sm disburse-loan" 
                                                         data-loan-id="<?= $loan['loan_id'] ?>" 
-                                                        data-ref-no="<?= $loan['ref_no'] ?>">
-                                                    Disburse
+                                                        data-ref-no="<?= $loan['ref_no'] ?>"
+                                                        data-borrower="<?= $loan['first_name'] . ' ' . $loan['last_name'] ?>"
+                                                        data-amount="<?= $loan['amount'] ?>">
+                                                    <i class="fas fa-money-bill-wave"></i> Disburse
                                                 </button>
                                             </td>
                                         </tr>
                                         <?php endwhile; ?>
                                     </tbody>
+                                    <tfoot>
+                                        <tr class="total-row">
+                                            <td colspan="2" class="text-right"><strong>Total Pending:</strong></td>
+                                            <td class="total-amount" id="pendingTotalAmount">KSh <?= number_format($pending_total, 2) ?></td>
+                                            <td colspan="3" class="text-center">
+                                                <span class="badge badge-warning" id="pendingCountBadge">
+                                                    <?= $pending_loans->num_rows ?> loan(s) waiting
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    </tfoot>
                                 </table>
                             </div>
                         </div>
@@ -660,6 +722,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                                     <th>Loan Reference No.</th>
                                     <th>Payee</th>
                                     <th>Amount</th>
+                                    <th>Payment Terms</th>
                                     <th>Withdrawal Fee</th>
                                     <th>Date</th>
                                     <th>Status</th>
@@ -670,16 +733,24 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                             <tbody>
                                 <?php
                                     $i=1;
+                                    $disbursed_total = 0;
                                     while($fetch=$tbl_payment->fetch_array()){
+                                        $disbursed_total += $fetch['pay_amount'];
                                 ?>
                                     <tr>
                                         <td><?php echo $i++?></td>
                                         <td><?php echo $fetch['ref_no']?></td>
                                         <td><?php echo $fetch['payee']?></td>
-                                        <td><?php echo "KSh ".number_format($fetch['pay_amount'], 2)?></td>
+                                        <td class="disbursed-amount"><?php echo "KSh ".number_format($fetch['pay_amount'], 2)?></td>
+                                        <td>
+                                            <div class="payment-terms">
+                                                <div><span class="term-months"><?php echo $fetch['loan_term']?> months</span></div>
+                                                <div><span class="monthly-amount">KSh <?php echo number_format($fetch['monthly_payment'], 2)?>/month</span></div>
+                                            </div>
+                                        </td>
                                         <td><?php echo "KSh ".number_format($fetch['withdrawal_fee'], 2)?></td>
                                         <td><?php echo date('M d, Y', strtotime($fetch['date_created']))?></td>
-                                        <td><?php echo $fetch['status'] == 3 ? 'Completed' : 'In Progress'?></td>
+                                        <td><?php echo $fetch['status'] == 2 ? 'Disbursed' : 'In Progress'?></td>
                                         <td><?php echo $fetch['disbursed_by']?></td>
                                         <td>
                                             <button class="btn btn-warning btn-sm print-receipt" 
@@ -699,8 +770,18 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                                     }
                                 ?>
                             </tbody>
+                            <tfoot>
+                                <tr class="total-row">
+                                    <td colspan="3" class="text-right"><strong>Total Disbursed:</strong></td>
+                                    <td class="total-amount" id="disbursedTotalAmount">KSh <?= number_format($disbursed_total, 2) ?></td>
+                                    <td colspan="6" class="text-center">
+                                        <span class="badge badge-success" id="disbursedCountBadge">
+                                            <?= $i-1 ?> loan(s) disbursed
+                                        </span>
+                                    </td>
+                                </tr>
+                            </tfoot>
                         </table>
-
                             </div>
                         </div>
                     </div>
@@ -731,7 +812,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
     <!-- Disburse Loan Modal-->
     <div class="modal fade" id="addModal" aria-hidden="true">
         <div class="modal-dialog">
-            <form method="POST" action="../controllers/save_payment.php">
+            <form method="POST" action="../controllers/save_payment.php" id="disbursementForm">
                 <div class="modal-content">
                     <div style="background-color: #51087E;" class="modal-header">
                         <h5 class="modal-title text-white">Loan Disbursement Form</h5>
@@ -747,27 +828,28 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                                 <select name="loan_id" class="ref_no" id="ref_no" required="required" style="width:100%;">
                                     <option value=""></option>
                                     <?php
-                                        $tbl_loan=$db->display_loan();
-                                        while($fetch=$tbl_loan->fetch_array()){
-                                            if($fetch['status'] == 1){
+                                        // Reset the result set for pending loans
+                                        $pending_loans->data_seek(0);
+                                        while($fetch=$pending_loans->fetch_array()){
                                     ?>
                                         <option value="<?php echo $fetch['loan_id']?>"><?php echo $fetch['ref_no']?></option>
                                     <?php
-                                            }
                                         }
                                     ?>
                                 </select>
                             </div>
-                            <div class="form-group">
-                            <label>Receipt Number</label>
-                            <input type="text" name="receipt_no" class="form-control" required>
-                        </div>
+                            <div class="form-group col-xl-7 col-md-7">
+                                <label>Receipt Number</label>
+                                <input type="text" name="receipt_no" class="form-control" required>
+                            </div>
                         </div>
                         <div id="formField"></div>
                     </div>
                     <div class="modal-footer">
                         <button class="btn btn-secondary" type="button" data-dismiss="modal">Cancel</button>
-                        <button type="submit" name="save" class="btn btn-success">Disburse</button>
+                        <button type="submit" name="save" class="btn btn-success" id="disburseBtn">
+                            <i class="fas fa-money-bill-wave"></i> Disburse
+                        </button>
                     </div>
                 </div>
             </form>
@@ -845,13 +927,192 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
     <script src="../public/js/sb-admin-2.js"></script>
     
     <script>
+        // Enhanced toast notification function - OUTSIDE document ready
+        function showToast(message, type, title, duration = 5000) {
+            var toastId = 'toast-' + Date.now();
+            var iconClass = '';
+            var titleText = title || '';
+            
+            switch(type) {
+                case 'success':
+                    iconClass = 'fas fa-check-circle';
+                    titleText = titleText || 'Success';
+                    break;
+                case 'danger':
+                case 'error':
+                    iconClass = 'fas fa-exclamation-circle';
+                    titleText = titleText || 'Error';
+                    type = 'danger';
+                    break;
+                case 'warning':
+                    iconClass = 'fas fa-exclamation-triangle';
+                    titleText = titleText || 'Warning';
+                    break;
+                case 'info':
+                    iconClass = 'fas fa-info-circle';
+                    titleText = titleText || 'Information';
+                    break;
+            }
+            
+            var toastHtml = `
+                <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="${duration}">
+                    <div class="toast-header bg-${type} text-white">
+                        <i class="${iconClass} mr-2"></i>
+                        <strong class="mr-auto">${titleText}</strong>
+                        <small class="text-light">${new Date().toLocaleTimeString()}</small>
+                        <button type="button" class="ml-2 mb-1 close text-white" data-dismiss="toast" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="toast-body">
+                        ${message}
+                    </div>
+                </div>
+            `;
+            
+            $('#toastContainer').append(toastHtml);
+            $(`#${toastId}`).toast('show');
+            
+            $(`#${toastId}`).on('hidden.bs.toast', function () {
+                $(this).remove();
+            });
+        }
+
+        // Generate Report function - OUTSIDE document ready so it's globally accessible
+        function generateReport() {
+            // Get current filter values from the form
+            var quickFilter = $('#quickFilter').val() || '';
+            var startDate = $('input[name="start_date"]').val() || '';
+            var endDate = $('input[name="end_date"]').val() || '';
+            var status = $('select[name="status"]').val() || '';
+            
+            // Build query parameters array
+            var params = [];
+            
+            if (quickFilter) {
+                params.push('quick_filter=' + encodeURIComponent(quickFilter));
+            }
+            
+            if (startDate) {
+                params.push('start_date=' + encodeURIComponent(startDate));
+            }
+            
+            if (endDate) {
+                params.push('end_date=' + encodeURIComponent(endDate));
+            }
+            
+            if (status) {
+                params.push('status=' + encodeURIComponent(status));
+            }
+            
+            // Construct URL with parameters
+            var url = '../controllers/generate_report.php';
+            if (params.length > 0) {
+                url += '?' + params.join('&');
+            }
+            
+            console.log('Generating report with URL:', url); // Debug log
+            
+            // Show informative toast about what's being generated
+            var filterInfo = 'all records';
+            if (quickFilter) {
+                switch(quickFilter) {
+                    case 'today': filterInfo = "today's records"; break;
+                    case 'yesterday': filterInfo = "yesterday's records"; break;
+                    case 'week': filterInfo = "this week's records"; break;
+                    case 'month': filterInfo = "this month's records"; break;
+                    case 'custom': filterInfo = "custom date range"; break;
+                }
+            }
+            
+            if (status) {
+                var statusText = status == '1' ? 'pending loans only' : 'disbursed loans only';
+                filterInfo += ' (' + statusText + ')';
+            }
+            
+            showToast(`Generating comprehensive report for ${filterInfo}...`, 'info', 'Report Generation', 4000);
+            
+            // Open report in new window/tab
+            window.open(url, '_blank');
+        }
+
+        // Print Receipt function - OUTSIDE document ready
+        function printReceipt() {
+            var printContents = document.querySelector('.receipt').innerHTML;
+            var originalContents = document.body.innerHTML;
+
+            document.body.innerHTML = printContents;
+            window.print();
+            document.body.innerHTML = originalContents;
+        }
+
+        // Document ready function
         $(document).ready(function() {
-            $('#dataTable').DataTable();
-            $('#pendingLoansTable').DataTable();
+            // Initialize DataTables with footer callbacks
+            var pendingTable = $('#pendingLoansTable').DataTable({
+                "footerCallback": function (row, data, start, end, display) {
+                    var api = this.api();
+                    var total = 0;
+                    var count = 0;
+                    
+                    api.column(2, { page: 'current' }).data().each(function (value, index) {
+                        var numValue = parseFloat(value.replace(/[^\d.-]/g, ''));
+                        if (!isNaN(numValue)) {
+                            total += numValue;
+                            count++;
+                        }
+                    });
+                    
+                    $('#pendingTotalAmount').html('KSh ' + total.toLocaleString('en-US', { minimumFractionDigits: 2 }));
+                    $('#pendingCountBadge').html(count + ' loan(s) waiting');
+                },
+                "order": [[0, "desc"]]
+            });
+
+            var disbursedTable = $('#dataTable').DataTable({
+                "footerCallback": function (row, data, start, end, display) {
+                    var api = this.api();
+                    var total = 0;
+                    var count = 0;
+                    
+                    api.column(3, { page: 'current' }).data().each(function (value, index) {
+                        var numValue = parseFloat(value.replace(/[^\d.-]/g, ''));
+                        if (!isNaN(numValue)) {
+                            total += numValue;
+                            count++;
+                        }
+                    });
+                    
+                    $('#disbursedTotalAmount').html('KSh ' + total.toLocaleString('en-US', { minimumFractionDigits: 2 }));
+                    $('#disbursedCountBadge').html(count + ' loan(s) disbursed');
+                },
+                "order": [[0, "desc"]]
+            });
             
             $('.ref_no').select2({
                 placeholder: 'Select an option'
             });
+
+            // Update button text to indicate it respects filters
+            function updateGenerateButtonText() {
+                var quickFilter = $('#quickFilter').val();
+                var status = $('select[name="status"]').val();
+                var hasFilters = quickFilter || status || $('input[name="start_date"]').val() || $('input[name="end_date"]').val();
+                
+                var buttonText = hasFilters ? 
+                    '<i class="fas fa-download fa-sm text-white-50"></i> Generate Filtered Report' : 
+                    '<i class="fas fa-download fa-sm text-white-50"></i> Generate Report';
+                    
+                $('.btn-warning[onclick="generateReport()"]').html(buttonText);
+            }
+
+            // Update button text when filters change
+            $('#quickFilter, select[name="status"], input[name="start_date"], input[name="end_date"]').on('change', function() {
+                updateGenerateButtonText();
+            });
+
+            // Call on page load
+            updateGenerateButtonText();
             
             $('#ref_no').on('change', function(){
                 if($('#ref_no').val()== ""){
@@ -859,83 +1120,149 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                 }else{
                     $('#formField').empty();
                     $('#formField').load("../helpers/get_field.php?loan_id="+$(this).val(), function() {
-                        // Auto-fill the disbursement amount
                         var totalDisbursement = parseFloat($('#totalDisbursement').text().replace('KSh ', '').replace(',', ''));
                         $('input[name="disbursement"]').val(totalDisbursement.toFixed(2));
                     });
                 }
             });
 
-
-  
-
-    // Handle quick filter changes
-    // Handle initial state
-    function handleCustomDateRange() {
-        const filterValue = $('#quickFilter').val();
-        const customDateRange = $('.custom-date-range');
-        
-        if (filterValue === 'custom') {
-            customDateRange.show();
-            // Make date fields required
-            customDateRange.find('input[type="date"]').prop('required', true);
-        } else {
-            customDateRange.hide();
-            // Remove required attribute and clear values
-            customDateRange.find('input[type="date"]')
-                         .prop('required', false)
-                         .val('');
-        }
-    }
-
-    // Set initial state
-    handleCustomDateRange();
-
-    // Handle filter changes
-    $('#quickFilter').change(handleCustomDateRange);
-
-    // Form validation
-    $('#filterForm').submit(function(e) {
-        if ($('#quickFilter').val() === 'custom') {
-            const startDate = $('input[name="start_date"]').val();
-            const endDate = $('input[name="end_date"]').val();
-            
-            if (!startDate || !endDate) {
-                e.preventDefault();
-                alert('Please select both start and end dates for custom range');
-                return false;
-            }
-            
-            if (startDate > endDate) {
-                e.preventDefault();
-                alert('Start date cannot be later than end date');
-                return false;
-            }
-        }
-    });
-
-    // Add loading indicator
-    $('#filterForm').on('submit', function() {
-        $('body').append('<div class="loading-overlay"><div class="spinner"></div></div>');
-    });
-
-
-
-
-            $('.disburse-loan').click(function() {
+            // Fixed disburse button click handler - using event delegation
+            $(document).on('click', '.disburse-loan', function() {
                 var loanId = $(this).data('loan-id');
                 var refNo = $(this).data('ref-no');
+                var borrower = $(this).data('borrower');
+                var amount = $(this).data('amount');
+                
+                // Pre-select the loan in the dropdown
                 $('#ref_no').val(loanId).trigger('change');
+                
+                // Show the modal
+                $('#addModal').modal('show');
+                
+                // Show info toast
+                showToast(`Preparing disbursement for ${borrower} - ${refNo} (KSh ${amount.toLocaleString()})`, 'info', 'Disbursement Setup');
+            });
+
+            // Handle form submission with toast notifications
+$('#disbursementForm').on('submit', function(e) {
+    e.preventDefault();
+    
+    var formData = $(this).serialize() + '&save=1&ajax=1'; // Add both save and ajax parameters
+    var disburseBtn = $('#disburseBtn');
+    var originalText = disburseBtn.html();
+    
+    // Get loan details for toast
+    var selectedOption = $('#ref_no option:selected');
+    var refNo = selectedOption.text();
+    var payeeName = $('input[name="payee"]').val() || 'Unknown';
+    var amount = $('input[name="disbursement"]').val() || '0';
+    
+    disburseBtn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Processing...');
+    
+    $.ajax({
+        url: '../controllers/save_payment.php',
+        type: 'POST',
+        data: formData,
+        dataType: 'json',
+        success: function(response) {
+            disburseBtn.prop('disabled', false).html(originalText);
+            
+            if (response && response.success) {
+                $('#addModal').modal('hide');
+                showToast(
+                    `Loan successfully disbursed to ${payeeName}! Amount: KSh ${parseFloat(amount).toLocaleString()} for Reference: ${refNo}`,
+                    'success',
+                    'Disbursement Successful',
+                    7000
+                );
+                
+                setTimeout(function() {
+                    location.reload();
+                }, 2000);
+            } else {
+                var errorMessage = response && response.message ? response.message : 'Unknown error occurred during disbursement';
+                showToast(
+                    `Failed to disburse loan: ${errorMessage}`,
+                    'error',
+                    'Disbursement Failed'
+                );
+            }
+        },
+        error: function(xhr, status, error) {
+            disburseBtn.prop('disabled', false).html(originalText);
+            
+            console.log('AJAX Error Details:', {
+                status: status,
+                error: error,
+                responseText: xhr.responseText,
+                statusCode: xhr.status
+            });
+            
+            var errorMessage = 'Network error occurred. Please check your connection and try again.';
+            if (xhr.responseText) {
+                try {
+                    var response = JSON.parse(xhr.responseText);
+                    errorMessage = response.message || errorMessage;
+                } catch (e) {
+                    console.log('Failed to parse JSON response:', xhr.responseText);
+                }
+            }
+            
+            showToast(errorMessage, 'error', 'Connection Error');
+        }
+    });
+});
+
+            // Handle quick filter changes
+            function handleCustomDateRange() {
+                const filterValue = $('#quickFilter').val();
+                const customDateRange = $('.custom-date-range');
+                
+                if (filterValue === 'custom') {
+                    customDateRange.show();
+                    customDateRange.find('input[type="date"]').prop('required', true);
+                } else {
+                    customDateRange.hide();
+                    customDateRange.find('input[type="date"]')
+                                 .prop('required', false)
+                                 .val('');
+                }
+            }
+
+            handleCustomDateRange();
+            $('#quickFilter').change(handleCustomDateRange);
+
+            $('#filterForm').submit(function(e) {
+                if ($('#quickFilter').val() === 'custom') {
+                    const startDate = $('input[name="start_date"]').val();
+                    const endDate = $('input[name="end_date"]').val();
+                    
+                    if (!startDate || !endDate) {
+                        e.preventDefault();
+                        showToast('Please select both start and end dates for custom range', 'warning', 'Validation Error');
+                        return false;
+                    }
+                    
+                    if (startDate > endDate) {
+                        e.preventDefault();
+                        showToast('Start date cannot be later than end date', 'warning', 'Validation Error');
+                        return false;
+                    }
+                }
+            });
+
+            $('#filterForm').on('submit', function() {
+                $('body').append('<div class="loading-overlay"><div class="spinner"></div></div>');
             });
 
             $('.print-receipt').click(function() {
-            $('#receiptRefNo').text($(this).data('ref-no'));
-            $('#receiptPayee').text($(this).data('payee'));
-            $('#receiptAmount').text($(this).data('amount').toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
-            $('#receiptDate').text(new Date($(this).data('date')).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }));
-            $('#receiptStatus').text($(this).data('status'));
-            $('#receiptDisbursedBy').text($(this).data('disbursed-by'));
-        });
+                $('#receiptRefNo').text($(this).data('ref-no'));
+                $('#receiptPayee').text($(this).data('payee'));
+                $('#receiptAmount').text($(this).data('amount').toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+                $('#receiptDate').text(new Date($(this).data('date')).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }));
+                $('#receiptStatus').text($(this).data('status'));
+                $('#receiptDisbursedBy').text($(this).data('disbursed-by'));
+            });
 
             // Toggle the side navigation
             $("#sidebarToggleTop").on('click', function(e) {
@@ -951,35 +1278,21 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                 }
             });
 
-            // Close any open menu accordions when window is resized below 768px
             $(window).resize(function() {
                 if ($(window).width() < 768) {
                     $('.sidebar .collapse').collapse('hide');
                 };
                 
-                // Toggle the side navigation when window is resized below 480px
                 if ($(window).width() < 480 && !$(".sidebar").hasClass("toggled")) {
                     $("body").addClass("sidebar-toggled");
                     $(".sidebar").addClass("toggled");
                     $('.sidebar .collapse').collapse('hide');
                 };
             });
+
+            // Show welcome toast
+            showToast('Disbursement page loaded successfully. Ready to process loan disbursements.', 'info', 'Welcome', 3000);
         });
-
-        function generateReport() {
-            window.location.href = '../controllers/generate_report.php';
-        }
-
-        function printReceipt() {
-            var printContents = document.querySelector('.receipt').innerHTML;
-            var originalContents = document.body.innerHTML;
-
-            document.body.innerHTML = printContents;
-
-            window.print();
-
-            document.body.innerHTML = originalContents;
-        }
     </script>
 </body>
 </html>

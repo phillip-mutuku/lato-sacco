@@ -40,7 +40,7 @@ if ($loans) {
                 break;
             case 2:
                 $status_class = 'badge-primary';
-                $status_text = 'Released';
+                $status_text = 'Disbursed';
                 break;
             case 3:
                 $status_class = 'badge-success';

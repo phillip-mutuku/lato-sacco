@@ -157,42 +157,75 @@ class AccountModel {
     }
 
     // Get account transactions
-    public function getAccountTransactions($accountId) {
-        $stmt = $this->conn->prepare("SELECT * FROM transactions WHERE account_id = ? ORDER BY date DESC");
-        $stmt->bind_param("i", $accountId);
+    public function getAccountTransactions($accountId, $accountType = 'all') {
+    try {
+        $query = "SELECT t.*, s.account_type
+                  FROM transactions t
+                  LEFT JOIN savings s ON t.receipt_number = s.receipt_number
+                  WHERE t.account_id = ?";
+        
+        $params = [$accountId];
+        $types = "i";
+        
+        if ($accountType !== 'all') {
+            $query .= " AND (s.account_type = ? OR s.account_type IS NULL)";
+            $params[] = $accountType;
+            $types .= "s";
+        }
+        
+        $query .= " ORDER BY t.date DESC";
+        
+        $stmt = $this->conn->prepare($query);
+        $stmt->bind_param($types, ...$params);
         $stmt->execute();
         return $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    } catch (Exception $e) {
+        error_log("Error in getAccountTransactions: " . $e->getMessage());
+        return [];
     }
+}
 
     // Get account loans
-    public function getAccountLoans($accountId) {
-        try {
-            $stmt = $this->conn->prepare("
-                SELECT l.*, 
-                       (l.amount - COALESCE(SUM(lr.amount_repaid), 0)) as outstanding_balance
-                FROM loan l
-                LEFT JOIN loan_repayments lr ON l.loan_id = lr.loan_id
-                WHERE l.account_id = ?
-                GROUP BY l.loan_id
-                HAVING outstanding_balance > 0 OR l.status != 3
-            ");
-            if (!$stmt) {
-                throw new Exception("Prepare failed: " . $this->conn->error);
-            }
-            $stmt->bind_param("i", $accountId);
-            $stmt->execute();
-            $result = $stmt->get_result();
-            $loans = $result->fetch_all(MYSQLI_ASSOC);
-            
-            // Debug information
-            error_log("Fetched loans for account $accountId: " . print_r($loans, true));
-            
-            return $loans;
-        } catch (Exception $e) {
-            error_log("Error in getAccountLoans: " . $e->getMessage());
-            return false;
+    public function getAccountLoans($accountId, $accountType = 'all') {
+    try {
+        $query = "
+            SELECT l.*, 
+                   (l.amount - COALESCE(SUM(lr.amount_repaid), 0)) as outstanding_balance
+            FROM loan l
+            LEFT JOIN loan_repayments lr ON l.loan_id = lr.loan_id
+            WHERE l.account_id = ?";
+        
+        $params = [$accountId];
+        $types = "i";
+        
+        if ($accountType !== 'all') {
+            $query .= " AND l.account_type = ?";
+            $params[] = $accountType;
+            $types .= "s";
         }
+        
+        $query .= " GROUP BY l.loan_id
+                    HAVING outstanding_balance > 0 OR l.status != 3
+                    ORDER BY l.date_applied DESC";
+        
+        $stmt = $this->conn->prepare($query);
+        if (!$stmt) {
+            throw new Exception("Prepare failed: " . $this->conn->error);
+        }
+        $stmt->bind_param($types, ...$params);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $loans = $result->fetch_all(MYSQLI_ASSOC);
+        
+        // Debug information
+        error_log("Fetched loans for account $accountId (type: $accountType): " . print_r($loans, true));
+        
+        return $loans;
+    } catch (Exception $e) {
+        error_log("Error in getAccountLoans: " . $e->getMessage());
+        return [];
     }
+}
 
 ///filtered data
 // In AccountModel.php, update or add these methods
@@ -227,7 +260,14 @@ public function getFilteredTotalSavings($accountId, $accountType) {
     }
 }
 
-public function getFilteredTotalLoans($accountId, $accountType) {
+/**
+ * Get filtered total loans for an account (Outstanding loans only)
+ * 
+ * @param int $accountId ID of the account
+ * @param string $accountType Filter by account type
+ * @return float Total outstanding loans amount
+ */
+public function getFilteredTotalLoans($accountId, $accountType = 'all') {
     try {
         $query = "SELECT COALESCE(SUM(outstanding_balance), 0) as total
                  FROM loan 
@@ -248,6 +288,148 @@ public function getFilteredTotalLoans($accountId, $accountType) {
         return $result['total'] ?? 0;
     } catch (Exception $e) {
         error_log("Error in getFilteredTotalLoans: " . $e->getMessage());
+        return 0;
+    }
+}
+
+
+/**
+ * Get total outstanding loans (principal balance) from loan schedule
+ * Fixed to handle negative values and ensure proper calculation
+ */
+public function getTotalOutstandingLoans($accountId, $accountType = 'all') {
+    try {
+        $query = "
+            SELECT COALESCE(SUM(GREATEST(current_balance, 0)), 0) as total_outstanding
+            FROM (
+                SELECT 
+                    l.loan_id,
+                    GREATEST(COALESCE(
+                        (SELECT ls.balance 
+                         FROM loan_schedule ls 
+                         WHERE ls.loan_id = l.loan_id 
+                         AND ls.status IN ('unpaid', 'partial')
+                         ORDER BY ls.due_date ASC 
+                         LIMIT 1),
+                        l.amount
+                    ), 0) as current_balance
+                FROM loan l
+                WHERE l.account_id = ?
+                AND l.status IN (1, 2)"; // Only active/released loans
+        
+        $params = [$accountId];
+        $types = "i";
+        
+        if ($accountType !== 'all') {
+            $query .= " AND l.account_type = ?";
+            $params[] = $accountType;
+            $types .= "s";
+        }
+        
+        $query .= "
+            ) as loan_balances";
+        
+        $stmt = $this->conn->prepare($query);
+        if (!$stmt) {
+            throw new Exception("Error preparing statement: " . $this->conn->error);
+        }
+        
+        $stmt->bind_param($types, ...$params);
+        if (!$stmt->execute()) {
+            throw new Exception("Error executing query: " . $stmt->error);
+        }
+        
+        $result = $stmt->get_result()->fetch_assoc();
+        $outstanding = floatval($result['total_outstanding'] ?? 0);
+        
+        // Ensure we never return negative values
+        return max(0, $outstanding);
+        
+    } catch (Exception $e) {
+        error_log("Error in getTotalOutstandingLoans: " . $e->getMessage());
+        return 0;
+    }
+}
+
+/**
+ * Get total group savings for a specific client from group transactions
+ * Fixed to look in group_savings and group_withdrawals tables
+ */
+public function getTotalGroupSavings($accountId, $accountType = 'all') {
+    try {
+        // Get group savings from actual group tables, not account types
+        $query = "
+            SELECT COALESCE(
+                (SELECT SUM(gs.amount) 
+                 FROM group_savings gs
+                 JOIN group_members gm ON gs.group_id = gm.group_id AND gs.account_id = gm.account_id
+                 WHERE gm.account_id = ? AND gm.status = 'active'),
+                0
+            ) - COALESCE(
+                (SELECT SUM(gw.amount)
+                 FROM group_withdrawals gw
+                 JOIN group_members gm ON gw.group_id = gm.group_id AND gw.account_id = gm.account_id
+                 WHERE gm.account_id = ? AND gm.status = 'active'),
+                0
+            ) as total_group_savings";
+        
+        $stmt = $this->conn->prepare($query);
+        if (!$stmt) {
+            throw new Exception("Error preparing statement: " . $this->conn->error);
+        }
+        
+        $stmt->bind_param("ii", $accountId, $accountId);
+        if (!$stmt->execute()) {
+            throw new Exception("Error executing query: " . $stmt->error);
+        }
+        
+        $result = $stmt->get_result()->fetch_assoc();
+        $groupSavings = floatval($result['total_group_savings'] ?? 0);
+        
+        // Ensure we never return negative values
+        return max(0, $groupSavings);
+        
+    } catch (Exception $e) {
+        error_log("Error in getTotalGroupSavings: " . $e->getMessage());
+        return 0;
+    }
+}
+
+/**
+ * Get count of active loans (status = 2, which means disbursed/active)
+ */
+public function getActiveLoansCount($accountId, $accountType = 'all') {
+    try {
+        $query = "
+            SELECT COUNT(*) as active_count
+            FROM loan l
+            WHERE l.account_id = ? 
+            AND l.status = 2"; // Status 2 = Active/Disbursed
+        
+        $params = [$accountId];
+        $types = "i";
+        
+        if ($accountType !== 'all') {
+            $query .= " AND l.account_type = ?";
+            $params[] = $accountType;
+            $types .= "s";
+        }
+        
+        $stmt = $this->conn->prepare($query);
+        if (!$stmt) {
+            throw new Exception("Error preparing statement: " . $this->conn->error);
+        }
+        
+        $stmt->bind_param($types, ...$params);
+        if (!$stmt->execute()) {
+            throw new Exception("Error executing query: " . $stmt->error);
+        }
+        
+        $result = $stmt->get_result()->fetch_assoc();
+        return intval($result['active_count'] ?? 0);
+        
+    } catch (Exception $e) {
+        error_log("Error in getActiveLoansCount: " . $e->getMessage());
         return 0;
     }
 }
@@ -293,8 +475,9 @@ public function getFilteredTotalLoans($accountId, $accountType) {
     }
 
     // Get total outstanding loans for an account
-    public function getTotalLoans($accountId) {
-        $stmt = $this->conn->prepare("
+    public function getTotalLoans($accountId, $accountType = 'all') {
+    try {
+        $query = "
             SELECT SUM(l.amount) as total_loan_amount,
                    SUM(COALESCE(lr.total_repaid, 0)) as total_repaid
             FROM loan l
@@ -303,9 +486,19 @@ public function getFilteredTotalLoans($accountId, $accountType) {
                 FROM loan_repayments
                 GROUP BY loan_id
             ) lr ON l.loan_id = lr.loan_id
-            WHERE l.account_id = ?
-        ");
-        $stmt->bind_param("i", $accountId);
+            WHERE l.account_id = ?";
+        
+        $params = [$accountId];
+        $types = "i";
+        
+        if ($accountType !== 'all') {
+            $query .= " AND l.account_type = ?";
+            $params[] = $accountType;
+            $types .= "s";
+        }
+        
+        $stmt = $this->conn->prepare($query);
+        $stmt->bind_param($types, ...$params);
         $stmt->execute();
         $result = $stmt->get_result()->fetch_assoc();
         
@@ -313,7 +506,11 @@ public function getFilteredTotalLoans($accountId, $accountType) {
         $totalRepaid = $result['total_repaid'] ?? 0;
         
         return $totalLoanAmount - $totalRepaid;
+    } catch (Exception $e) {
+        error_log("Error in getTotalLoans: " . $e->getMessage());
+        return 0;
     }
+}
 
 
     
@@ -735,17 +932,21 @@ public function getTransactionReceipt($transactionId, $type) {
 
     //loan repayments
     public function getLoanRepayments($accountId) {
-        $stmt = $this->conn->prepare("
-            SELECT lr.*, l.ref_no as loan_ref_no
-            FROM loan_repayments lr
-            JOIN loan l ON lr.loan_id = l.loan_id
-            WHERE l.account_id = ?
-            ORDER BY lr.date_paid DESC
-        ");
-        $stmt->bind_param("i", $accountId);
-        $stmt->execute();
-        return $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-    }
+    $stmt = $this->conn->prepare("
+        SELECT 
+            lr.*, 
+            l.ref_no as loan_ref_no,
+            COALESCE(u.firstname, lr.served_by, 'Unknown') as served_by_name
+        FROM loan_repayments lr
+        JOIN loan l ON lr.loan_id = l.loan_id
+        LEFT JOIN user u ON lr.served_by = u.user_id
+        WHERE l.account_id = ?
+        ORDER BY lr.date_paid DESC
+    ");
+    $stmt->bind_param("i", $accountId);
+    $stmt->execute();
+    return $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+}
 
 
     
@@ -832,66 +1033,242 @@ public function getTransactionReceipt($transactionId, $type) {
 
 
     public function getLoanDetailsForRepayment($loanId) {
-        try {
-            // Get loan details with explicit account ID join
-            $query = $this->conn->prepare("
-                SELECT 
-                    l.*, 
-                    ca.first_name, 
-                    ca.last_name,
-                    (l.amount - COALESCE((SELECT SUM(amount_repaid) FROM loan_repayments WHERE loan_id = l.loan_id), 0)) as outstanding_balance
-                FROM loan l
-                JOIN client_accounts ca ON l.account_id = ca.account_id
-                WHERE l.loan_id = ?
-            ");
-            
-            $query->bind_param("i", $loanId);
-            $query->execute();
-            $result = $query->get_result();
-            $loanDetails = $result->fetch_assoc();
-            
-            // Debug log
-            error_log("Loan details for loan ID $loanId: " . json_encode($loanDetails));
-            
-            if (!$loanDetails) {
-                error_log("No loan found with ID: $loanId");
-                return false;
-            }
-            
-            // Add next payment information if available - specifically for this loan
-            $scheduleQuery = $this->conn->prepare("
-                SELECT * FROM loan_schedule 
-                WHERE loan_id = ? 
-                AND (status = 'unpaid' OR status = 'partial')
-                ORDER BY due_date ASC LIMIT 1
-            ");
-            
-            if ($scheduleQuery) {
-                $scheduleQuery->bind_param("i", $loanId);
-                $scheduleQuery->execute();
-                $schedule = $scheduleQuery->get_result()->fetch_assoc();
-                
-                if ($schedule) {
-                    $loanDetails['next_due_amount'] = $schedule['amount'] - ($schedule['repaid_amount'] ?? 0);
-                    $loanDetails['next_due_date'] = $schedule['due_date'];
-                    $loanDetails['is_overdue'] = (strtotime($schedule['due_date']) < time());
-                    
-                    // Debug log
-                    error_log("Next payment for loan ID $loanId: " . json_encode([
-                        'due_amount' => $loanDetails['next_due_amount'],
-                        'due_date' => $loanDetails['next_due_date'],
-                        'is_overdue' => $loanDetails['is_overdue']
-                    ]));
-                }
-            }
-            
-            return $loanDetails;
-            
-        } catch (Exception $e) {
-            error_log("Error in getLoanDetailsForRepayment: " . $e->getMessage());
+    try {
+        // Get loan details with explicit account ID join
+        $query = $this->conn->prepare("
+            SELECT 
+                l.*, 
+                ca.first_name, 
+                ca.last_name,
+                (l.amount - COALESCE((SELECT SUM(amount_repaid) FROM loan_repayments WHERE loan_id = l.loan_id), 0)) as outstanding_balance
+            FROM loan l
+            JOIN client_accounts ca ON l.account_id = ca.account_id
+            WHERE l.loan_id = ?
+        ");
+        
+        $query->bind_param("i", $loanId);
+        $query->execute();
+        $result = $query->get_result();
+        $loanDetails = $result->fetch_assoc();
+        
+        if (!$loanDetails) {
+            error_log("No loan found with ID: $loanId");
             return false;
         }
+        
+        // Get next unpaid/partial payment information
+        $scheduleQuery = $this->conn->prepare("
+            SELECT * FROM loan_schedule 
+            WHERE loan_id = ? 
+            AND (status = 'unpaid' OR status = 'partial')
+            ORDER BY due_date ASC LIMIT 1
+        ");
+        
+        if ($scheduleQuery) {
+            $scheduleQuery->bind_param("i", $loanId);
+            $scheduleQuery->execute();
+            $schedule = $scheduleQuery->get_result()->fetch_assoc();
+            
+            if ($schedule) {
+                $dueAmount = floatval($schedule['amount']);
+                $repaidAmount = floatval($schedule['repaid_amount'] ?? 0);
+                $remainingAmount = $dueAmount - $repaidAmount;
+                
+                // Get accumulated defaults from all overdue unpaid/partial installments
+                $defaultQuery = $this->conn->prepare("
+                    SELECT SUM(default_amount) as total_defaults 
+                    FROM loan_schedule 
+                    WHERE loan_id = ? 
+                    AND due_date <= CURDATE() 
+                    AND status != 'paid'
+                    AND default_amount > 0
+                ");
+                $defaultQuery->bind_param("i", $loanId);
+                $defaultQuery->execute();
+                $defaultResult = $defaultQuery->get_result()->fetch_assoc();
+                $totalDefaults = floatval($defaultResult['total_defaults'] ?? 0);
+                
+                // Next due amount = remaining amount for current installment + accumulated defaults
+                $loanDetails['next_due_amount'] = $remainingAmount + $totalDefaults;
+                $loanDetails['next_due_date'] = $schedule['due_date'];
+                $loanDetails['is_overdue'] = (strtotime($schedule['due_date']) < time());
+                $loanDetails['accumulated_defaults'] = $totalDefaults;
+                
+                // Handle partial payments
+                if ($schedule['status'] === 'partial' && $schedule['repaid_amount'] > 0) {
+                    $loanDetails['partial_paid'] = floatval($schedule['repaid_amount']);
+                }
+                
+                // Debug log
+                error_log("Next payment for loan ID $loanId: " . json_encode([
+                    'remaining_amount' => $remainingAmount,
+                    'accumulated_defaults' => $totalDefaults,
+                    'total_due_amount' => $loanDetails['next_due_amount'],
+                    'due_date' => $loanDetails['next_due_date'],
+                    'is_overdue' => $loanDetails['is_overdue']
+                ]));
+            } else {
+                $loanDetails['next_due_amount'] = 0;
+                $loanDetails['next_due_date'] = null;
+                $loanDetails['is_overdue'] = false;
+                $loanDetails['accumulated_defaults'] = 0;
+            }
+        }
+        
+        return $loanDetails;
+        
+    } catch (Exception $e) {
+        error_log("Error in getLoanDetailsForRepayment: " . $e->getMessage());
+        return false;
     }
+}
+
+
+public function deleteRepayment($repaymentId, $loanId, $deletedAmount) {
+    $this->conn->begin_transaction();
+    
+    try {
+        // First, get the repayment details before deletion
+        $getRepaymentStmt = $this->conn->prepare("
+            SELECT lr.*, l.ref_no as loan_ref_no
+            FROM loan_repayments lr
+            JOIN loan l ON lr.loan_id = l.loan_id
+            WHERE lr.id = ?
+        ");
+        $getRepaymentStmt->bind_param("i", $repaymentId);
+        $getRepaymentStmt->execute();
+        $repaymentDetails = $getRepaymentStmt->get_result()->fetch_assoc();
+        
+        if (!$repaymentDetails) {
+            throw new Exception("Repayment record not found");
+        }
+        
+        // Delete the repayment record
+        $deleteRepaymentStmt = $this->conn->prepare("DELETE FROM loan_repayments WHERE id = ?");
+        $deleteRepaymentStmt->bind_param("i", $repaymentId);
+        
+        if (!$deleteRepaymentStmt->execute()) {
+            throw new Exception("Failed to delete repayment record");
+        }
+        
+        // Delete the associated transaction record
+        $deleteTransactionStmt = $this->conn->prepare("
+            DELETE FROM transactions 
+            WHERE receipt_number = ? AND type = 'Loan Repayment' AND amount = ?
+        ");
+        $deleteTransactionStmt->bind_param("sd", $repaymentDetails['receipt_number'], $deletedAmount);
+        $deleteTransactionStmt->execute();
+        
+        // Now we need to reverse the payment from the loan schedule
+        // Get all schedule entries that were affected by this payment
+        $scheduleStmt = $this->conn->prepare("
+            SELECT * FROM loan_schedule 
+            WHERE loan_id = ? 
+            ORDER BY due_date ASC
+        ");
+        $scheduleStmt->bind_param("i", $loanId);
+        $scheduleStmt->execute();
+        $schedules = $scheduleStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+        
+        // Reverse the payment by reducing repaid amounts
+        $remainingToReverse = floatval($deletedAmount);
+        $today = date('Y-m-d');
+        
+        // Process schedules in reverse order (latest first) to undo the payment
+        foreach (array_reverse($schedules) as $schedule) {
+            if ($remainingToReverse <= 0) break;
+            if (floatval($schedule['repaid_amount']) <= 0) continue;
+            
+            $currentRepaidAmount = floatval($schedule['repaid_amount']);
+            $dueAmount = floatval($schedule['amount']);
+            
+            // Calculate how much to reverse from this installment
+            $reverseAmount = min($remainingToReverse, $currentRepaidAmount);
+            $newRepaidAmount = $currentRepaidAmount - $reverseAmount;
+            
+            // Calculate new status and default amount
+            $newStatus = 'unpaid';
+            $newDefaultAmount = 0;
+            $paidDate = null;
+            
+            if (abs($newRepaidAmount - $dueAmount) <= 0.50) {
+                $newStatus = 'paid';
+                $paidDate = $schedule['paid_date']; // Keep original paid date if still fully paid
+            } elseif ($newRepaidAmount > 0) {
+                $newStatus = 'partial';
+            }
+            
+            // Calculate default amount if past due and not fully paid
+            if ($newStatus !== 'paid' && strtotime($schedule['due_date']) < strtotime($today)) {
+                $newDefaultAmount = $dueAmount - $newRepaidAmount;
+            }
+            
+            // Update the schedule entry
+            $updateScheduleStmt = $this->conn->prepare("
+                UPDATE loan_schedule 
+                SET repaid_amount = ?,
+                    default_amount = ?,
+                    status = ?,
+                    paid_date = ?
+                WHERE id = ?
+            ");
+            
+            $updateScheduleStmt->bind_param(
+                "ddssi",
+                $newRepaidAmount,
+                $newDefaultAmount,
+                $newStatus,
+                $paidDate,
+                $schedule['id']
+            );
+            
+            if (!$updateScheduleStmt->execute()) {
+                throw new Exception("Failed to update loan schedule: " . $updateScheduleStmt->error);
+            }
+            
+            $remainingToReverse -= $reverseAmount;
+        }
+        
+        // Check if loan status needs to be updated (if it was completed, it might need to go back to active)
+        $unpaidCountStmt = $this->conn->prepare("
+            SELECT COUNT(*) as unpaid_count
+            FROM loan_schedule
+            WHERE loan_id = ? AND status != 'paid'
+        ");
+        $unpaidCountStmt->bind_param("i", $loanId);
+        $unpaidCountStmt->execute();
+        $unpaidResult = $unpaidCountStmt->get_result()->fetch_assoc();
+        
+        // If there are unpaid installments and loan was marked as completed, revert to active
+        if ($unpaidResult['unpaid_count'] > 0) {
+            $updateLoanStmt = $this->conn->prepare("
+                UPDATE loan 
+                SET status = CASE 
+                    WHEN status = 3 THEN 2  -- Change from completed to active/disbursed
+                    ELSE status 
+                END
+                WHERE loan_id = ?
+            ");
+            $updateLoanStmt->bind_param("i", $loanId);
+            $updateLoanStmt->execute();
+        }
+        
+        $this->conn->commit();
+        
+        return [
+            'status' => 'success',
+            'message' => 'Repayment deleted successfully and loan schedule updated'
+        ];
+        
+    } catch (Exception $e) {
+        $this->conn->rollback();
+        error_log("Error in deleteRepayment: " . $e->getMessage());
+        return [
+            'status' => 'error',
+            'message' => $e->getMessage()
+        ];
+    }
+}
     
 
 
@@ -929,7 +1306,7 @@ public function getTotalLoanAmount($accountId) {
     }
 }
 
-public function getTotalOutstandingPrincipal($accountId) {
+public function getTotalOutstandingPrincipal($accountId, $accountType = 'all') {
     try {
         // Get the balance of the most recent unpaid/partial installment for active loans
         $query = "
@@ -938,18 +1315,28 @@ public function getTotalOutstandingPrincipal($accountId) {
             FROM loan l
             JOIN loan_schedule ls ON l.loan_id = ls.loan_id
             WHERE l.account_id = ?
-                AND l.status IN (1, 2)  -- Active/Released loans only
-                AND ls.status IN ('unpaid', 'partial')
-            GROUP BY l.loan_id
-            ORDER BY ls.due_date ASC
-            LIMIT 1";
+                AND l.status IN (1, 2)";  // Active/Released loans only
+        
+        $params = [$accountId];
+        $types = "i";
+        
+        if ($accountType !== 'all') {
+            $query .= " AND l.account_type = ?";
+            $params[] = $accountType;
+            $types .= "s";
+        }
+        
+        $query .= " AND ls.status IN ('unpaid', 'partial')
+                    GROUP BY l.loan_id
+                    ORDER BY ls.due_date ASC
+                    LIMIT 1";
         
         $stmt = $this->conn->prepare($query);
         if (!$stmt) {
             throw new Exception("Error preparing statement: " . $this->conn->error);
         }
         
-        $stmt->bind_param("i", $accountId);
+        $stmt->bind_param($types, ...$params);
         if (!$stmt->execute()) {
             throw new Exception("Error executing query: " . $stmt->error);
         }
@@ -963,21 +1350,26 @@ public function getTotalOutstandingPrincipal($accountId) {
                 SELECT amount as outstanding_principal
                 FROM loan
                 WHERE account_id = ?
-                    AND status IN (1, 2)  -- Active/Released loans only
-                    AND NOT EXISTS (
-                        SELECT 1 FROM loan_schedule 
-                        WHERE loan_id = loan.loan_id 
-                        AND status = 'paid'
-                    )
-                ORDER BY date_created DESC
-                LIMIT 1";
+                    AND status IN (1, 2)";  // Active/Released loans only
+            
+            if ($accountType !== 'all') {
+                $newLoanQuery .= " AND account_type = ?";
+            }
+            
+            $newLoanQuery .= " AND NOT EXISTS (
+                                SELECT 1 FROM loan_schedule 
+                                WHERE loan_id = loan.loan_id 
+                                AND status = 'paid'
+                            )
+                            ORDER BY date_created DESC
+                            LIMIT 1";
             
             $newStmt = $this->conn->prepare($newLoanQuery);
             if (!$newStmt) {
                 throw new Exception("Error preparing new loan statement: " . $this->conn->error);
             }
             
-            $newStmt->bind_param("i", $accountId);
+            $newStmt->bind_param($types, ...$params);
             if (!$newStmt->execute()) {
                 throw new Exception("Error executing new loan query: " . $newStmt->error);
             }
@@ -1034,175 +1426,46 @@ public function getTotalOutstandingPrincipal($accountId) {
 
 
 
-    public function repayLoan($accountId, $loanId, $repayAmount, $paymentMode, $servedBy, $receiptNumber) {
-        error_log("Model: Repay Loan - accountId=$accountId, loanId=$loanId, repayAmount=$repayAmount, paymentMode=$paymentMode, servedBy=$servedBy, receiptNumber=$receiptNumber");
+  public function repayLoan($accountId, $loanId, $repayAmount, $paymentMode, $servedBy, $receiptNumber) {
+    error_log("Model: Repay Loan - accountId=$accountId, loanId=$loanId, repayAmount=$repayAmount, paymentMode=$paymentMode, servedBy=$servedBy, receiptNumber=$receiptNumber");
+    
+    // Verify the loan exists and check status
+    $loanQuery = $this->conn->prepare("SELECT loan_id, account_id, ref_no, status FROM loan WHERE loan_id = ?");
+    $loanQuery->bind_param("i", $loanId);
+    $loanQuery->execute();
+    $loanResult = $loanQuery->get_result();
+    
+    if ($loanResult->num_rows === 0) {
+        error_log("Loan not found with ID: $loanId");
+        return ['status' => 'error', 'message' => "Loan not found with ID: $loanId"];
+    }
+    
+    $loanData = $loanResult->fetch_assoc();
+    
+    // Check if loan is disbursed (status should be >= 2)
+    if ($loanData['status'] < 2) {
+        return ['status' => 'error', 'message' => 'Cannot process repayment. Loan must be disbursed first (status >= 2).'];
+    }
+    
+    $loanRefNo = $loanData['ref_no'];
+    
+    $this->conn->begin_transaction();
+    
+    try {
+        // Get all unpaid and partial schedule entries ordered by due date
+        $scheduleStmt = $this->conn->prepare("
+            SELECT * FROM loan_schedule 
+            WHERE loan_id = ? 
+            AND (status = 'unpaid' OR status = 'partial')
+            ORDER BY due_date ASC
+        ");
         
-        // Verify the loan exists
-        $loanQuery = $this->conn->prepare("SELECT loan_id, account_id, ref_no FROM loan WHERE loan_id = ?");
-        $loanQuery->bind_param("i", $loanId);
-        $loanQuery->execute();
-        $loanResult = $loanQuery->get_result();
+        $scheduleStmt->bind_param("i", $loanId);
+        $scheduleStmt->execute();
+        $schedules = $scheduleStmt->get_result()->fetch_all(MYSQLI_ASSOC);
         
-        if ($loanResult->num_rows === 0) {
-            error_log("Loan not found with ID: $loanId");
-            return ['status' => 'error', 'message' => "Loan not found with ID: $loanId"];
-        }
-        
-        $loanData = $loanResult->fetch_assoc();
-        $loanRefNo = $loanData['ref_no'];
-        
-        $this->conn->begin_transaction();
-        
-        try {
-            // Get loan details
-            $loanDetails = $this->getLoanDetailsForRepayment($loanId);
-            if (!$loanDetails) {
-                throw new Exception("Error retrieving loan details for loan ID: $loanId");
-            }
-            
-            // Get next unpaid schedule
-            $scheduleStmt = $this->conn->prepare("
-                SELECT * FROM loan_schedule 
-                WHERE loan_id = ? 
-                AND (status = 'unpaid' OR status = 'partial')
-                ORDER BY due_date ASC LIMIT 1
-            ");
-            
-            $scheduleStmt->bind_param("i", $loanId);
-            $scheduleStmt->execute();
-            $schedule = $scheduleStmt->get_result()->fetch_assoc();
-            
-            if (!$schedule) {
-                // If no schedule found, just record the payment
-                $repaymentStmt = $this->conn->prepare("
-                    INSERT INTO loan_repayments (
-                        loan_id, amount_repaid, date_paid, payment_mode, served_by, receipt_number
-                    ) VALUES (?, ?, NOW(), ?, ?, ?)
-                ");
-                
-                $repaymentStmt->bind_param("idsss", 
-                    $loanId,
-                    $repayAmount,
-                    $paymentMode,
-                    $servedBy,
-                    $receiptNumber
-                );
-                
-                if (!$repaymentStmt->execute()) {
-                    throw new Exception("Failed to record loan repayment for loan ID: $loanId");
-                }
-                
-                $repaymentId = $this->conn->insert_id;
-                
-                // Add transaction record - FIXED: removed loan_id column
-                $description = "Loan repayment for loan ref #" . $loanRefNo;
-                $transactionStmt = $this->conn->prepare("
-                    INSERT INTO transactions (
-                        account_id,
-                        type,
-                        amount,
-                        description,
-                        receipt_number,
-                        payment_mode,
-                        served_by,
-                        date
-                    ) VALUES (?, 'Loan Repayment', ?, ?, ?, ?, ?, NOW())
-                ");
-                
-                if (!$transactionStmt) {
-                    throw new Exception("Error preparing transaction statement: " . $this->conn->error);
-                }
-                
-                $transactionStmt->bind_param("idssss", 
-                    $accountId,
-                    $repayAmount,
-                    $description,
-                    $receiptNumber,
-                    $paymentMode,
-                    $servedBy
-                );
-                
-                if (!$transactionStmt->execute()) {
-                    throw new Exception("Error recording transaction: " . $transactionStmt->error);
-                }
-                
-                $this->conn->commit();
-                return [
-                    'status' => 'success',
-                    'message' => 'Loan repayment recorded successfully',
-                    'repaymentDetails' => $this->getRepaymentDetails($repaymentId)
-                ];
-            }
-            
-            // Calculate amounts for scheduled loans
-            $dueAmount = $schedule['amount'];
-            $currentRepaidAmount = $schedule['repaid_amount'] ?? 0;
-            $remainingDue = $dueAmount - $currentRepaidAmount;
-            $newBalance = $schedule['balance'];
-            
-            // Calculate default amount if payment is late
-            $defaultAmount = 0;
-            if (strtotime($schedule['due_date']) < strtotime(date('Y-m-d'))) {
-                $defaultAmount = max(0, $remainingDue - $repayAmount);
-            }
-            
-            // Update schedule entry with explicit status values
-            $newRepaidAmount = $currentRepaidAmount + $repayAmount;
-            
-            // Use explicitly defined status values
-            $newStatus = 'unpaid'; // default
-            if ($newRepaidAmount >= $dueAmount) {
-                $newStatus = 'paid';
-            } elseif ($newRepaidAmount > 0) {
-                $newStatus = 'partial';
-            }
-            
-            // Debug the status values
-            error_log("Setting status to: '$newStatus'");
-            error_log("Schedule ID: " . $schedule['id']);
-            
-            // Simplified update query to isolate the issue
-            $updateQuery = "
-                UPDATE loan_schedule 
-                SET repaid_amount = ?,
-                    default_amount = ?,
-                    status = ?,
-                    balance = ?
-                WHERE id = ?
-            ";
-            
-            $updateScheduleStmt = $this->conn->prepare($updateQuery);
-            if (!$updateScheduleStmt) {
-                throw new Exception("Prepare failed: " . $this->conn->error);
-            }
-            
-            $updateScheduleStmt->bind_param(
-                "ddsdi",
-                $newRepaidAmount,
-                $defaultAmount,
-                $newStatus,
-                $newBalance,
-                $schedule['id']
-            );
-            
-            if (!$updateScheduleStmt->execute()) {
-                error_log("MySQL Error: " . $updateScheduleStmt->error);
-                throw new Exception("Failed to update loan schedule: " . $updateScheduleStmt->error);
-            }
-            
-            // Handle the paid_date separately to avoid potential issues
-            if ($newStatus === 'paid' || $newStatus === 'partial') {
-                $paidDateQuery = "
-                    UPDATE loan_schedule 
-                    SET paid_date = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                ";
-                $paidDateStmt = $this->conn->prepare($paidDateQuery);
-                $paidDateStmt->bind_param("i", $schedule['id']);
-                $paidDateStmt->execute();
-            }
-            
-            // Insert repayment record
+        if (empty($schedules)) {
+            // If no unpaid schedule found, just record the payment
             $repaymentStmt = $this->conn->prepare("
                 INSERT INTO loan_repayments (
                     loan_id, amount_repaid, date_paid, payment_mode, served_by, receipt_number
@@ -1223,7 +1486,7 @@ public function getTotalOutstandingPrincipal($accountId) {
             
             $repaymentId = $this->conn->insert_id;
             
-            // Add transaction record - FIXED: removed loan_id column
+            // Add transaction record
             $description = "Loan repayment for loan ref #" . $loanRefNo;
             $transactionStmt = $this->conn->prepare("
                 INSERT INTO transactions (
@@ -1255,48 +1518,175 @@ public function getTotalOutstandingPrincipal($accountId) {
                 throw new Exception("Error recording transaction: " . $transactionStmt->error);
             }
             
-            // Check if loan is fully paid
-            $unpaidStmt = $this->conn->prepare("
-                SELECT COUNT(*) as unpaid_count
-                FROM loan_schedule
-                WHERE loan_id = ? AND status != 'paid'
-            ");
-            
-            $unpaidStmt->bind_param("i", $loanId);
-            $unpaidStmt->execute();
-            $unpaidResult = $unpaidStmt->get_result()->fetch_assoc();
-            
-            if ($unpaidResult['unpaid_count'] == 0) {
-                // Update loan status to completed (3)
-                $updateLoanStmt = $this->conn->prepare("
-                    UPDATE loan SET status = 3 WHERE loan_id = ?
-                ");
-                $updateLoanStmt->bind_param("i", $loanId);
-                $updateLoanStmt->execute();
-            }
-            
             $this->conn->commit();
-            
-            // Get updated balances
-            $totalOutstandingPrincipal = $this->getTotalOutstandingPrincipal($accountId);
-            
             return [
                 'status' => 'success',
-                'message' => 'Loan repayment successful',
-                'newTotalOutstandingLoans' => $totalOutstandingPrincipal,
-                'newNetBalance' => $this->getNetBalance($accountId),
-                'repaymentDetails' => $this->getRepaymentDetails($repaymentId)
-            ];
-            
-        } catch (Exception $e) {
-            $this->conn->rollback();
-            error_log("Error in repayLoan: " . $e->getMessage());
-            return [
-                'status' => 'error',
-                'message' => $e->getMessage()
+                'message' => 'Loan repayment recorded successfully'
             ];
         }
+        
+        // Process payments starting with oldest unpaid installment
+        $remainingPayment = $repayAmount;
+        $today = date('Y-m-d');
+        
+        foreach ($schedules as $schedule) {
+            if ($remainingPayment <= 0) break;
+            
+            $dueAmount = floatval($schedule['amount']);
+            $currentRepaidAmount = floatval($schedule['repaid_amount'] ?? 0);
+            $existingDefaultAmount = floatval($schedule['default_amount'] ?? 0);
+            
+            // Calculate total amount needed for this installment (due amount + existing defaults)
+            $totalAmountNeeded = $dueAmount - $currentRepaidAmount;
+            
+            // Apply payment to this installment
+            $paymentForThisInstallment = min($remainingPayment, $totalAmountNeeded);
+            $newRepaidAmount = $currentRepaidAmount + $paymentForThisInstallment;
+            
+            // Calculate new default amount - only if past due date and not fully paid
+            $newDefaultAmount = 0;
+            if ($newRepaidAmount < $dueAmount && strtotime($schedule['due_date']) < strtotime($today)) {
+                $newDefaultAmount = $dueAmount - $newRepaidAmount;
+            }
+            
+            // Determine new status
+            $newStatus = 'unpaid';
+            $paidDate = null;
+            
+            if (abs($newRepaidAmount - $dueAmount) <= 0.50) {
+                $newStatus = 'paid';
+                $paidDate = $today;
+                $newDefaultAmount = 0; // Clear defaults when fully paid
+            } elseif ($newRepaidAmount > 0) {
+                $newStatus = 'partial';
+            }
+            
+            // Update schedule entry
+            $updateQuery = "
+                UPDATE loan_schedule 
+                SET repaid_amount = ?,
+                    default_amount = ?,
+                    status = ?,
+                    paid_date = ?
+                WHERE id = ?
+            ";
+            
+            $updateScheduleStmt = $this->conn->prepare($updateQuery);
+            if (!$updateScheduleStmt) {
+                throw new Exception("Prepare failed: " . $this->conn->error);
+            }
+            
+            $updateScheduleStmt->bind_param(
+                "ddssi",
+                $newRepaidAmount,
+                $newDefaultAmount,
+                $newStatus,
+                $paidDate,
+                $schedule['id']
+            );
+            
+            if (!$updateScheduleStmt->execute()) {
+                error_log("MySQL Error: " . $updateScheduleStmt->error);
+                throw new Exception("Failed to update loan schedule: " . $updateScheduleStmt->error);
+            }
+            
+            $remainingPayment -= $paymentForThisInstallment;
+        }
+        
+        // Insert repayment record
+        $repaymentStmt = $this->conn->prepare("
+            INSERT INTO loan_repayments (
+                loan_id, amount_repaid, date_paid, payment_mode, served_by, receipt_number
+            ) VALUES (?, ?, NOW(), ?, ?, ?)
+        ");
+        
+        $repaymentStmt->bind_param("idsss", 
+            $loanId,
+            $repayAmount,
+            $paymentMode,
+            $servedBy,
+            $receiptNumber
+        );
+        
+        if (!$repaymentStmt->execute()) {
+            throw new Exception("Failed to record loan repayment for loan ID: $loanId");
+        }
+        
+        $repaymentId = $this->conn->insert_id;
+        
+        // Add transaction record
+        $description = "Loan repayment for loan ref #" . $loanRefNo;
+        $transactionStmt = $this->conn->prepare("
+            INSERT INTO transactions (
+                account_id,
+                type,
+                amount,
+                description,
+                receipt_number,
+                payment_mode,
+                served_by,
+                date
+            ) VALUES (?, 'Loan Repayment', ?, ?, ?, ?, ?, NOW())
+        ");
+        
+        if (!$transactionStmt) {
+            throw new Exception("Error preparing transaction statement: " . $this->conn->error);
+        }
+        
+        $transactionStmt->bind_param("idssss", 
+            $accountId,
+            $repayAmount,
+            $description,
+            $receiptNumber,
+            $paymentMode,
+            $servedBy
+        );
+        
+        if (!$transactionStmt->execute()) {
+            throw new Exception("Error recording transaction: " . $transactionStmt->error);
+        }
+        
+        // Check if loan is fully paid
+        $unpaidStmt = $this->conn->prepare("
+            SELECT COUNT(*) as unpaid_count
+            FROM loan_schedule
+            WHERE loan_id = ? AND status != 'paid'
+        ");
+        
+        $unpaidStmt->bind_param("i", $loanId);
+        $unpaidStmt->execute();
+        $unpaidResult = $unpaidStmt->get_result()->fetch_assoc();
+        
+        if ($unpaidResult['unpaid_count'] == 0) {
+            // Update loan status to completed (3)
+            $updateLoanStmt = $this->conn->prepare("
+                UPDATE loan SET status = 3 WHERE loan_id = ?
+            ");
+            $updateLoanStmt->bind_param("i", $loanId);
+            $updateLoanStmt->execute();
+        }
+        
+        $this->conn->commit();
+        
+        // Get updated balances
+        $totalOutstandingPrincipal = $this->getTotalOutstandingPrincipal($accountId);
+        
+        return [
+            'status' => 'success',
+            'message' => 'Loan repayment successful',
+            'newTotalOutstandingLoans' => $totalOutstandingPrincipal,
+            'newNetBalance' => $this->getNetBalance($accountId)
+        ];
+        
+    } catch (Exception $e) {
+        $this->conn->rollback();
+        error_log("Error in repayLoan: " . $e->getMessage());
+        return [
+            'status' => 'error',
+            'message' => $e->getMessage()
+        ];
     }
+}
     
 
 
@@ -1305,23 +1695,16 @@ public function withdraw($accountId, $amount, $paymentMode, $accountType, $recei
     $this->conn->begin_transaction();
 
     try {
-        // Calculate the total amount to be deducted (amount + fee)
-        $totalAmount = $amount + $withdrawalFee;
+        // Calculate the actual withdrawal amount (total - fee)
+        $withdrawalAmount = $amount - $withdrawalFee;
         $availableBalance = $this->getFilteredTotalSavings($accountId, $accountType);
 
         // Check if the available balance is sufficient
-        if ($totalAmount > $availableBalance) {
-            throw new Exception("Insufficient funds for withdrawal");
+        if ($amount > $availableBalance) {
+            throw new Exception("Insufficient funds for withdrawal. Available: KSh " . number_format($availableBalance, 2));
         }
 
-        // Get served by username
-        $userStmt = $this->conn->prepare("SELECT username FROM user WHERE user_id = ?");
-        $userStmt->bind_param("i", $servedBy);
-        $userStmt->execute();
-        $userResult = $userStmt->get_result()->fetch_assoc();
-        $servedBy = $userResult ? $userResult['username'] : 'Unknown';
-
-        // Record the withdrawal transaction with the total deduction (including fee)
+        // Record the withdrawal transaction
         $stmt = $this->conn->prepare("
             INSERT INTO savings (
                 account_id,
@@ -1336,10 +1719,9 @@ public function withdraw($accountId, $amount, $paymentMode, $accountType, $recei
             ) VALUES (?, ?, ?, 'Withdrawal', ?, ?, ?, ?, NOW())
         ");
 
-        // Record only the withdrawal amount (fee is handled separately in another entry)
         $stmt->bind_param("idsssds", 
             $accountId,
-            $amount,
+            $withdrawalAmount,
             $paymentMode,
             $accountType,
             $receiptNumber,
@@ -1353,27 +1735,16 @@ public function withdraw($accountId, $amount, $paymentMode, $accountType, $recei
 
         $withdrawalId = $this->conn->insert_id;
 
-        // Deduct the total amount (withdrawal + fee) from the total savings
-        $updateBalanceStmt = $this->conn->prepare("
-            UPDATE client_accounts 
-            SET total_savings = total_savings - ?
-            WHERE account_id = ?
-        ");
-        $updateBalanceStmt->bind_param("di", $totalAmount, $accountId);
-
-        if (!$updateBalanceStmt->execute()) {
-            throw new Exception("Error updating total savings: " . $updateBalanceStmt->error);
-        }
-
-        // Add transactions separately for clarity
+        // Add transaction record for withdrawal
         $this->addTransaction(
             $accountId,
             'Withdrawal',
-            -$amount,
+            -$withdrawalAmount,
             "Withdrawal from $accountType account",
             $receiptNumber
         );
 
+        // Add separate transaction for withdrawal fee if applicable
         if ($withdrawalFee > 0) {
             $this->addTransaction(
                 $accountId,
@@ -1386,10 +1757,14 @@ public function withdraw($accountId, $amount, $paymentMode, $accountType, $recei
 
         $this->conn->commit();
 
+        // Get withdrawal receipt details
+        $receiptDetails = $this->getWithdrawalReceiptDetails($withdrawalId);
+
         return [
             'status' => 'success',
             'message' => 'Withdrawal processed successfully',
-            'details' => $this->getReceiptDetails($withdrawalId, 'Withdrawal')
+            'withdrawalId' => $withdrawalId,
+            'receiptDetails' => $receiptDetails['details'] ?? null
         ];
 
     } catch (Exception $e) {
@@ -1401,9 +1776,6 @@ public function withdraw($accountId, $amount, $paymentMode, $accountType, $recei
         ];
     }
 }
-
-
-
 
 
 
@@ -1829,6 +2201,38 @@ public function rollbackTransaction() {
         return $row['next_due_date'] ?? null;
     }
 
+
+    /**
+ * Get total withdrawals for an account
+ * 
+ * @param int $accountId ID of the account
+ * @param string $accountType Filter by account type
+ * @return float Total withdrawals amount
+ */
+public function getTotalWithdrawals($accountId, $accountType = 'all') {
+    try {
+        $query = "SELECT COALESCE(SUM(amount + COALESCE(withdrawal_fee, 0)), 0) as total 
+                  FROM savings 
+                  WHERE account_id = ? AND type = 'Withdrawal'";
+        $params = [$accountId];
+        $types = "i";
+        
+        if ($accountType !== 'all') {
+            $query .= " AND account_type = ?";
+            $params[] = $accountType;
+            $types .= "s";
+        }
+        
+        $stmt = $this->conn->prepare($query);
+        $stmt->bind_param($types, ...$params);
+        $stmt->execute();
+        $result = $stmt->get_result()->fetch_assoc();
+        return $result['total'] ?? 0;
+    } catch (Exception $e) {
+        error_log("Error in getTotalWithdrawals: " . $e->getMessage());
+        return 0;
+    }
+}
     // Get loan outstanding balance
     public function getLoanOutstandingBalance($loanId) {
         $stmt = $this->conn->prepare("
@@ -1869,6 +2273,20 @@ public function rollbackTransaction() {
         return $stmt->execute();
     }
 
+
+    /**
+     * Get receipt details for withdrawal
+    * 
+    * @param int $withdrawalId Withdrawal ID
+    * @return array Receipt details
+    */
+    public function getReceiptDetails($withdrawalId, $type) {
+        if ($type === 'Withdrawal') {
+            return $this->getWithdrawalReceiptDetails($withdrawalId);
+        } else {
+            return $this->getSavingsReceiptDetails($withdrawalId);
+        }
+    }
     
 
     public function getLastError() {

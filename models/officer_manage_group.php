@@ -987,7 +987,7 @@ function showMessage(message, type) {
         });
 
 
-        
+
         // Add Savings Form Submit
     $('#addSavingsForm').submit(function(e) {
         e.preventDefault();

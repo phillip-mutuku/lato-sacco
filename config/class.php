@@ -1,6 +1,7 @@
 <?php
 require_once 'config.php';
 
+
 class db_class extends db_connect {
     
     public function __construct() {
@@ -118,13 +119,14 @@ class db_class extends db_connect {
 
 
     public function get_pending_loans() {
-        $query = $this->conn->query("SELECT l.loan_id, l.ref_no, a.last_name, l.amount, a.first_name, a.shareholder_no 
-                                     FROM loan l 
-                                     JOIN client_accounts a ON l.account_id = a.account_id 
-                                     WHERE l.status = 0 
-                                     ORDER BY l.loan_id DESC");
-        return $query;
-    }
+    $query = $this->conn->query("SELECT l.loan_id, l.ref_no, l.amount, l.loan_term, l.monthly_payment,
+                                 a.last_name, a.first_name, a.shareholder_no 
+                                 FROM loan l 
+                                 JOIN client_accounts a ON l.account_id = a.account_id 
+                                 WHERE l.status = 0 
+                                 ORDER BY l.loan_id DESC");
+    return $query;
+}
 
 
 

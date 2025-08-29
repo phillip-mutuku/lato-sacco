@@ -15,6 +15,6 @@ if(isset($_POST['update'])){
         echo "<script>alert('Failed to update loan product. Please try again.');</script>";
     }
     
-    echo "<script>window.location='../views/loan_plan.php';</script>";
+    echo "<script>window.location='../models/loan_plan.php';</script>";
 }
 ?>
