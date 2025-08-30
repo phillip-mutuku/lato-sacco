@@ -2322,6 +2322,333 @@ public function getTotalWithdrawals($accountId, $accountType = 'all') {
         }
     }
 
+
+/**
+ * Get fully paid loans for an account - Updated for your database structure
+ * 
+ * @param int $accountId ID of the account
+ * @param string $accountType Filter by account type
+ * @return array Array of fully paid loans
+ */
+public function getFullyPaidLoans($accountId, $accountType = 'all') {
+    try {
+        // Simple query that matches your actual database structure
+        $query = "
+            SELECT 
+                l.loan_id,
+                l.ref_no,
+                l.loan_product_id,
+                l.amount,
+                l.interest_rate,
+                l.loan_term,
+                l.date_applied,
+                l.status,
+                l.monthly_payment,
+                COALESCE(l.total_payable, l.amount) as total_payable,
+                COALESCE(l.total_interest, 0) as total_interest,
+                -- Calculate total paid from loan_repayments
+                COALESCE((
+                    SELECT SUM(amount_repaid) 
+                    FROM loan_repayments 
+                    WHERE loan_id = l.loan_id
+                ), l.amount) as total_paid,
+                -- Calculate interest paid (total paid - principal)
+                COALESCE((
+                    SELECT SUM(amount_repaid) 
+                    FROM loan_repayments 
+                    WHERE loan_id = l.loan_id
+                ), l.amount) - l.amount as interest_paid,
+                -- Get completion date from last repayment
+                COALESCE((
+                    SELECT MAX(date_paid) 
+                    FROM loan_repayments 
+                    WHERE loan_id = l.loan_id
+                ), l.date_applied) as date_completed,
+                -- Calculate duration in months
+                COALESCE(TIMESTAMPDIFF(MONTH, l.date_applied, (
+                    SELECT MAX(date_paid) 
+                    FROM loan_repayments 
+                    WHERE loan_id = l.loan_id
+                )), l.loan_term) as duration_months
+            FROM loan l
+            WHERE l.account_id = ?
+            AND l.status = 3"; // Status 3 = Completed
+        
+        $params = [$accountId];
+        $types = "i";
+        
+        if ($accountType !== 'all') {
+            $query .= " AND l.account_type = ?";
+            $params[] = $accountType;
+            $types .= "s";
+        }
+        
+        $query .= " ORDER BY l.loan_id DESC";
+        
+        $stmt = $this->conn->prepare($query);
+        if (!$stmt) {
+            throw new Exception("Error preparing statement: " . $this->conn->error);
+        }
+        
+        $stmt->bind_param($types, ...$params);
+        if (!$stmt->execute()) {
+            throw new Exception("Error executing query: " . $stmt->error);
+        }
+        
+        $result = $stmt->get_result();
+        $loans = $result->fetch_all(MYSQLI_ASSOC);
+        
+        error_log("Found " . count($loans) . " completed loans for account $accountId");
+        
+        return $loans;
+        
+    } catch (Exception $e) {
+        error_log("Error in getFullyPaidLoans: " . $e->getMessage());
+        return [];
+    }
+}
+
+/**
+ * Get summary statistics for fully paid loans - Updated version
+ * 
+ * @param int $accountId ID of the account
+ * @param string $accountType Filter by account type
+ * @return array Summary statistics
+ */
+public function getFullyPaidLoansSummary($accountId, $accountType = 'all') {
+    try {
+        $query = "
+            SELECT 
+                COUNT(l.loan_id) as total_loans,
+                COALESCE(SUM(l.amount), 0) as total_principal,
+                COALESCE(SUM((
+                    SELECT SUM(amount_repaid) 
+                    FROM loan_repayments lr 
+                    WHERE lr.loan_id = l.loan_id
+                )), SUM(l.amount)) as total_amount_paid,
+                COALESCE(SUM((
+                    SELECT SUM(amount_repaid) 
+                    FROM loan_repayments lr 
+                    WHERE lr.loan_id = l.loan_id
+                )) - SUM(l.amount), 0) as total_interest_paid
+            FROM loan l
+            WHERE l.account_id = ?
+            AND l.status = 3"; // Status 3 = Completed
+        
+        $params = [$accountId];
+        $types = "i";
+        
+        if ($accountType !== 'all') {
+            $query .= " AND l.account_type = ?";
+            $params[] = $accountType;
+            $types .= "s";
+        }
+        
+        $stmt = $this->conn->prepare($query);
+        if (!$stmt) {
+            throw new Exception("Error preparing statement: " . $this->conn->error);
+        }
+        
+        $stmt->bind_param($types, ...$params);
+        if (!$stmt->execute()) {
+            throw new Exception("Error executing query: " . $stmt->error);
+        }
+        
+        $result = $stmt->get_result()->fetch_assoc();
+        
+        // Ensure all values are numeric and handle nulls
+        return [
+            'total_loans' => intval($result['total_loans'] ?? 0),
+            'total_principal' => floatval($result['total_principal'] ?? 0),
+            'total_amount_paid' => floatval($result['total_amount_paid'] ?? 0),
+            'total_interest_paid' => max(0, floatval($result['total_interest_paid'] ?? 0))
+        ];
+        
+    } catch (Exception $e) {
+        error_log("Error in getFullyPaidLoansSummary: " . $e->getMessage());
+        return [
+            'total_loans' => 0,
+            'total_principal' => 0,
+            'total_amount_paid' => 0,
+            'total_interest_paid' => 0
+        ];
+    }
+}
+
+/**
+ * Get loan schedule for a fully paid loan
+ * 
+ * @param int $loanId ID of the loan
+ * @return array|false Loan schedule or false on error
+ */
+public function getFullyPaidLoanSchedule($loanId) {
+    try {
+        $stmt = $this->conn->prepare("
+            SELECT 
+                ls.*,
+                COALESCE(ls.repaid_amount, 0) as repaid_amount,
+                COALESCE(ls.default_amount, 0) as default_amount,
+                ls.paid_date
+            FROM loan_schedule ls
+            WHERE ls.loan_id = ? 
+            ORDER BY ls.due_date ASC
+        ");
+        
+        if (!$stmt) {
+            throw new Exception("Error preparing statement: " . $this->conn->error);
+        }
+        
+        $stmt->bind_param("i", $loanId);
+        if (!$stmt->execute()) {
+            throw new Exception("Error executing query: " . $stmt->error);
+        }
+        
+        $result = $stmt->get_result();
+        $schedule = array();
+        
+        while ($row = $result->fetch_assoc()) {
+            $schedule[] = array(
+                'due_date' => $row['due_date'],
+                'principal' => number_format($row['principal'], 2),
+                'interest' => number_format($row['interest'], 2),
+                'amount' => number_format($row['amount'], 2),
+                'balance' => number_format($row['balance'], 2),
+                'repaid_amount' => number_format($row['repaid_amount'], 2),
+                'default_amount' => number_format($row['default_amount'], 2),
+                'status' => $row['status'],
+                'paid_date' => $row['paid_date']
+            );
+        }
+        
+        return $schedule;
+        
+    } catch (Exception $e) {
+        error_log("Error in getFullyPaidLoanSchedule: " . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Get details for a fully paid loan
+ * 
+ * @param int $loanId ID of the loan
+ * @return array|false Loan details or false on error
+ */
+public function getFullyPaidLoanDetails($loanId) {
+    try {
+        $stmt = $this->conn->prepare("
+            SELECT 
+                l.*,
+                CONCAT(ca.first_name, ' ', ca.last_name) as client_name,
+                MAX(lr.date_paid) as date_completed,
+                COUNT(lr.id) as total_payments_made,
+                SUM(lr.amount_repaid) as total_amount_paid,
+                (SUM(lr.amount_repaid) - l.amount) as total_interest_paid
+            FROM loan l
+            JOIN client_accounts ca ON l.account_id = ca.account_id
+            LEFT JOIN loan_repayments lr ON l.loan_id = lr.loan_id
+            WHERE l.loan_id = ? AND l.status = 3
+            GROUP BY l.loan_id
+        ");
+        
+        if (!$stmt) {
+            throw new Exception("Error preparing statement: " . $this->conn->error);
+        }
+        
+        $stmt->bind_param("i", $loanId);
+        if (!$stmt->execute()) {
+            throw new Exception("Error executing query: " . $stmt->error);
+        }
+        
+        $result = $stmt->get_result();
+        return $result->fetch_assoc();
+        
+    } catch (Exception $e) {
+        error_log("Error in getFullyPaidLoanDetails: " . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Check if a loan is fully paid
+ * 
+ * @param int $loanId ID of the loan
+ * @return bool True if fully paid, false otherwise
+ */
+public function isLoanFullyPaid($loanId) {
+    try {
+        $stmt = $this->conn->prepare("
+            SELECT 
+                l.amount,
+                COALESCE(SUM(lr.amount_repaid), 0) as total_paid,
+                l.status
+            FROM loan l
+            LEFT JOIN loan_repayments lr ON l.loan_id = lr.loan_id
+            WHERE l.loan_id = ?
+            GROUP BY l.loan_id
+        ");
+        
+        if (!$stmt) {
+            return false;
+        }
+        
+        $stmt->bind_param("i", $loanId);
+        if (!$stmt->execute()) {
+            return false;
+        }
+        
+        $result = $stmt->get_result()->fetch_assoc();
+        
+        if (!$result) {
+            return false;
+        }
+        
+        // Check if status is completed (3) and total paid >= loan amount
+        return ($result['status'] == 3 && floatval($result['total_paid']) >= floatval($result['amount']));
+        
+    } catch (Exception $e) {
+        error_log("Error in isLoanFullyPaid: " . $e->getMessage());
+        return false;
+    }
+}
+
+/**
+ * Get payment history for a fully paid loan
+ * 
+ * @param int $loanId ID of the loan
+ * @return array Payment history
+ */
+public function getFullyPaidLoanPaymentHistory($loanId) {
+    try {
+        $stmt = $this->conn->prepare("
+            SELECT 
+                lr.*,
+                u.firstname as served_by_name,
+                DATE(lr.date_paid) as payment_date
+            FROM loan_repayments lr
+            LEFT JOIN user u ON lr.served_by = u.user_id
+            WHERE lr.loan_id = ?
+            ORDER BY lr.date_paid ASC
+        ");
+        
+        if (!$stmt) {
+            throw new Exception("Error preparing statement: " . $this->conn->error);
+        }
+        
+        $stmt->bind_param("i", $loanId);
+        if (!$stmt->execute()) {
+            throw new Exception("Error executing query: " . $stmt->error);
+        }
+        
+        $result = $stmt->get_result();
+        return $result->fetch_all(MYSQLI_ASSOC);
+        
+    } catch (Exception $e) {
+        error_log("Error in getFullyPaidLoanPaymentHistory: " . $e->getMessage());
+        return [];
+    }
+}
+
     // Add a transaction
     private function addTransaction($accountId, $type, $amount, $description, $receiptNumber) {
         $stmt = $this->conn->prepare("

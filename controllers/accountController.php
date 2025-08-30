@@ -695,106 +695,283 @@ public function getAllAccountStats($accountId, $accountType = 'all') {
     }
 
     /**
-     * Handle various account actions based on GET parameters
-     */
-    public function handleAction() {
-        error_log("HandleAction method called");
-        error_log("GET data: " . print_r($_GET, true));
-        error_log("POST data: " . print_r($_POST, true));
-    
-        $action = $_GET['action'] ?? 'unknown';
-        error_log("Received action: " . $action);
-
-        switch ($action) {
-            case 'create':
-                error_log("CreateAccount case entered");
-                $this->handleCreateAccount();
-                break;
-            case 'update':
-                error_log("UpdateAccount case entered");
-                $this->handleUpdateAccount();
-                break;
-            case 'get':
-                    error_log("GetAccount case entered");
-                    $this->handleGetAccount();
-                    break;
-            case 'delete':
-                error_log("DeleteAccount case entered");
-                $this->handleDeleteAccount();
-                break;
-            case 'addSavings':
-                    error_log("AddSavings case entered");
-                    $this->handleAddSavings();
-                break;
-            case 'withdraw':
-                    $this->handleWithdraw();
-                    break;
-            case 'repayLoan':
-                    error_log("RepayLoan case entered");
-                    $this->handleRepayLoan();
-                break;
-            case 'addLoan':
-                error_log("Addloan case entered");
-                $this->handleAddLoan();
-                break;
-            case 'updateLoanStatus':
-                error_log("Updateloanstatus case entered");
-                $this->handleUpdateLoanStatus();
-                break;
-            case 'getLoanSchedule':
-                    $this->handleGetLoanSchedule();
-                    break;
-            case 'getAccountRepayments':
-                    $this->handleGetAccountRepayments();
-                    break;
-            case 'getAccountDetails':
-                error_log("getaccountdetails case entered");
-                $this->handleGetAccountDetails();
-                break;
-            case 'getDueAmount':
-                    $this->handleGetDueAmount();
-                    break;
-            case 'getRepaymentDetails':
-                    $this->handleGetRepaymentDetails();
-                    break;
-            case 'getSavingsData':
-                error_log("getsavings case entered");
-                $this->handleGetSavingsData();
-                break;
-            case 'getTransactionData':
-                error_log("gettransactions case entered");
-                $this->handleGetTransactionData();
-                break;
-            case 'getLoanDetails':
-                error_log("getloanstatus case entered");
-                $this->handleGetLoanDetails();
-                break;
-            case 'getSavingsDetails':
-                    $this->handleGetSavingsDetails();
-                    break;
-            case 'getFilteredSummary':
-                        $this->handleGetFilteredSummary();
-                        break;
-            case 'getAvailableBalance':
-                            $this->handleGetAvailableBalance();
-                            break;
-            case 'deleteRepayment':
-                            $this->handleDeleteRepayment();
-                            break;
-            case 'getTransactionReceipt':
-                            $this->handleGetTransactionReceipt();
-                            break;
-            case 'getNextShareholderNo':
-                            $this->handleGetNextShareholderNo();
-                            break;
-            case 'checkShareholderNo':
-                            $this->handleCheckShareholderNo();
-                            break;
-            default:
-                echo json_encode(['status' => 'error', 'message' => 'Invalid action']);
-            break;
-        }
+ * Get fully paid loans for an account
+ * 
+ * @param int $accountId ID of the account
+ * @param string $accountType Filter by account type
+ * @return array Array of fully paid loans with summary
+ */
+public function getFullyPaidLoans($accountId, $accountType = 'all') {
+    try {
+        $loans = $this->model->getFullyPaidLoans($accountId, $accountType);
+        $summary = $this->model->getFullyPaidLoansSummary($accountId, $accountType);
+        
+        return [
+            'status' => 'success',
+            'loans' => $loans,
+            'summary' => $summary
+        ];
+    } catch (Exception $e) {
+        error_log("Error in getFullyPaidLoans: " . $e->getMessage());
+        return [
+            'status' => 'error',
+            'message' => $e->getMessage()
+        ];
     }
+}
+
+/**
+ * Get fully paid loan schedule with payment history
+ * 
+ * @param int $loanId ID of the loan
+ * @return array Loan schedule with payment details
+ */
+public function getFullyPaidLoanSchedule($loanId) {
+    try {
+        $schedule = $this->model->getFullyPaidLoanSchedule($loanId);
+        $loanDetails = $this->model->getFullyPaidLoanDetails($loanId);
+        
+        if (!$schedule || !$loanDetails) {
+            throw new Exception("Loan schedule or details not found");
+        }
+        
+        return [
+            'status' => 'success',
+            'schedule' => $schedule,
+            'loan_details' => $loanDetails
+        ];
+    } catch (Exception $e) {
+        error_log("Error in getFullyPaidLoanSchedule: " . $e->getMessage());
+        return [
+            'status' => 'error',
+            'message' => $e->getMessage()
+        ];
+    }
+}
+
+/**
+ * Handle getting fully paid loans
+ */
+private function handleGetFullyPaidLoans() {
+    try {
+        error_log("=== DEBUG: getFullyPaidLoans called ===");
+        
+        $accountId = $_GET['accountId'] ?? null;
+        $accountType = $_GET['accountType'] ?? 'all';
+        
+        error_log("Account ID: " . $accountId);
+        error_log("Account Type: " . $accountType);
+
+        if (!$accountId) {
+            throw new Exception("Account ID is required");
+        }
+
+        // Test basic query first
+        $testQuery = "SELECT COUNT(*) as total FROM loan WHERE account_id = ? AND status = 3";
+        $stmt = $this->model->getConnection()->prepare($testQuery);
+        $stmt->bind_param("i", $accountId);
+        $stmt->execute();
+        $result = $stmt->get_result()->fetch_assoc();
+        
+        error_log("Total completed loans found: " . $result['total']);
+        
+        // If no completed loans, return empty result
+        if ($result['total'] == 0) {
+            echo json_encode([
+                'status' => 'success',
+                'loans' => [],
+                'summary' => [
+                    'total_loans' => 0,
+                    'total_amount_paid' => 0,
+                    'total_interest_paid' => 0
+                ]
+            ]);
+            return;
+        }
+
+        // Simple query to get basic loan info
+        $query = "SELECT 
+            l.loan_id,
+            l.ref_no,
+            l.loan_product_id,
+            l.amount,
+            l.interest_rate,
+            l.date_applied,
+            l.status
+        FROM loan l
+        WHERE l.account_id = ? AND l.status = 3
+        ORDER BY l.loan_id DESC";
+        
+        $stmt = $this->model->getConnection()->prepare($query);
+        $stmt->bind_param("i", $accountId);
+        
+        if (!$stmt->execute()) {
+            throw new Exception("Query execution failed: " . $stmt->error);
+        }
+        
+        $result = $stmt->get_result();
+        $loans = $result->fetch_all(MYSQLI_ASSOC);
+        
+        error_log("Loans found: " . count($loans));
+        
+        // Add dummy calculated fields for now
+        foreach ($loans as &$loan) {
+            $loan['total_paid'] = $loan['amount']; // Placeholder
+            $loan['interest_paid'] = 0; // Placeholder
+            $loan['date_completed'] = $loan['date_applied']; // Placeholder
+            $loan['duration_months'] = 12; // Placeholder
+        }
+        
+        $summary = [
+            'total_loans' => count($loans),
+            'total_amount_paid' => array_sum(array_column($loans, 'total_paid')),
+            'total_interest_paid' => 0
+        ];
+
+        echo json_encode([
+            'status' => 'success',
+            'loans' => $loans,
+            'summary' => $summary
+        ]);
+        
+    } catch (Exception $e) {
+        error_log("Error in handleGetFullyPaidLoans: " . $e->getMessage());
+        echo json_encode([
+            'status' => 'error',
+            'message' => $e->getMessage()
+        ]);
+    }
+}
+
+/**
+ * Handle getting fully paid loan schedule
+ */
+private function handleGetFullyPaidLoanSchedule() {
+    try {
+        $loanId = $_GET['loan_id'] ?? null;
+
+        if (!$loanId) {
+            throw new Exception("Loan ID is required");
+        }
+
+        $result = $this->getFullyPaidLoanSchedule($loanId);
+        echo json_encode($result);
+    } catch (Exception $e) {
+        echo json_encode([
+            'status' => 'error',
+            'message' => $e->getMessage()
+        ]);
+    }
+}
+
+// handleAction method
+public function handleAction() {
+    error_log("HandleAction method called");
+    error_log("GET data: " . print_r($_GET, true));
+    error_log("POST data: " . print_r($_POST, true));
+
+    $action = $_GET['action'] ?? 'unknown';
+    error_log("Received action: " . $action);
+
+    switch ($action) {
+        case 'create':
+            error_log("CreateAccount case entered");
+            $this->handleCreateAccount();
+            break;
+        case 'update':
+            error_log("UpdateAccount case entered");
+            $this->handleUpdateAccount();
+            break;
+        case 'get':
+            error_log("GetAccount case entered");
+            $this->handleGetAccount();
+            break;
+        case 'delete':
+            error_log("DeleteAccount case entered");
+            $this->handleDeleteAccount();
+            break;
+        case 'addSavings':
+            error_log("AddSavings case entered");
+            $this->handleAddSavings();
+            break;
+        case 'withdraw':
+            $this->handleWithdraw();
+            break;
+        case 'repayLoan':
+            error_log("RepayLoan case entered");
+            $this->handleRepayLoan();
+            break;
+        case 'addLoan':
+            error_log("Addloan case entered");
+            $this->handleAddLoan();
+            break;
+        case 'updateLoanStatus':
+            error_log("Updateloanstatus case entered");
+            $this->handleUpdateLoanStatus();
+            break;
+        case 'getLoanSchedule':
+            $this->handleGetLoanSchedule();
+            break;
+        case 'getAccountRepayments':
+            $this->handleGetAccountRepayments();
+            break;
+        case 'getAccountDetails':
+            error_log("getaccountdetails case entered");
+            $this->handleGetAccountDetails();
+            break;
+        case 'getDueAmount':
+            $this->handleGetDueAmount();
+            break;
+        case 'getRepaymentDetails':
+            $this->handleGetRepaymentDetails();
+            break;
+        case 'getSavingsData':
+            error_log("getsavings case entered");
+            $this->handleGetSavingsData();
+            break;
+        case 'getTransactionData':
+            error_log("gettransactions case entered");
+            $this->handleGetTransactionData();
+            break;
+        case 'getLoanDetails':
+            error_log("getloanstatus case entered");
+            $this->handleGetLoanDetails();
+            break;
+        case 'getSavingsDetails':
+            $this->handleGetSavingsDetails();
+            break;
+        case 'getFilteredSummary':
+            $this->handleGetFilteredSummary();
+            break;
+        case 'getAvailableBalance':
+            $this->handleGetAvailableBalance();
+            break;
+        case 'deleteRepayment':
+            $this->handleDeleteRepayment();
+            break;
+        case 'getTransactionReceipt':
+            $this->handleGetTransactionReceipt();
+            break;
+        case 'getNextShareholderNo':
+            $this->handleGetNextShareholderNo();
+            break;
+        case 'checkShareholderNo':
+            $this->handleCheckShareholderNo();
+            break;
+        // NEW CASES FOR FULLY PAID LOANS
+        case 'getFullyPaidLoans':
+            error_log("getFullyPaidLoans case entered");
+            $this->handleGetFullyPaidLoans();
+            break;
+        case 'getFullyPaidLoanSchedule':
+            error_log("getFullyPaidLoanSchedule case entered");
+            $this->handleGetFullyPaidLoanSchedule();
+            break;
+        default:
+            echo json_encode(['status' => 'error', 'message' => 'Invalid action']);
+            break;
+    }
+}
 
     private function handleCreateAccount() {
         // Validate required fields

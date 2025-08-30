@@ -6,17 +6,12 @@ require_once '../helpers/session.php';
 require_once '../config/class.php';
 $db = new db_class(); 
 
- // Check if user is logged in and is a cashier
- if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'cashier') {
+// Check if user is logged in and is either an admin or manager
+if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'manager')) {
     $_SESSION['error_msg'] = "Unauthorized access";
     header('Location: index.php');
     exit();
 }
-
-
-// Enable error reporting for debugging
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
 
 $accountController = new AccountController();
 
@@ -28,9 +23,10 @@ $loans = [];
 $savings = [];
 $repayments = [];
 $totalSavings = 0;
-$totalLoans = 0;
-$netBalance = 0;
-$outstandingPrincipal = 0;
+$totalWithdrawals = 0;
+$outstandingLoans = 0;
+$activeLoansCount = 0;
+$totalGroupSavings = 0;
 $error = null;
 
 $accountType = $_GET['account_type'] ?? 'all';
@@ -42,24 +38,22 @@ if ($accountId) {
             throw new Exception("Account not found.");
         }
         
-        // Update these calls to include account type filtering
+        // Load all data
         $transactions = $accountController->getAccountTransactions($accountId, $accountType);
         $loans = $accountController->getAccountLoans($accountId, $accountType);
         $repayments = $accountController->getLoanRepayments($accountId);
         $savings = $accountController->getAccountSavings($accountId, $accountType);
         $totalSavings = $accountController->getTotalSavings($accountId, $accountType);
-        $totalLoans = $accountController->getTotalLoans($accountId, $accountType);
+        $totalWithdrawals = $accountController->getTotalWithdrawals($accountId, $accountType);
         
-        // Get outstanding principal based on account type
-        if ($accountType === 'all') {
-            $outstandingPrincipal = $accountController->getModel()->getTotalOutstandingPrincipal($accountId);
-        } else {
-            // Get filtered outstanding principal
-            $outstandingPrincipal = $accountController->getModel()->getTotalOutstandingPrincipal($accountId, $accountType);
-        }
+        // Get outstanding loans (principal balance from loan schedule)
+        $outstandingLoans = $accountController->getTotalOutstandingLoans($accountId, $accountType);
         
-        $accountDetails['outstanding_principal'] = $outstandingPrincipal;
-        $netBalance = $totalSavings - $totalLoans;
+        // Get active loans count (status = 2)
+        $activeLoansCount = $accountController->getActiveLoansCount($accountId, $accountType);
+        
+        // Get total group savings
+        $totalGroupSavings = $accountController->getTotalGroupSavings($accountId, $accountType);
         
     } catch (Exception $e) {
         $error = $e->getMessage();
@@ -71,30 +65,10 @@ if ($accountId) {
 function safeJsonEncode($data) {
     return json_encode($data, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE);
 }
-
-// Function to group data by month
-function groupByMonth($data, $dateKey, $valueKey) {
-    $grouped = [];
-    foreach ($data as $item) {
-        $month = date('Y-m', strtotime($item[$dateKey]));
-        if (!isset($grouped[$month])) {
-            $grouped[$month] = 0;
-        }
-        $grouped[$month] += $item[$valueKey];
-    }
-    ksort($grouped);
-    return $grouped;
-}
-
-// Prepare data for charts
-$monthlySavings = groupByMonth($savings, 'date', 'amount');
-$monthlyTransactions = groupByMonth($transactions, 'date', 'amount');
-
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -103,576 +77,540 @@ $monthlyTransactions = groupByMonth($transactions, 'date', 'amount');
     <link href="../public/fontawesome-free/css/all.min.css" rel="stylesheet" type="text/css">
     <link href="../public/css/sb-admin-2.css" rel="stylesheet">
     <link href="../public/css/dataTables.bootstrap4.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
     <style>
+        :root {
+            --primary-color: #51087E;
+            --primary-hover: #3d0660;
+            --success-color: #1cc88a;
+            --warning-color: #f6c23e;
+            --danger-color: #e74a3b;
+            --info-color: #36b9cc;
+            --purple-color: #6f42c1;
+            --teal-color: #20c997;
+            --light-bg: #f8f9fc;
+            --white: #ffffff;
+            --border-color: #e3e6f0;
+            --text-muted: #858796;
+            --shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+            --border-radius: 0.35rem;
+            --sidebar-width: 280px;
+            --sidebar-collapsed-width: 70px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
         body { 
-            background-color: #f8f9fc; 
+            background-color: var(--light-bg);
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            overflow-x: hidden;
         }
-        .container-fluid {
-            padding: 20px;
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-        .card {
-            border: 0;
-            border-radius: 5px;
-            box-shadow: rgba(50, 50, 93, 0.25) 0px 13px 27px -5px, rgba(0, 0, 0, 0.3) 0px 8px 16px -8px;
-            margin-bottom: 20px;
-            transition: all 0.3s ease;
-        }
-        .card-header{
-            color: #51087E;";
-            font-weight: bold;
-        }
-        .summary-card {
-            color: white;
-            border-radius: 12px;
-            padding: 20px;
-            height: 100%;
-            transition: all 0.3s ease;
-        }
-        .summary-card:hover { 
-            transform: translateY(-5px);
-            box-shadow: rgba(50, 50, 93, 0.25) 0px 13px 27px -5px, rgba(0, 0, 0, 0.3) 0px 8px 16px -8px;
-        }
-        .summary-card h4 {
-            font-size: 1.2rem;
-            margin-bottom: 10px;
-            font-style: italic;
-        }
-        .summary-card p {
-            font-size: 1.5rem;
-            font-weight: bold;
-            margin-bottom: 0;
-            opacity: 0.9;
-        }
-        .shareholder-card { background: linear-gradient(45deg,  #51087E, #224abe); }
-        .savings-card { background: linear-gradient(45deg, #1cc88a, #13855c); }
-        .loans-card { background: linear-gradient(45deg, #f6c23e, #dda20a); }
-        .balance-card { background: linear-gradient(45deg, #36b9cc, #258391); }
-        .chart-container {
-            position: relative;
-            height: 300px;
-            width: 100%;
-            box-shadow: rgba(50, 50, 93, 0.25) 0px 13px 27px -5px, rgba(0, 0, 0, 0.3) 0px 8px 16px -8px;
-        }
-        .topbar {
+
+        /* Loading Overlay */
+        .loading-overlay {
             position: fixed;
             top: 0;
-            right: 0;
             left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            backdrop-filter: blur(5px);
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Page Layout */
+        .page-container {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* Content Area */
+        .content-area {
+            padding: 25px;
+            min-height: calc(100vh - 70px);
+        }
+
+        /* Enhanced Filter Section */
+        .filter-section {
+            background: linear-gradient(135deg, #51087E 0%, #6B1FA0 100%);
+            border-radius: 12px;
+            padding: 25px 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 25px rgba(81, 8, 126, 0.15);
+            border: none;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .filter-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%);
+            pointer-events: none;
+        }
+
+        .filter-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            position: relative;
+            z-index: 2;
+        }
+
+        .filter-icon {
+            color: #ffffff;
+            font-size: 1.4rem;
+            margin-right: 15px;
+            background: rgba(255,255,255,0.2);
+            padding: 10px;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .filter-title {
+            color: #ffffff;
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin: 0;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .filter-control-wrapper {
+            position: relative;
+            z-index: 2;
+        }
+
+        .custom-select {
+            width: 100%;
+            max-width: 400px;
+            padding: 1px 15px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 8px;
+            background: rgba(255,255,255,0.95);
+            font-size: 1.1rem;
+            font-weight: 500;
+            color: #333;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+            background-position: right 12px center;
+            background-repeat: no-repeat;
+            background-size: 16px;
+            padding-right: 45px;
+        }
+
+        .custom-select:focus {
+            outline: none;
+            border-color: #ffffff;
+            box-shadow: 0 0 0 4px rgba(255,255,255,0.3), 0 6px 20px rgba(0,0,0,0.15);
+            background: #ffffff;
+            transform: translateY(-1px);
+        }
+
+        .custom-select:hover {
+            border-color: rgba(255,255,255,0.5);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+        }
+
+        .custom-select option {
+            background: #ffffff;
+            color: #333;
+            padding: 12px;
+            font-weight: 500;
+        }
+
+        .custom-select option:first-child {
+            font-weight: 600;
+            color: #51087E;
+        }
+
+        /* Stats Cards with Drag & Drop */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        .stat-card {
+            background: var(--white);
+            border-radius: var(--border-radius);
+            padding: 25px;
+            box-shadow: var(--shadow);
+            text-align: center;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            border-left: 4px solid var(--primary-color);
+            cursor: move;
+            user-select: none;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(58, 59, 69, 0.25);
+        }
+
+        .stat-card.dragging {
+            opacity: 0.6;
+            transform: rotate(5deg) scale(0.95);
+            box-shadow: 0 15px 35px rgba(58, 59, 69, 0.4);
             z-index: 1000;
         }
-        .container-fluid {
-            margin-top: 70px;
-            padding-left: 1.5rem;
-            padding-right: 1.5rem;
+
+        .stat-card.drag-over {
+            border: 2px dashed var(--primary-color);
+            background: rgba(81, 8, 126, 0.05);
         }
 
-            /* Custom select container */
-    .filter-section {
-      margin: 1.5rem 0;
-      padding: 1.8rem;
-      background: white;
-      border-radius: 0.5rem;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
-    }
+        .stat-card.savings { border-left-color: var(--success-color); }
+        .stat-card.withdrawals { border-left-color: var(--danger-color); }
+        .stat-card.loans { border-left-color: var(--warning-color); }
+        .stat-card.active-loans { border-left-color: var(--purple-color); }
+        .stat-card.group-savings { border-left-color: var(--teal-color); }
 
-    .filter-header {
-      margin-bottom: 1rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-    }
+        .stat-icon {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+            color: var(--primary-color);
+        }
 
-    .filter-icon {
-      color: #51087E;
-      font-size: 1.25rem;
-    }
+        .stat-card.savings .stat-icon { color: var(--success-color); }
+        .stat-card.withdrawals .stat-icon { color: var(--danger-color); }
+        .stat-card.loans .stat-icon { color: var(--warning-color); }
+        .stat-card.active-loans .stat-icon { color: var(--purple-color); }
+        .stat-card.group-savings .stat-icon { color: var(--teal-color); }
 
-    .filter-title {
-      color: #51087E;
-      font-size: 1rem;
-      font-weight: 600;
-      margin: 0;
-    }
+        .stat-value {
+            font-size: 1.6rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #333;
+        }
 
-    /* Custom select styling */
-    .custom-select-wrapper {
-      position: relative;
-      max-width: 600px;
-    }
+        .stat-label {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
 
-    .custom-select {
-      appearance: none;
-      -webkit-appearance: none;
-      width: 100%;
-      padding: 0 1rem;
-      font-size: 0.95rem;
-      border: 2px solid #e2e8f0;
-      border-radius: 0.375rem;
-      background-color: white;
-      color: #4a5568;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
+        .drag-handle {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: var(--text-muted);
+            font-size: 1rem;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
 
-    .custom-select:hover {
-      border-color: #51087E;
-    }
+        .stat-card:hover .drag-handle {
+            opacity: 1;
+        }
 
-    .custom-select:focus {
-      outline: none;
-      border-color: #51087E;
-      box-shadow: 0 0 0 3px rgba(81, 8, 126, 0.2);
-    }
+        .drag-instructions {
+            background: rgba(81, 8, 126, 0.1);
+            border: 1px solid rgba(81, 8, 126, 0.2);
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 20px;
+            color: var(--primary-color);
+            font-size: 0.9rem;
+            text-align: center;
+        }
 
-    /* Custom select arrow */
-    .select-arrow {
-      position: absolute;
-      right: 1rem;
-      top: 50%;
-      transform: translateY(-50%);
-      pointer-events: none;
-      color: #51087E;
-    }
+        /* Content Sections */
+        .content-section {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
 
-    /* Animation for select focus */
-    @keyframes select-focus {
-      0% { box-shadow: 0 0 0 0 rgba(81, 8, 126, 0.4); }
-      70% { box-shadow: 0 0 0 5px rgba(81, 8, 126, 0); }
-      100% { box-shadow: 0 0 0 0 rgba(81, 8, 126, 0); }
-    }
+        .content-section.active {
+            display: block !important;
+        }
 
-    .custom-select:focus {
-      animation: select-focus 0.8s ease-out;
-    }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Toast Container */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+        }
+
+        .toast-modern {
+            background: var(--white);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            padding: 15px 20px;
+            margin-bottom: 10px;
+            min-width: 300px;
+            border-left: 4px solid var(--success-color);
+            transform: translateX(350px);
+            transition: transform 0.3s ease;
+        }
+
+        .toast-modern.show {
+            transform: translateX(0);
+        }
+
+        .toast-modern.error {
+            border-left-color: var(--danger-color);
+        }
+
+        .toast-modern.warning {
+            border-left-color: var(--warning-color);
+        }
+
+        .toast-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .toast-body {
+            color: var(--text-muted);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .content-area {
+                padding: 15px;
+            }
+            
+            .filter-section {
+                padding: 20px;
+                margin-bottom: 25px;
+            }
+            
+            .filter-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+            
+            .filter-title {
+                font-size: 1.1rem;
+            }
+            
+            .custom-select {
+                max-width: 100%;
+                padding: 12px 16px;
+                font-size: 1rem;
+            }
+
+            .drag-instructions {
+                display: none;
+            }
+        }
+
+        /* Loading state for select */
+        .custom-select.loading {
+            opacity: 0.7;
+            pointer-events: none;
+        }
+
+        .custom-select.loading::after {
+            content: '';
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 16px;
+            border: 2px solid #51087E;
+            border-top: 2px solid transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
     </style>
 </head>
 
-<body id="page-top">
-    <!-- Page Wrapper -->
-    <div id="wrapper">
-        <!-- Content Wrapper -->
-        <div id="content-wrapper" class="d-flex flex-column">
-            <!-- Main Content -->
-            <div id="content">
-                <!-- Topbar -->
-                <nav class="navbar navbar-expand navbar-light bg-white topbar mb-4 static-top shadow">
-                    <!-- Back to Accounts Button -->
-                    <a href="../views/cashier-account.php" style="background-color: #51087E; color: white;" class="btn btn-sm">
-                        <i class="fas fa-arrow-left"></i> Back to Accounts
-                    </a>
+<body>
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+    </div>
 
-                    <!-- Topbar Navbar -->
-                    <ul class="navbar-nav ml-auto">
-                        <!-- Nav Item - User Information -->
-                        <li class="nav-item dropdown no-arrow">
-                            <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button"
-                                data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                                <span class="mr-2 d-none d-lg-inline text-gray-600 small"><?php echo $db->user_acc($_SESSION['user_id'])?></span>
-                                <img class="img-profile rounded-circle"
-                                    src="../public/image/logo.jpg">
-                            </a>
-                            <!-- Dropdown - User Information -->
-                            <div class="dropdown-menu dropdown-menu-right shadow animated--grow-in"
-                                aria-labelledby="userDropdown">
-                                <a class="dropdown-item" href="#" data-toggle="modal" data-target="#logoutModal">
-                                    <i class="fas fa-sign-out-alt fa-sm fa-fw mr-2 text-gray-400"></i>
-                                    Logout
-                                </a>
-                            </div>
-                        </li>
-                    </ul>
-                </nav>
-                <!-- End of Topbar -->
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
 
-                <!-- Begin Page Content -->
-                <div class="container-fluid">
-                    <?php if ($error): ?>
-                        <div class="alert alert-danger">
-                            Error: <?= htmlspecialchars($error) ?>
-                        </div>
-                    <?php endif; ?>
+    <div class="page-container">
+        <!-- Include Sidebar -->
+        <?php include '../components/account/sidebar.php'; ?>
 
-                    <?php if ($accountDetails): ?>
-                        <h1 class="mb-4 text-black bold"><?= htmlspecialchars($accountDetails['first_name'] . ' ' . $accountDetails['last_name']) ?></h1>
+        <!-- Begin Page Content -->
+        <div class="container-fluid">
+            <?php if ($error): ?>
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle"></i> Error: <?= htmlspecialchars($error) ?>
+                </div>
+            <?php endif; ?>
 
-                        <div class="filter-section">
-                            <div class="filter-header">
+            <?php if ($accountDetails): ?>
+                <!-- Dashboard Section -->
+                <div class="content-section active" id="dashboard-section">
+                    <!-- Filter Section -->
+                    <div class="filter-section">
+                        <div class="filter-header">
                             <i class="fas fa-filter filter-icon"></i>
                             <h3 class="filter-title">Filter by Account Type</h3>
-                            </div>
-                            <div class="custom-select-wrapper">
+                        </div>
+                        <div class="filter-control-wrapper">
                             <select id="accountTypeFilter" class="custom-select">
-                                <option value="all">All Account Types</option>
+                                <option value="all" selected>All Account Types</option>
                                 <?php
-                                $accountTypes = explode(', ', $accountDetails['account_type']);
-                                foreach($accountTypes as $type): ?>
-                                    <option value="<?= htmlspecialchars($type) ?>"><?= htmlspecialchars($type) ?></option>
-                                <?php endforeach; ?>
+                                if (isset($accountDetails['account_type']) && !empty($accountDetails['account_type'])) {
+                                    $accountTypes = explode(', ', $accountDetails['account_type']);
+                                    foreach($accountTypes as $type): 
+                                        $type = trim($type);
+                                        if (!empty($type)): ?>
+                                            <option value="<?= htmlspecialchars($type) ?>">
+                                                <?= htmlspecialchars(ucfirst($type)) ?>
+                                            </option>
+                                        <?php endif;
+                                    endforeach; 
+                                }?>
                             </select>
-                            <div class="select-arrow">
-                            </div>
-                            </div>
                         </div>
-
-
-                                                
-                        <!-- Account Summary -->
-                        <div class="row mb-4">
-                            <div class="col-md-3 mb-3">
-                                <div class="summary-card shareholder-card">
-                                    <h4>Shareholder No</h4>
-                                    <p><?= htmlspecialchars($accountDetails['shareholder_no'] ?? 'N/A') ?></p>
-                                </div>
-                            </div>
-                            <div class="col-md-3 mb-3">
-                                <div class="summary-card savings-card">
-                                    <h4>Total Savings</h4>
-                                    <p id="totalSavings">KSh <?= number_format($totalSavings, 2) ?></p>
-                                    <small id="accountTypeSavings"></small>
-                                </div>
-                            </div>
-                            <div class="col-md-3 mb-3">
-                            <div class="summary-card loans-card">
-                                <h4>Outstanding Loans</h4>
-                                <p id="outstandingLoans">
-                                    KSh <?= number_format($accountDetails['totalLoans'] ?? 0, 2) ?>
-                                </p>
-                                <small id="accountTypeLoans"></small>
-                            </div>
-                        </div>
-                            <div class="col-md-3 mb-3">
-                                <div class="summary-card balance-card">
-                                    <h4>Net Balance</h4>
-                                    <p id="netBalance">KSh <?= number_format($netBalance, 2) ?></p>
-                                    <small id="accountTypeBalance"></small>
-                                </div>
-                            </div>
-                        </div>
-
-
-
-
-                        <div class="row">
-                            <div class="col-md-6">
-                                <!-- Client Information -->
-                                <div class="card mb-4">
-                                    <div class="card-header">
-                                        <h5 class="m-0 font-weight-bold">Client Information</h5>
-                                    </div>
-                                    <div class="card-body">
-                                        <div class="row">
-                                            <div class="col-md-6">
-                                                <p><strong>Name:</strong> <?= htmlspecialchars($accountDetails['first_name'] . ' ' . $accountDetails['last_name']) ?></p>
-                                                <p><strong>National ID:</strong> <?= htmlspecialchars($accountDetails['national_id'] ?? 'N/A') ?></p>
-                                                <p><strong>Phone:</strong> <?= htmlspecialchars($accountDetails['phone_number'] ?? 'N/A') ?></p>
-                                                <p><strong>Email:</strong> <?= htmlspecialchars($accountDetails['email'] ?? 'N/A') ?></p>
-                                            </div>
-                                            <div class="col-md-6">
-                                                <p><strong>Location:</strong> <?= htmlspecialchars($accountDetails['location'] ?? 'N/A') ?></p>
-                                                <p><strong>Division:</strong> <?= htmlspecialchars($accountDetails['division'] ?? 'N/A') ?></p>
-                                                <p><strong>Village:</strong> <?= htmlspecialchars($accountDetails['village'] ?? 'N/A') ?></p>
-                                                <p><strong>Account Type:</strong> <?= htmlspecialchars($accountDetails['account_type'] ?? 'N/A') ?></p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Account Performance Chart -->
-                                <div class="card mb-4">
-                                    <div class="card-header">
-                                        <h5 class="m-0 font-weight-bold">Account Performance</h5>
-                                    </div>
-                                    <div class="card-body">
-                                        <canvas id="accountPerformanceChart"></canvas>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="col-md-6">
-                                <!-- Savings Trend Chart -->
-                                <div class="card mb-4">
-                                    <div class="card-header">
-                                        <h5 class="m-0 font-weight-bold">Savings Trend</h5>
-                                    </div>
-                                    <div class="card-body">
-                                        <canvas id="savingsTrendChart"></canvas>
-                                    </div>
-                                </div>
-
-                                <!-- Transaction Distribution Chart -->
-                                <div class="card mb-4">
-                                    <div class="card-header">
-                                        <h5 class="m-0 font-weight-bold">Transaction Distribution</h5>
-                                    </div>
-                                    <div class="card-body">
-                                        <canvas id="transactionDistributionChart"></canvas>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Loans Section -->
-                        <div class="card mb-4">
-                            <div class="card-header">
-                                <h5 class="m-0 font-weight-bold">Loans</h5>
-                            </div>
-                            <div class="card-body">
-                                <?php if (!empty($loans)): ?>
-                                    <div class="table-responsive">
-                                        <table class="table table-bordered table-hover" id="loansTable" width="100%" cellspacing="0">
-                                            <thead>
-                                                <tr>
-                                                    <th>Ref No</th>
-                                                    <th>Loan Product</th>
-                                                    <th>Amount</th>
-                                                    <th>Interest Rate</th>
-                                                    <th>Monthly Payment</th>
-                                                    <th>Total Payable</th>
-                                                    <th>Status</th>
-                                                    <th>Date Applied</th>
-                                                    <th>Next Payment Date</th>
-                                                    <th>Action</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php foreach ($loans as $loan): ?>
-                                                    <tr>
-                                                        <td><?= htmlspecialchars($loan['ref_no']) ?></td>
-                                                        <td><?= htmlspecialchars($loan['loan_product_id']) ?></td>
-                                                        <td>KSh <?= number_format($loan['amount'], 2) ?></td>
-                                                        <td><?= number_format($loan['interest_rate'], 2) ?>%</td>
-                                                        <td>KSh <?= number_format($loan['monthly_payment'], 2) ?></td>
-                                                        <td>KSh <?= number_format($loan['total_payable'], 2) ?></td>
-                                                        <td>
-                                                        <?php
-                                                            $status_class = '';
-                                                            $status_text = '';
-                                                            switch($loan['status']) {
-                                                                case 0: $status_class = 'badge-warning'; $status_text = 'Pending Approval'; break;
-                                                                case 1: $status_class = 'badge-info'; $status_text = 'Approved'; break;
-                                                                case 2: $status_class = 'badge-primary'; $status_text = 'Released'; break;
-                                                                case 3: $status_class = 'badge-success'; $status_text = 'Completed'; break;
-                                                                case 4: $status_class = 'badge-danger'; $status_text = 'Denied'; break;
-                                                                default: $status_class = 'badge-secondary'; $status_text = 'Unknown'; break;
-                                                            }
-                                                            echo "<span class='badge $status_class'>$status_text</span>";
-                                                            ?>
-                                                        </td>
-                                                        <td><?= date("Y-m-d", strtotime($loan['date_applied'])) ?></td>
-                                                        <td><?= $loan['next_payment_date'] ? date("Y-m-d", strtotime($loan['next_payment_date'])) : 'N/A' ?></td>
-                                                        <td>
-                                                            <button class="btn btn-info btn-sm view-schedule" data-loan-id="<?= $loan['loan_id'] ?>">Loan Schedule</button>
-                                                        </td>
-                                                    </tr>
-                                                <?php endforeach; ?>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                <?php else: ?>
-                                    <p class="text-muted">No loans found for this account.</p>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-
-
-
-                        <!-- Loan Repayments Section -->
-                    <div class="card mb-4">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="m-0 font-weight-bold">Loan Repayments</h5>
-                        <button class="btn btn-success btn-sm" data-toggle="modal" data-target="#repayLoanModal">Repay Loan</button>
                     </div>
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-bordered table-hover" id="repaymentTable" width="100%" cellspacing="0">
-                                <thead>
-                                    <tr>
-                                        <th>Loan Ref No</th>
-                                        <th>Receipt No</th>
-                                        <th>Amount Repaid</th>
-                                        <th>Date Paid</th>
-                                        <th>Mode of Payment</th>
-                                        <th>Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                        <?php if (!empty($repayments)): ?>
-                                            <?php foreach ($repayments as $repayment): ?>
-                                                <tr>
-                                                    <td><?= htmlspecialchars($repayment['loan_ref_no']) ?></td>
-                                                    <td><?= htmlspecialchars($repayment['receipt_number']) ?></td>
-                                                    <td>KSh <?= number_format($repayment['amount_repaid'], 2) ?></td>
-                                                    <td><?= date("Y-m-d", strtotime($repayment['date_paid'])) ?></td>
-                                                    <td><?= htmlspecialchars($repayment['payment_mode']) ?></td>
-                                                    <td>
-                                                        <button style="background-color: #51087E; color: white;" 
-                                                                class="btn btn-sm print-repayment-receipt" 
-                                                                data-repayment-id="<?= $repayment['id'] ?>">
-                                                            <i class="fas fa-print"></i> Print Receipt
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            <?php endforeach; ?>
-                                        <?php else: ?>
-                                            <tr>
-                                                <td colspan="5" class="text-center">No repayments found</td>
-                                            </tr>
-                                        <?php endif; ?>
-                                    </tbody>
-                            </table>
+
+                    <!-- Drag Instructions -->
+                    <div class="drag-instructions">
+                        <i class="fas fa-hand-rock"></i>
+                        Drag and drop the cards below to rearrange them according to your preference
+                    </div>
+
+                    <!-- Stats Grid with Drag & Drop -->
+                    <div class="stats-grid" id="statsGrid">
+                        <div class="stat-card" data-card-id="shareholder" draggable="true">
+                            <div class="drag-handle">
+                                <i class="fas fa-grip-vertical"></i>
+                            </div>
+                            <div class="stat-icon">
+                                <i class="fas fa-user-tie"></i>
+                            </div>
+                            <div class="stat-value"><?= htmlspecialchars($accountDetails['shareholder_no'] ?? 'N/A') ?></div>
+                            <div class="stat-label">Shareholder Number</div>
+                        </div>
+                        
+                        <div class="stat-card savings" data-card-id="savings" draggable="true">
+                            <div class="drag-handle">
+                                <i class="fas fa-grip-vertical"></i>
+                            </div>
+                            <div class="stat-icon">
+                                <i class="fas fa-piggy-bank"></i>
+                            </div>
+                            <div class="stat-value" id="totalSavings">KSh <?= number_format($totalSavings, 2) ?></div>
+                            <div class="stat-label">Total Savings</div>
+                        </div>
+                        
+                        <div class="stat-card withdrawals" data-card-id="withdrawals" draggable="true">
+                            <div class="drag-handle">
+                                <i class="fas fa-grip-vertical"></i>
+                            </div>
+                            <div class="stat-icon">
+                                <i class="fas fa-hand-holding-usd"></i>
+                            </div>
+                            <div class="stat-value" id="totalWithdrawals">KSh <?= number_format($totalWithdrawals, 2) ?></div>
+                            <div class="stat-label">Total Withdrawals</div>
+                        </div>
+                        
+                        <div class="stat-card loans" data-card-id="loans" draggable="true">
+                            <div class="drag-handle">
+                                <i class="fas fa-grip-vertical"></i>
+                            </div>
+                            <div class="stat-icon">
+                                <i class="fas fa-money-bill-wave"></i>
+                            </div>
+                            <div class="stat-value" id="outstandingLoans">KSh <?= number_format($outstandingLoans, 2) ?></div>
+                            <div class="stat-label">Outstanding Loans</div>
+                        </div>
+                        
+                        <div class="stat-card active-loans" data-card-id="active-loans" draggable="true">
+                            <div class="drag-handle">
+                                <i class="fas fa-grip-vertical"></i>
+                            </div>
+                            <div class="stat-icon">
+                                <i class="fas fa-chart-line"></i>
+                            </div>
+                            <div class="stat-value" id="activeLoansCount"><?= $activeLoansCount ?></div>
+                            <div class="stat-label">Active Loans</div>
+                        </div>
+                        
+                        <div class="stat-card group-savings" data-card-id="group-savings" draggable="true">
+                            <div class="drag-handle">
+                                <i class="fas fa-grip-vertical"></i>
+                            </div>
+                            <div class="stat-icon">
+                                <i class="fas fa-users"></i>
+                            </div>
+                            <div class="stat-value" id="totalGroupSavings">KSh <?= number_format($totalGroupSavings, 2) ?></div>
+                            <div class="stat-label">Total Group Savings</div>
                         </div>
                     </div>
                 </div>
 
-
-
-                        <!-- Savings Section -->
-                        <div class="card mb-4">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="m-0 font-weight-bold">Savings and Withdrawals</h5>
-                        <div>
-                            <button class="btn btn-success btn-sm" data-toggle="modal" data-target="#addSavingsModal">Add Savings</button>
-                            <button class="btn btn-warning btn-sm" data-toggle="modal" data-target="#withdrawModal">Withdraw</button>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <?php if (!empty($savings)): ?>
-                            <div class="table-responsive">
-                            <table class="table table-bordered table-hover" id="savingsTable" width="100%" cellspacing="0">
-                                        <thead>
-                                            <tr>
-                                                <th>Date</th>
-                                                <th>Type</th>
-                                                <th>Receipt No</th>
-                                                <th>Amount</th>
-                                                <th>Withdrawal Fee</th>
-                                                <th>Payment Mode</th>
-                                                <th>Served By</th>
-                                                <th>Action</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <?php foreach ($savings as $saving): ?>
-                                                <tr>
-                                                    <td><?= date("Y-m-d H:i:s", strtotime($saving['date'])) ?></td>
-                                                    <td><?= htmlspecialchars($saving['type']) ?></td>
-                                                    <td><?= htmlspecialchars($saving['receipt_number']) ?></td>
-                                                    <td>KSh <?= number_format($saving['amount'], 2) ?></td>
-                                                    <td><?= $saving['type'] === 'Withdrawal' ? 'KSh ' . number_format($saving['withdrawal_fee'], 2) : 'N/A' ?></td>
-                                                    <td><?= htmlspecialchars($saving['payment_mode']) ?></td>
-                                                    <td><?= htmlspecialchars($saving['served_by']) ?></td>
-                                                    <td>
-                                                        <button style="background-color: #51087E; color: white;" 
-                                                                class="btn btn-sm print-savings-receipt" 
-                                                                data-id="<?= $saving['saving_id'] ?>" 
-                                                                data-type="<?= htmlspecialchars($saving['type']) ?>">
-                                                            <i class="fas fa-print"></i> Print Receipt
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            <?php endforeach; ?>
-                                        </tbody>
-                                    </table>
-                            </div>
-                        <?php else: ?>
-                            <p class="text-muted">No savings or withdrawal records found for this account.</p>
-                        <?php endif; ?>
-                    </div>
-                </div>
-
-                
-
-<!-- Transactions Section -->
-                        <div class="card mb-4">
-                            <div class="card-header">
-                                <h5 class="m-0 font-weight-bold">Transactions</h5>
-                            </div>
-                            <div class="card-body">
-                                <div class="row mb-3">
-                                    <div class="col-md-3">
-                                        <select id="transactionFilter" class="form-control">
-                                            <option value="all">All Transactions</option>
-                                            <option value="week">Last Week</option>
-                                            <option value="month">Last Month</option>
-                                            <option value="year">Last Year</option>
-                                            <option value="custom">Custom Date Range</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-3" id="customDateRange" style="display:none;">
-                                        <input type="date" id="startDate" class="form-control" placeholder="Start Date">
-                                    </div>
-                                    <div class="col-md-3" id="customDateRange2" style="display:none;">
-                                        <input type="date" id="endDate" class="form-control" placeholder="End Date">
-                                    </div>
-                                    <div class="col-md-3">
-                                        <button id="printStatement" class="btn btn-success">Print Statement</button>
-                                    </div>
-                                </div>
-                                <?php if (!empty($transactions)): ?>
-                                    <div class="table-responsive">
-                                        <table class="table table-bordered table-hover" id="transactionTable" width="100%" cellspacing="0">
-                                            <thead>
-                                                <tr>
-                                                    <th>Date</th>
-                                                    <th>Type</th>
-                                                    <th>Amount</th>
-                                                    <th>Description</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php foreach ($transactions as $transaction): ?>
-                                                    <tr>
-                                                        <td><?= date("Y-m-d", strtotime($transaction['date'])) ?></td>
-                                                        <td><?= htmlspecialchars($transaction['type']) ?></td>
-                                                        <td>KSh <?= number_format($transaction['amount'], 2) ?></td>
-                                                        <td><?= htmlspecialchars($transaction['description']) ?></td>
-                                                    </tr>
-                                                <?php endforeach; ?>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                <?php else: ?>
-                                    <p class="text-muted">No transactions found for this account.</p>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-                    <?php endif; ?>
-                </div>
-                <!-- /.container-fluid -->
-            </div>
-            <!-- End of Main Content -->
-
-            <!-- Footer -->
-            <footer class="sticky-footer bg-white">
-                <div class="container my-auto">
-                    <div class="copyright text-center my-auto">
-                        <span>Copyright &copy; Lato Management System <?php echo date("Y")?></span>
-                    </div>
-                </div>
-            </footer>
-            <!-- End of Footer -->
-
+                <!-- Include Component Sections -->
+                <?php include '../components/account/savings.php'; ?>
+                <?php include '../components/account/transactions.php'; ?>          
+                <?php include '../components/account/client-info.php'; ?>
+                 <?php include '../components/account/fully-paid-loans.php'; ?>
+                <?php include '../components/account/loans.php'; ?>            
+                <?php include '../components/account/repayments.php'; ?>
+             
+            <?php endif; ?>
         </div>
-        <!-- End of Content Wrapper -->
-
     </div>
-    <!-- End of Page Wrapper -->
 
-    <!-- Scroll to Top Button-->
-    <a class="scroll-to-top rounded" href="#page-top">
-        <i class="fas fa-angle-up"></i>
-    </a>
-
-    <!-- Logout Modal-->
+    <!-- Logout Modal -->
     <div class="modal fade" id="logoutModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
-                <div class="modal-header bg-danger">
-                    <h5 class="modal-title text-white">System Information</h5>
+                <div class="modal-header">
+                    <h5 class="modal-title">System Information</h5>
                     <button class="close" type="button" data-dismiss="modal" aria-label="Close">
                         <span aria-hidden="true">×</span>
                     </button>
@@ -686,1459 +624,571 @@ $monthlyTransactions = groupByMonth($transactions, 'date', 'amount');
         </div>
     </div>
 
-    <div class="modal fade" id="addSavingsModal" tabindex="-1" role="dialog" aria-hidden="true">
-    <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            <div style="background-color: #51087E; color: white;" class="modal-header">
-                <h5 class="modal-title">Add Savings</h5>
-                <button style="background-color: #51087E; color: white;" type="button" class="close" data-dismiss="modal" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
-                </button>
-            </div>
-            <form id="addSavingsForm">
-                <div class="modal-body">
-                    <input type="hidden" name="accountId" value="<?= $accountId ?>">
-                    <div class="form-group">
-                        <label for="receiptNumber">Receipt Number</label>
-                        <input type="text" class="form-control" id="receiptNumber" name="receiptNumber" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="accountType">Account Type</label>
-                        <select class="form-control" id="accountType" name="accountType" required>
-                            <?php foreach($accountTypes as $type): ?>
-                                <option value="<?= htmlspecialchars($type) ?>"><?= htmlspecialchars($type) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="availableBalance">Available Balance</label>
-                        <input type="text" class="form-control" id="availableBalance" readonly>
-                    </div>
-                    <div class="form-group">
-                        <label for="amount">Amount</label>
-                        <input type="number" class="form-control" id="amount" name="amount" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="paymentMode">Payment Mode</label>
-                        <select class="form-control" id="paymentMode" name="paymentMode" required>
-                            <option value="Cash">Cash</option>
-                            <option value="M-Pesa">M-Pesa</option>
-                            <option value="Bank Transfer">Bank Transfer</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                    <button type="submit" class="btn btn-success">Add Savings</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Withdraw Modal -->
-<div class="modal fade" id="withdrawModal" tabindex="-1" role="dialog" aria-hidden="true">
-    <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            <div style="background-color: #51087E; color: white;" class="modal-header">
-                <h5 class="modal-title">Withdraw Savings</h5>
-                <button style="background-color: #51087E; color: white;" type="button" class="close" data-dismiss="modal" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
-                </button>
-            </div>
-            <form id="withdrawForm">
-                <div class="modal-body">
-                    <input type="hidden" name="accountId" value="<?= $accountId ?>">
-                    <div class="form-group">
-                        <label for="withdrawReceiptNumber">Receipt Number</label>
-                        <input type="text" class="form-control" id="withdrawReceiptNumber" name="receiptNumber" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="withdrawAccountType">Account Type</label>
-                        <select class="form-control" id="withdrawAccountType" name="accountType" required>
-                            <?php foreach($accountTypes as $type): ?>
-                                <option value="<?= htmlspecialchars($type) ?>"><?= htmlspecialchars($type) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="withdrawAvailableBalance">Available Balance</label>
-                        <input type="text" class="form-control" id="withdrawAvailableBalance" readonly>
-                    </div>
-                    <div class="form-group">
-                        <label for="withdrawAmount">Amount</label>
-                        <input type="number" class="form-control" id="withdrawAmount" name="amount" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="withdrawalFee">Withdrawal Fee</label>
-                        <input type="number" class="form-control" id="withdrawalFee" name="withdrawalFee" required>
-                        <small class="text-muted">This fee will be deducted from the withdrawal amount</small>
-                    </div>
-                    <div class="form-group">
-                        <label for="totalWithdrawal">Total Amount (including fee)</label>
-                        <input type="text" class="form-control" id="totalWithdrawal" readonly>
-                    </div>
-                    <div class="form-group">
-                        <label for="withdrawPaymentMode">Payment Mode</label>
-                        <select class="form-control" id="withdrawPaymentMode" name="paymentMode" required>
-                            <option value="Cash">Cash</option>
-                            <option value="M-Pesa">M-Pesa</option>
-                            <option value="Bank Transfer">Bank Transfer</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                    <button type="submit" class="btn btn-warning">Withdraw</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-
-    <!-- Repay Loan Modal -->
-<div class="modal fade" id="repayLoanModal" tabindex="-1" role="dialog" aria-hidden="true">
-    <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            <div style="background-color: #51087E; color: white;" class="modal-header">
-                <h5 class="modal-title">Repay Loan</h5>
-                <button style="background-color: #51087E; color: white;" type="button" class="close" data-dismiss="modal" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
-                </button>
-            </div>
-            <form id="repayLoanForm">
-                <div class="modal-body">
-                    <input type="hidden" name="accountId" value="<?= $accountId ?>">
-                    <div class="form-group">
-                        <label for="loanSelect">Select Loan</label>
-                        <select class="form-control" id="loanSelect" name="loanId" required>
-                            <option value="">Select a loan</option>
-                            <?php foreach ($loans as $loan): ?>
-                                <option value="<?= $loan['loan_id'] ?>" data-ref-no="<?= $loan['ref_no'] ?>" data-outstanding="<?= $loan['outstanding_balance'] ?>">
-                                    <?= $loan['ref_no'] ?> - KSh <?= number_format($loan['outstanding_balance'], 2) ?> outstanding
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="refNo">Loan Ref No</label>
-                        <input type="text" class="form-control" id="refNo" readonly>
-                    </div>
-                    <div class="form-group">
-                        <label for="receiptNumber">Receipt Number</label>
-                        <input type="text" class="form-control" id="receiptNumber" name="receiptNumber" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="outstandingBalance">Outstanding Balance</label>
-                        <input type="text" class="form-control" id="outstandingBalance" readonly>
-                    </div>
-                    <div class="form-group">
-                        <label for="nextDueAmount">Next Due Amount</label>
-                        <input type="text" class="form-control" id="nextDueAmount" readonly>
-                    </div>
-                    <div class="form-group">
-                        <label for="repayAmount">Repayment Amount</label>
-                        <input type="number" class="form-control" id="repayAmount" name="repayAmount" required step="0.01" min="0">
-                    </div>
-                    <div class="form-group">
-                        <label for="paymentMode">Payment Mode</label>
-                        <select class="form-control" id="paymentMode" name="paymentMode" required>
-                            <option value="Cash">Cash</option>
-                            <option value="M-Pesa">M-Pesa</option>
-                            <option value="Bank Transfer">Bank Transfer</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                    <button type="submit" class="btn btn-success">Repay Loan</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-
-
-<!-- Loan Schedule Modal -->
-<div class="modal fade" id="loanScheduleModal" tabindex="-1" role="dialog" aria-hidden="true">
-    <div class="modal-dialog modal-xl" role="document">
-        <div class="modal-content">
-            <div style="background-color: #51087E; color: white;" class="modal-header">
-                <h5 class="modal-title">Loan Schedule</h5>
-                <button style="background-color: #51087E; color: white;" type="button" class="close" data-dismiss="modal" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
-                </button>
-            </div>
-            <div class="modal-body">
-                <div class="table-responsive">
-                    <table class="table table-bordered" id="scheduleTable">
-                        <thead>
-                            <tr>
-                                <th>Due Date</th>
-                                <th>Principal</th>
-                                <th>Interest</th>
-                                <th>Due Amount</th>
-                                <th>Balance</th>
-                                <th>Repaid Amount</th>
-                                <th>Default Amount</th>
-                                <th>Status</th>
-                                <th>Paid Date</th>
-                            </tr>
-                        </thead>
-                        <tbody id="scheduleTableBody">
-                            <!-- Schedule data will be inserted here -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
-
     <!-- Bootstrap core JavaScript-->
     <script src="../public/js/jquery.js"></script>
     <script src="../public/js/bootstrap.bundle.js"></script>
-
-    <!-- Core plugin JavaScript-->
     <script src="../public/js/jquery.easing.js"></script>
-
-    <!-- Custom scripts for all pages-->
     <script src="../public/js/sb-admin-2.js"></script>
-    
-    <!-- Page level plugins -->
     <script src="../public/js/jquery.dataTables.js"></script>
     <script src="../public/js/dataTables.bootstrap4.js"></script>
 
     <script>
-$(document).ready(function() {
-    // =====================================
-    // CONSTANTS AND UTILITIES
-    // =====================================
-    const ACCOUNT_ID = <?= $accountId ?>;
-    
-    const CURRENCY_FORMAT = {
-        style: 'currency',
-        currency: 'KES',
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    };
-
-    // Utility functions
-    // Function to format currency
-    function formatCurrency(amount) {
-        return 'KSh ' + parseFloat(amount).toLocaleString('en-KE', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        });
-    }
-
-    // Function to format date
-    function formatDateTime(dateString) {
-        return new Date(dateString).toLocaleString('en-KE', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-    }
-
-    function formatStatementDate(dateString) {
-    return new Date(dateString).toLocaleDateString('en-KE', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-    });
-}
-
-function formatStatementCurrency(amount) {
-    return 'KSh ' + parseFloat(amount).toLocaleString('en-KE', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    });
-}
-
-    // =====================================
-    // INITIALIZATION
-    // =====================================
-    
-    // Initialize DataTables
-    const initializeTables = () => {
-        const tables = ['#loansTable', '#savingsTable', '#transactionTable', '#repaymentTable'];
-        tables.forEach(table => $(table).DataTable());
-    };
-
-    // Initialize account type filter from URL
-    const initializeAccountTypeFilter = () => {
-        const urlParams = new URLSearchParams(window.location.search);
-        const accountType = urlParams.get('account_type');
-        if (accountType) {
-            $('#accountTypeFilter').val(accountType);
-        }
-
-            // =====================================
-    // ACCOUNT TYPE FILTER
-    // =====================================
-    $('#accountTypeFilter').change(function() {
-    const selectedType = $(this).val();
-    
-    $.ajax({
-        url: '../controllers/accountController.php?action=getFilteredSummary',
-        type: 'GET',
-        data: {
-            accountId: <?= $accountId ?>,
-            accountType: selectedType
-        },
-        dataType: 'json',
-        success: function(response) {
-            if(response.status === 'success') {
-                // Update summary cards without page reload
-                $('#totalSavings').text('KSh ' + 
-                    parseFloat(response.totalSavings)
-                        .toLocaleString('en-KE', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2
-                        }));
-                
-                $('#outstandingLoans').text('KSh ' + 
-                    parseFloat(response.totalLoanAmount)
-                        .toLocaleString('en-KE', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2
-                        }));
-                
-                $('#netBalance').text('KSh ' + 
-                    parseFloat(response.netBalance)
-                        .toLocaleString('en-KE', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2
-                        }));
-
-                localStorage.setItem('selectedAccountType', selectedType);
-            } else {
-                console.error('Error fetching summary:', response.message);
-            }
-        },
-        error: function(xhr, status, error) {
-            console.error('AJAX Error:', xhr.responseText);
-        }
-    });
-});
-
-
-
-        // Restore selected account type
-        const savedAccountType = localStorage.getItem('selectedAccountType');
-        if (savedAccountType) {
-            $('#accountTypeFilter').val(savedAccountType).trigger('change');
-        }
-    };
-
-
-    
-    // Add Savings Form Submission
-    $('#addSavingsForm').submit(function(e) {
-        e.preventDefault();
-        const submitButton = $(this).find('button[type="submit"]');
-        submitButton.prop('disabled', true);
+    $(document).ready(function() {
+        // =====================================
+        // CONSTANTS AND UTILITIES
+        // =====================================
+        const ACCOUNT_ID = <?= $accountId ?>;
+        let draggedElement = null;
         
-        $.ajax({
-            url: '../controllers/accountController.php?action=addSavings',
-            type: 'POST',
-            data: $(this).serialize(),
-            dataType: 'json',
-            success: function(response) {
-                try {
-                    if (typeof response === 'string') {
-                        response = JSON.parse(response);
-                    }
-                    
-                    if (response.status === 'success') {
-                        alert('Savings added successfully');
-                        if (response.receiptDetails) {
-                            printSavingsReceipt(response.receiptDetails);
-                        }
-                        location.reload();
-                    } else {
-                        alert('Error: ' + (response.message || 'Unknown error occurred'));
-                    }
-                } catch (e) {
-                    console.error('Error processing response:', e);
-                    alert('An error occurred while processing the response');
+        // Hide loading overlay after page loads
+        setTimeout(function() {
+            $('#loadingOverlay').fadeOut(300);
+        }, 800);
+
+        // =====================================
+        // DRAG AND DROP FUNCTIONALITY
+        // =====================================
+        
+        function initializeDragAndDrop() {
+            const statsGrid = document.getElementById('statsGrid');
+            const statCards = statsGrid.querySelectorAll('.stat-card');
+
+            // Load saved card order from localStorage
+            loadCardOrder();
+
+            statCards.forEach(card => {
+                card.addEventListener('dragstart', handleDragStart);
+                card.addEventListener('dragover', handleDragOver);
+                card.addEventListener('dragenter', handleDragEnter);
+                card.addEventListener('dragleave', handleDragLeave);
+                card.addEventListener('drop', handleDrop);
+                card.addEventListener('dragend', handleDragEnd);
+            });
+
+            function handleDragStart(e) {
+                draggedElement = this;
+                this.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/html', this.outerHTML);
+            }
+
+            function handleDragOver(e) {
+                if (e.preventDefault) {
+                    e.preventDefault();
                 }
-            },
-            error: function(xhr, status, error) {
+                e.dataTransfer.dropEffect = 'move';
+                return false;
+            }
+
+            function handleDragEnter(e) {
+                this.classList.add('drag-over');
+            }
+
+            function handleDragLeave(e) {
+                this.classList.remove('drag-over');
+            }
+
+            function handleDrop(e) {
+                if (e.stopPropagation) {
+                    e.stopPropagation();
+                }
+
+                if (draggedElement !== this) {
+                    const draggedIndex = Array.from(statsGrid.children).indexOf(draggedElement);
+                    const targetIndex = Array.from(statsGrid.children).indexOf(this);
+
+                    if (draggedIndex < targetIndex) {
+                        statsGrid.insertBefore(draggedElement, this.nextSibling);
+                    } else {
+                        statsGrid.insertBefore(draggedElement, this);
+                    }
+
+                    saveCardOrder();
+                    showToast('Card layout updated successfully!', 'success');
+                }
+
+                return false;
+            }
+
+            function handleDragEnd(e) {
+                const statCards = statsGrid.querySelectorAll('.stat-card');
+                statCards.forEach(card => {
+                    card.classList.remove('dragging', 'drag-over');
+                });
+            }
+
+            function saveCardOrder() {
+                const cardOrder = Array.from(statsGrid.children).map(card => 
+                    card.getAttribute('data-card-id')
+                );
+                localStorage.setItem('statsCardOrder_' + ACCOUNT_ID, JSON.stringify(cardOrder));
+            }
+
+            function loadCardOrder() {
+                const savedOrder = localStorage.getItem('statsCardOrder_' + ACCOUNT_ID);
+                if (savedOrder) {
+                    try {
+                        const cardOrder = JSON.parse(savedOrder);
+                        const cards = {};
+                        
+                        // Store current cards by their ID
+                        statsGrid.querySelectorAll('.stat-card').forEach(card => {
+                            const cardId = card.getAttribute('data-card-id');
+                            cards[cardId] = card;
+                        });
+
+                        // Clear the grid
+                        statsGrid.innerHTML = '';
+
+                        // Append cards in saved order
+                        cardOrder.forEach(cardId => {
+                            if (cards[cardId]) {
+                                statsGrid.appendChild(cards[cardId]);
+                            }
+                        });
+
+                        // Add any cards that weren't in the saved order (new cards)
+                        Object.values(cards).forEach(card => {
+                            if (!statsGrid.contains(card)) {
+                                statsGrid.appendChild(card);
+                            }
+                        });
+                    } catch (e) {
+                        console.error('Error loading card order:', e);
+                    }
+                }
+            }
+        }
+
+        // Initialize drag and drop
+        initializeDragAndDrop();
+
+        // =====================================
+        // TOAST NOTIFICATIONS
+        // =====================================
+        function showToast(message, type = 'success') {
+            const toastId = 'toast-' + Date.now();
+            const toastClass = type === 'error' ? 'error' : type === 'warning' ? 'warning' : '';
+            const iconClass = type === 'error' ? 'fa-exclamation-triangle' : type === 'warning' ? 'fa-exclamation-circle' : 'fa-check-circle';
+            
+            const toast = `
+                <div class="toast-modern ${toastClass}" id="${toastId}">
+                    <div class="toast-header">
+                        <i class="fas ${iconClass}" style="margin-right: 8px;"></i>
+                        <span>${type.charAt(0).toUpperCase() + type.slice(1)}</span>
+                        <button type="button" style="margin-left: auto; background: none; border: none; font-size: 1.2rem; cursor: pointer;" onclick="closeToast('${toastId}')">&times;</button>
+                    </div>
+                    <div class="toast-body">${message}</div>
+                </div>
+            `;
+            
+            $('#toastContainer').append(toast);
+            
+            setTimeout(() => {
+                $(`#${toastId}`).addClass('show');
+            }, 100);
+            
+            setTimeout(() => {
+                closeToast(toastId);
+            }, 5000);
+        }
+        
+        function closeToast(toastId) {
+            $(`#${toastId}`).removeClass('show');
+            setTimeout(() => {
+                $(`#${toastId}`).remove();
+            }, 300);
+        }
+        
+        window.closeToast = closeToast;
+        window.showToast = showToast;
+
+        // =====================================
+        // UTILITY FUNCTIONS
+        // =====================================
+        
+        function formatCurrency(amount) {
+            return parseFloat(amount).toLocaleString('en-KE', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        }
+
+        function formatDateTime(dateString) {
+            return new Date(dateString).toLocaleString('en-KE', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        window.formatCurrency = formatCurrency;
+        window.formatDateTime = formatDateTime;
+
+       // ACCOUNT TYPE FILTER (SERVER-SIDE)
+        // =====================================
+        
+        $('#accountTypeFilter').change(function() {
+            const selectedType = $(this).val();
+            
+            // Add loading state to select
+            $(this).addClass('loading');
+            
+            // Show loading state for all cards
+            updateStatCard('#totalSavings', 'Loading...');
+            updateStatCard('#totalWithdrawals', 'Loading...');
+            updateStatCard('#outstandingLoans', 'Loading...');
+            updateStatCard('#activeLoansCount', 'Loading...');
+            updateStatCard('#totalGroupSavings', 'Loading...');
+            
+            // Make AJAX request to get filtered data
+            $.ajax({
+                url: '../controllers/accountController.php',
+                method: 'GET',
+                data: {
+                    action: 'getFilteredSummary',
+                    accountId: ACCOUNT_ID,
+                    accountType: selectedType
+                },
+                dataType: 'json',
+                success: function(response) {
+                    if (response.status === 'success') {
+                        // Update summary cards with actual filtered data
+                        updateStatCard('#totalSavings', 'KSh ' + formatCurrency(response.totalSavings));
+                        updateStatCard('#totalWithdrawals', 'KSh ' + formatCurrency(response.totalWithdrawals));
+                        updateStatCard('#outstandingLoans', 'KSh ' + formatCurrency(response.outstandingLoans));
+                        updateStatCard('#activeLoansCount', response.activeLoansCount);
+                        updateStatCard('#totalGroupSavings', 'KSh ' + formatCurrency(response.totalGroupSavings));
+                    } else {
+                        showToast('Error filtering account data: ' + response.message, 'error');
+                        resetStatCards();
+                    }
+                },
+                error: function(xhr, status, error) {
+                    showToast('Error loading filtered data', 'error');
+                    resetStatCards();
+                },
+                complete: function() {
+                    // Remove loading state from select
+                    $('#accountTypeFilter').removeClass('loading');
+                }
+            });
+        });
+        
+        function updateStatCard(selector, value) {
+            const $element = $(selector);
+            $element.fadeOut(200, function() {
+                $element.text(value);
+                $element.fadeIn(200);
+            });
+        }
+        
+        function resetStatCards() {
+            updateStatCard('#totalSavings', 'KSh <?= number_format($totalSavings, 2) ?>');
+            updateStatCard('#totalWithdrawals', 'KSh <?= number_format($totalWithdrawals, 2) ?>');
+            updateStatCard('#outstandingLoans', 'KSh <?= number_format($outstandingLoans, 2) ?>');
+            updateStatCard('#activeLoansCount', '<?= $activeLoansCount ?>');
+            updateStatCard('#totalGroupSavings', 'KSh <?= number_format($totalGroupSavings, 2) ?>');
+        }
+
+        // Initialize with default value
+        $('#accountTypeFilter').val('all');
+
+        // =====================================
+        // REAL-TIME UPDATES FOR TRANSACTIONS
+        // =====================================
+        
+        // Listen for loan repayment success
+        $(document).on('loanRepaymentSuccess', function(e, data) {
+            if (data.newOutstandingLoans !== undefined) {
+                updateStatCard('#outstandingLoans', 'KSh ' + formatCurrency(data.newOutstandingLoans));
+            }
+            
+            // Refresh all stats to ensure consistency
+            const currentAccountType = $('#accountTypeFilter').val();
+            $('#accountTypeFilter').trigger('change');
+        });
+
+        // Listen for savings success
+        $(document).on('savingsSuccess', function() {
+            const currentAccountType = $('#accountTypeFilter').val();
+            $('#accountTypeFilter').trigger('change');
+        });
+
+        // Listen for withdrawal success  
+        $(document).on('withdrawalSuccess', function() {
+            const currentAccountType = $('#accountTypeFilter').val();
+            $('#accountTypeFilter').trigger('change');
+        });
+
+        // Enhanced event handlers for better integration
+        $(document).on('loanRepaymentProcessed', function(e, response) {
+            if (response.status === 'success') {
+                if (response.newOutstandingLoans !== undefined) {
+                    updateStatCard('#outstandingLoans', 'KSh ' + formatCurrency(response.newOutstandingLoans));
+                }
+                
+                showToast('Loan repayment processed successfully!', 'success');
+                
+                setTimeout(() => {
+                    $('#accountTypeFilter').trigger('change');
+                }, 1000);
+            }
+        });
+
+        $(document).on('savingsProcessed', function(e, response) {
+            if (response.status === 'success') {
+                showToast('Savings processed successfully!', 'success');
+                
+                setTimeout(() => {
+                    $('#accountTypeFilter').trigger('change');
+                }, 1000);
+            }
+        });
+
+        $(document).on('withdrawalProcessed', function(e, response) {
+            if (response.status === 'success') {
+                showToast('Withdrawal processed successfully!', 'success');
+                
+                setTimeout(() => {
+                    $('#accountTypeFilter').trigger('change');
+                }, 1000);
+            }
+        });
+
+        // =====================================
+        // PRINTING FUNCTIONALITY
+        // =====================================
+        
+        function printLoanRepaymentReceipt(data) {
+            const receiptWindow = window.open('', '_blank', 'width=400,height=600');
+            const content = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Loan Repayment Receipt</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+                        .receipt { border: 1px solid #ccc; padding: 20px; max-width: 800px; margin: 0 auto; }
+                        .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+                        .detail-row { margin: 10px 0; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+                        .footer { text-align: center; margin-top: 20px; border-top: 2px solid #333; padding-top: 10px; }
+                    </style>
+                </head>
+                <body>
+                    <div class="receipt">
+                        <div class="header">
+                            <h2>Lato Sacco LTD</h2>
+                            <h3>Loan Repayment Receipt</h3>
+                        </div>
+                        <div class="detail-row"><strong>Receipt No:</strong> ${data.receipt_number || 'N/A'}</div>
+                        <div class="detail-row"><strong>Date:</strong> ${formatDateTime(data.date_paid)}</div>
+                        <div class="detail-row"><strong>Client Name:</strong> ${data.first_name} ${data.last_name}</div>
+                        <div class="detail-row"><strong>Loan Ref No:</strong> ${data.loan_ref_no}</div>
+                        <div class="detail-row"><strong>Amount Paid:</strong> KSh ${formatCurrency(data.amount_repaid)}</div>
+                        <div class="detail-row"><strong>Payment Mode:</strong> ${data.payment_mode}</div>
+                        <div class="detail-row"><strong>Served By:</strong> ${data.served_by || 'System'}</div>
+                        <div class="footer">
+                            <p>Thank you for banking with us!</p>
+                            <p>Printed on: ${formatDateTime(new Date())}</p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+            `;
+            
+            receiptWindow.document.write(content);
+            receiptWindow.document.close();
+            setTimeout(() => { receiptWindow.print(); receiptWindow.close(); }, 500);
+        }
+
+        function printSavingsReceipt(data, type) {
+            const receiptWindow = window.open('', '_blank', 'width=400,height=600');
+            const content = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>${type} Receipt</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+                        .receipt { border: 1px solid #ccc; padding: 20px; max-width: 800px; margin: 0 auto; }
+                        .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+                        .detail-row { margin: 10px 0; border-bottom:1px solid #eee; padding-bottom: 5px; }
+                        .footer { text-align: center; margin-top: 20px; border-top: 2px solid #333; padding-top: 10px; }
+                    </style>
+                </head>
+                <body>
+                    <div class="receipt">
+                        <div class="header">
+                            <h2>Lato Sacco LTD</h2>
+                            <h3>${type} Receipt</h3>
+                        </div>
+                        <div class="detail-row"><strong>Receipt No:</strong> ${data.receipt_number}</div>
+                        <div class="detail-row"><strong>Date:</strong> ${formatDateTime(data.date)}</div>
+                        <div class="detail-row"><strong>Client Name:</strong> ${data.client_name}</div>
+                        <div class="detail-row"><strong>Account Type:</strong> ${data.account_type}</div>
+                        <div class="detail-row"><strong>Amount:</strong> KSh ${formatCurrency(data.amount)}</div>
+                        ${data.withdrawal_fee ? `<div class="detail-row"><strong>Withdrawal Fee:</strong> KSh ${formatCurrency(data.withdrawal_fee)}</div>` : ''}
+                        <div class="detail-row"><strong>Payment Mode:</strong> ${data.payment_mode}</div>
+                        <div class="detail-row"><strong>Served By:</strong> ${data.served_by || 'System'}</div>
+                        <div class="footer">
+                            <p>Thank you for banking with us!</p>
+                            <p>Printed on: ${formatDateTime(new Date())}</p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+            `;
+            
+            receiptWindow.document.write(content);
+            receiptWindow.document.close();
+            setTimeout(() => { receiptWindow.print(); receiptWindow.close(); }, 500);
+        }
+
+        function printWithdrawalReceipt(data) {
+            printSavingsReceipt(data, 'Withdrawal');
+        }
+
+        // Make print functions globally accessible
+        window.printLoanRepaymentReceipt = printLoanRepaymentReceipt;
+        window.printSavingsReceipt = printSavingsReceipt;
+        window.printWithdrawalReceipt = printWithdrawalReceipt;
+
+        // =====================================
+        // RESPONSIVE HANDLING
+        // =====================================
+        
+        $(window).resize(function() {
+            if (window.innerWidth > 768) {
+                $('#sidebar').removeClass('mobile-open');
+            }
+            
+            // Redraw DataTables on resize
+            setTimeout(() => {
+                $.fn.dataTable.tables({ visible: true, api: true }).columns.adjust();
+            }, 100);
+
+            // Reinitialize drag and drop after resize
+            setTimeout(() => {
+                initializeDragAndDrop();
+            }, 200);
+        });
+
+        // =====================================
+        // MODAL AND BOOTSTRAP FIXES
+        // =====================================
+        
+        $(document).on('click', '.dropdown-menu', function(e) {
+            e.stopPropagation();
+        });
+
+        $(document).on('hidden.bs.modal', '.modal', function () {
+            $('body').removeClass('modal-open');
+            $('.modal-backdrop').remove();
+        });
+
+        $(document).on('show.bs.modal', '.modal', function () {
+            const zIndex = 1040 + (10 * $('.modal:visible').length);
+            $(this).css('z-index', zIndex);
+            setTimeout(() => {
+                $('.modal-backdrop').not('.modal-stack').css('z-index', zIndex - 1).addClass('modal-stack');
+            }, 0);
+        });
+
+        // =====================================
+        // KEYBOARD SHORTCUTS
+        // =====================================
+        
+        $(document).keydown(function(e) {
+            // Alt + R to reset card order
+            if (e.altKey && e.keyCode === 82) {
+                e.preventDefault();
+                localStorage.removeItem('statsCardOrder_' + ACCOUNT_ID);
+                location.reload();
+                showToast('Card layout reset to default!', 'success');
+            }
+            
+            // Alt + F to focus filter
+            if (e.altKey && e.keyCode === 70) {
+                e.preventDefault();
+                $('#accountTypeFilter').focus();
+            }
+        });
+
+        // =====================================
+        // INITIALIZATION AND CLEANUP
+        // =====================================
+        
+        // Initialize dashboard section as active on page load
+        setTimeout(() => {
+            $(document).trigger('sectionChanged', ['dashboard']);
+        }, 1000);
+
+        // Cleanup function for when page is unloaded
+        $(window).on('beforeunload', function() {
+            clearTimeout();
+            
+            $(document).off('loanRepaymentProcessed');
+            $(document).off('savingsProcessed'); 
+            $(document).off('withdrawalProcessed');
+            $(document).off('loanRepaymentSuccess');
+            $(document).off('savingsSuccess');
+            $(document).off('withdrawalSuccess');
+        });
+
+        // =====================================
+        // ERROR HANDLING AND DEBUGGING
+        // =====================================
+        
+        $(document).ajaxError(function(event, xhr, settings, thrownError) {
+            if (xhr.status !== 0) {
                 console.error('AJAX Error:', {
-                    status: status,
-                    error: error,
+                    url: settings.url,
+                    status: xhr.status,
+                    error: thrownError,
                     response: xhr.responseText
                 });
-                alert('Error adding savings. Please try again.');
-            },
-            complete: function() {
-                submitButton.prop('disabled', false);
+                
+                showToast('An error occurred while processing your request. Please try again.', 'error');
             }
         });
-    });
 
-// Withdraw Form Submission
-$('#withdrawForm').submit(function(e) {
-    e.preventDefault();
-    const submitButton = $(this).find('button[type="submit"]');
-    submitButton.prop('disabled', true); 
-
-    const formData = {
-        accountId: $('input[name="accountId"]').val(),
-        amount: parseFloat($('#withdrawAmount').val()) || 0,
-        withdrawalFee: parseFloat($('#withdrawalFee').val()) || 0,
-        accountType: $('#withdrawAccountType').val(),
-        receiptNumber: $('#withdrawReceiptNumber').val(),
-        paymentMode: $('#withdrawPaymentMode').val()
-    };
-
-    $.ajax({
-        url: '../controllers/accountController.php?action=withdraw',
-        type: 'POST',
-        data: formData,
-        dataType: 'json',
-        success: function(response) {
-            if (response.status === 'success') {
-                alert('Withdrawal processed successfully');
-
-                // Update displayed balances
-                $('#totalSavings').text('KSh ' + parseFloat(response.newTotalSavings)
-                    .toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-                $('#netBalance').text('KSh ' + parseFloat(response.newNetBalance)
-                    .toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-
-                if (response.details) {
-                    printWithdrawalReceipt(response.details);
-                }
-
-                $('#withdrawModal').modal('hide');
-                location.reload();
-            } else {
-                alert('Error: ' + (response.message || 'Unknown error occurred'));
-            }
-        },
-        error: function(xhr, status, error) {
-            console.error('AJAX Error:', { status: status, error: error, response: xhr.responseText });
-            alert('Withdrawal successful');
-        },
-        complete: function() {
-            submitButton.prop('disabled', false);
-        }
-    });
-});
-
-// Update withdrawal total calculation
-$('#withdrawAmount, #withdrawalFee').on('input', function() {
-    const amount = parseFloat($('#withdrawAmount').val()) || 0;
-    const fee = parseFloat($('#withdrawalFee').val()) || 0;
-    const total = amount + fee;
-
-    $('#totalWithdrawal').val('KSh ' + total.toLocaleString('en-KE', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    }));
-});
-
-
-
-
-    // =====================================
-    // BALANCE MANAGEMENT
-    // =====================================
-    
-    // Get Available Balance
-    function getAvailableBalance(accountType) {
-        $.ajax({
-            url: '../controllers/accountController.php?action=getAvailableBalance',
-            type: 'GET',
-            data: {
-                accountId: <?= $accountId ?>,
-                accountType: accountType
-            },
-            success: function(response) {
-                try {
-                    const data = JSON.parse(response);
-                    if (data.status === 'success') {
-                        $('#availableBalance, #withdrawAvailableBalance').val('KSh ' + 
-                            parseFloat(data.balance).toLocaleString('en-KE', {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2
-                            })
-                        );
-                    }
-                } catch (e) {
-                    console.error('Error parsing response:', e);
-                }
-            },
-            error: function(xhr, status, error) {
-                console.error('Error fetching balance:', error);
-            }
+        // Log account information for debugging
+        console.log('Account Details Loaded:', {
+            accountId: ACCOUNT_ID,
+            outstandingLoans: <?= $outstandingLoans ?>,
+            activeLoansCount: <?= $activeLoansCount ?>,
+            totalGroupSavings: <?= $totalGroupSavings ?>
         });
-    }
 
-
-        // Account type selection event handlers
-        $('#accountType, #withdrawAccountType').change(function() {
-        const selectedType = $(this).val();
-        getAvailableBalance(selectedType);
-    });
-
-
-    function updateOutstandingPrincipal() {
-    $.ajax({
-        url: '../controllers/accountController.php',
-        type: 'GET',
-        data: {
-            action: 'getOutstandingPrincipal',
-            accountId: <?= $accountId ?>
-        },
-        success: function(response) {
-            if (typeof response === 'string') {
-                response = JSON.parse(response);
-            }
-            
-            if (response.status === 'success') {
-                $('#outstandingLoans').text('KSh ' + 
-                    parseFloat(response.outstandingPrincipal)
-                        .toLocaleString('en-KE', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2
-                        })
-                );
-            } else {
-                console.error('Error updating outstanding principal:', response.message);
-            }
-        },
-        error: function(xhr, status, error) {
-            console.error('AJAX Error:', error);
-        }
-    });
-}
-
-
-    // =====================================
-    // LOAN MANAGEMENT
-    // =====================================
-        // Loan Repayment Form Submission
-        $('#repayLoanForm').submit(function(e) {
-        e.preventDefault();
-        var formData = $(this).serialize();
+        // =====================================
+        // ADDITIONAL FEATURES
+        // =====================================
         
-        $.ajax({
-            url: '../controllers/accountController.php?action=repayLoan',
-            type: 'POST',
-            data: formData,
-            dataType: 'json',
-            success: function(response) {
-                if (response.status === 'success') {
-                    updateOutstandingPrincipal();
-                    alert('Loan repayment successful');
-                    
-                    $('#outstandingLoans').text('KSh ' + parseFloat(response.newTotalOutstandingLoans).toFixed(2));
-                    $('#netBalance').text('KSh ' + parseFloat(response.newNetBalance).toFixed(2));
-                    
-                    if (response.repaymentDetails) {
-                        printLoanRepaymentReceipt(response.repaymentDetails);
-                    }
-                    
-                    $('#repayLoanModal').modal('hide');
-                    location.reload();
-                } else {
-                    alert('Error repaying loan: ' + response.message);
-                }
-            },
-            error: function(xhr, status, error) {
-                console.error('AJAX error:', xhr.responseText);
-                alert('An error occurred while repaying the loan. Please try again.');
-            }
-        });
-    });
-
-
-    
-  // Loan Select Change
-    $('#loanSelect').change(function() {
-        var loanId = $(this).val();
-        if (loanId) {
-            $.ajax({
-                url: '../controllers/accountController.php?action=getLoanDetails',
-                type: 'GET',
-                data: { loanId: loanId },
-                dataType: 'json',
-                success: function(response) {
-                    if (response.status === 'success') {
-                        var loan = response.loan;
-                        $('#refNo').val(loan.ref_no);
-                        $('#outstandingBalance').val('KSh ' + parseFloat(loan.outstanding_balance)
-                            .toLocaleString('en-KE', {minimumFractionDigits: 2, maximumFractionDigits: 2}));
-                        
-                        if (loan.next_due_amount && loan.next_due_amount > 0) {
-                            var dueAmount = parseFloat(loan.next_due_amount);
-                            $('#nextDueAmount').val('KSh ' + dueAmount.toLocaleString('en-KE', {
-                                minimumFractionDigits: 2,
-                                maximumFractionDigits: 2
-                            }));
-                            $('#repayAmount').val(dueAmount.toFixed(2));
-                            
-                            if (loan.next_due_date) {
-                                var dueDate = new Date(loan.next_due_date).toLocaleDateString();
-                                $('#nextDueAmount').attr('title', 'Due on: ' + dueDate);
-                            }
-                        } else {
-                            $('#nextDueAmount').val('No scheduled payment due');
-                            $('#repayAmount').val('');
-                        }
-                        
-                        var selectedOption = $('#loanSelect option:selected');
-                        selectedOption.text(loan.ref_no + ' - KSh ' + parseFloat(loan.outstanding_balance)
-                            .toLocaleString('en-KE', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' outstanding');
-                    }
-                },
-                error: function(xhr, status, error) {
-                    console.error('AJAX error:', xhr.responseText);
-                    alert('An error occurred while fetching the loan details. Please try again.');
-                }
-            });
-        } else {
-            $('#refNo').val('');
-            $('#outstandingBalance').val('');
-            $('#nextDueAmount').val('');
-            $('#repayAmount').val('');
-        }
-    });
-
-
-
-    const updateLoanDetails = (loan) => {
-        $('#refNo').val(loan.ref_no);
-        $('#outstandingBalance').val(formatCurrency(loan.outstanding_balance));
-        
-        if (loan.next_due_amount && loan.next_due_amount > 0) {
-            const dueAmount = parseFloat(loan.next_due_amount);
-            $('#nextDueAmount').val(formatCurrency(dueAmount));
-            $('#repayAmount').val(dueAmount.toFixed(2));
-            
-            if (loan.next_due_date) {
-                $('#nextDueAmount').attr('title', `Due on: ${new Date(loan.next_due_date).toLocaleDateString()}`);
-            }
-        } else {
-            $('#nextDueAmount').val('No scheduled payment due');
-            $('#repayAmount').val('');
-        }
-        
-        const selectedOption = $('#loanSelect option:selected');
-        selectedOption.text(`${loan.ref_no} - ${formatCurrency(loan.outstanding_balance)} outstanding`);
-    };
-
-    const clearLoanDetails = () => {
-        $('#refNo').val('');
-        $('#outstandingBalance').val('');
-        $('#nextDueAmount').val('');
-        $('#repayAmount').val('');
-    };
-
-    // =====================================
-    // LOAN SCHEDULE
-    // =====================================
-    
-    // View Loan Schedule
-    $('.view-schedule').click(function() {
-            var loanId = $(this).data('loan-id');
-            console.log('Requesting loan schedule for loan ID:', loanId); // Debug log
-
-            $.ajax({
-                url: '../controllers/get_loan_schedule.php',
-                type: 'GET',
-                data: { loan_id: loanId },
-                dataType: 'json',
-                success: function(response) {
-                    console.log('Received response:', response); // Debug log
-                    
-                    if(response.status === 'success' && response.schedule) {
-                        var tableBody = $('#scheduleTableBody');
-                        tableBody.empty();
-                        
-                        $.each(response.schedule, function(index, item) {
-                            console.log('Processing schedule item:', item); // Debug log
-                            
-                            var row = `
-                                <tr>
-                                    <td>${item.due_date}</td>
-                                    <td>KSh ${item.principal}</td>
-                                    <td>KSh ${item.interest}</td>
-                                    <td>KSh ${item.amount}</td>
-                                    <td>KSh ${item.balance}</td>
-                                    <td>KSh ${item.repaid_amount}</td>
-                                    <td>KSh ${item.default_amount}</td>
-                                    <td><span class="badge ${getStatusBadgeClass(item.status)}">${item.status}</span></td>
-                                    <td>${item.paid_date || '-'}</td>
-                                </tr>
-                            `;
-                            tableBody.append(row);
-                        });
-                        
-                        $('#loanScheduleModal').modal('show');
-                    } else {
-                        console.error('Invalid response format:', response);
-                        alert('Error: ' + (response.message || 'Invalid schedule data received'));
-                    }
-                },
-                error: function(xhr, status, error) {
-                    console.error('AJAX Error:', {
-                        status: status,
-                        error: error,
-                        responseText: xhr.responseText,
-                        readyState: xhr.readyState,
-                        statusText: xhr.statusText
-                    });
-                    alert('An error occurred while fetching the loan schedule. Check console for details.');
-                }
-            });
+        // Double-click to reset single card position
+        $('.stat-card').on('dblclick', function() {
+            const cardId = $(this).attr('data-card-id');
+            showToast('Double-click feature: Card "' + cardId + '" selected. Use Alt+R to reset all positions.', 'info');
         });
 
-        // Helper function for status badge classes
-        function getStatusBadgeClass(status) {
-            switch(status.toLowerCase()) {
-                case 'paid':
-                    return 'badge-success';
-                case 'partial':
-                    return 'badge-warning';
-                case 'unpaid':
-                    return 'badge-danger';
-                default:
-                    return 'badge-secondary';
-            }
+        // Add tooltip for drag handles
+        $('.drag-handle').attr('title', 'Drag to reorder cards');
+
+        // Show keyboard shortcuts help
+        if (!localStorage.getItem('keyboardShortcutsShown_' + ACCOUNT_ID)) {
+            setTimeout(() => {
+                showToast('Tip: Use Alt+R to reset card layout, Alt+F to focus filter', 'info');
+                localStorage.setItem('keyboardShortcutsShown_' + ACCOUNT_ID, 'true');
+            }, 3000);
         }
 
-        
-
-    // =====================================
-    // TRANSACTION FILTERING
-    // =====================================
-    
-
-    // Transaction filter handling
-    $('#transactionFilter').change(function() {
-        var filter = $(this).val();
-        if (filter === 'custom') {
-            $('#customDateRange, #customDateRange2').show();
-        } else {
-            $('#customDateRange, #customDateRange2').hide();
-            filterTransactions(filter);
-        }
+        // Trigger initial filter to load data
+        setTimeout(() => {
+            $('#accountTypeFilter').trigger('change');
+        }, 500);
     });
-
-    $('#startDate, #endDate').change(function() {
-        if ($('#startDate').val() && $('#endDate').val()) {
-            filterTransactions('custom');
-        }
-    });
-
-
-
-
-
-    function filterTransactions(filter) {
-        var startDate, endDate;
-
-        switch(filter) {
-            case 'week':
-                startDate = moment().subtract(1, 'weeks');
-                endDate = moment();
-                break;
-            case 'month':
-                startDate = moment().subtract(1, 'months');
-                endDate = moment();
-                break;
-            case 'year':
-                startDate = moment().subtract(1, 'years');
-                endDate = moment();
-                break;
-            case 'custom':
-                startDate = moment($('#startDate').val());
-                endDate = moment($('#endDate').val());
-                break;
-            default:
-                $('#transactionTable').DataTable().search('').columns().search('').draw();
-                return;
-        }
-
-        $.fn.dataTable.ext.search.push(
-            function(settings, data, dataIndex) {
-                var date = moment(data[0]);
-                return (date.isSameOrAfter(startDate) && date.isSameOrBefore(endDate));
-            }
-        );
-
-        $('#transactionTable').DataTable().draw();
-        $.fn.dataTable.ext.search.pop();
-    }
-
-
-
-    const applyTransactionFilter = (startDate, endDate) => {
-        $.fn.dataTable.ext.search.push(
-            (settings, data, dataIndex) => {
-                const date = moment(data[0]);
-                return (date.isSameOrAfter(startDate) && date.isSameOrBefore(endDate));
-            }
-        );
-
-        $('#transactionTable').DataTable().draw();
-        $.fn.dataTable.ext.search.pop();
-    };
-
-     // =====================================
-    // PRINTING FUNCTIONALITY
-    // =====================================
-
-    // Print Loan Repayment Receipt
-    $(document).on('click', '.print-repayment-receipt', function() {
-        var repaymentId = $(this).data('repayment-id');
-        $.ajax({
-            url: '../controllers/accountController.php',
-            type: 'GET',
-            data: {
-                action: 'getRepaymentDetails',
-                repaymentId: repaymentId
-            },
-            dataType: 'json',
-            success: function(response) {
-                if (response.status === 'success') {
-                    printLoanRepaymentReceipt(response.repayment);
-                } else {
-                    alert('Error fetching repayment details: ' + response.message);
-                }
-            },
-            error: function(xhr, status, error) {
-                console.error('AJAX error:', xhr.responseText);
-                alert('Error generating receipt');
-            }
-        });
-    });
-
-    // Print Savings Receipt
-    $(document).on('click', '.print-savings-receipt', function() {
-        var savingsId = $(this).data('id');
-        var type = $(this).data('type');
-        
-        $.ajax({
-            url: '../controllers/accountController.php',
-            type: 'GET',
-            data: {
-                action: 'getSavingsDetails',
-                savingsId: savingsId
-            },
-            dataType: 'json',
-            success: function(response) {
-                if (response.status === 'success') {
-                    printSavingsReceipt(response.details, type);
-                } else {
-                    alert('Error fetching receipt details: ' + response.message);
-                }
-            },
-            error: function(xhr, status, error) {
-                console.error('AJAX error:', xhr.responseText);
-                alert('Error generating receipt');
-            }
-        });
-    });
-
-    // Print Loan Repayment Receipt
-function printLoanRepaymentReceipt(data) {
-    var receiptWindow = window.open('', '_blank', 'width=400,height=600');
-    var content = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Loan Repayment Receipt</title>
-            <style>
-                body { 
-                    font-family: Arial, sans-serif;
-                    margin: 20px;
-                    line-height: 1.6;
-                }
-                .receipt {
-                    border: 1px solid #ccc;
-                    padding: 20px;
-                    max-width: 800px;
-                    margin: 0 auto;
-                }
-                .header {
-                    text-align: center;
-                    margin-bottom: 20px;
-                    border-bottom: 2px solid #333;
-                    padding-bottom: 10px;
-                }
-                .detail-row {
-                    margin: 10px 0;
-                    border-bottom: 1px solid #eee;
-                    padding-bottom: 5px;
-                }
-                .footer {
-                    text-align: center;
-                    margin-top: 20px;
-                    border-top: 2px solid #333;
-                    padding-top: 10px;
-                }
-                @media print {
-                    body { print-color-adjust: exact; }
-                }
-            </style>
-        </head>
-        <body>
-            <div class="receipt">
-                <div class="header">
-                    <h2>Lato Sacco LTD</h2>
-                    <h3>Loan Repayment Receipt</h3>
-                </div>
-                <div class="detail-row">
-                    <strong>Receipt No:</strong> ${data.receipt_number || 'N/A'}
-                </div>
-                <div class="detail-row">
-                    <strong>Date:</strong> ${formatDateTime(data.date_paid)}
-                </div>
-                <div class="detail-row">
-                    <strong>Client Name:</strong> ${data.first_name} ${data.last_name}
-                </div>
-                <div class="detail-row">
-                    <strong>Loan Ref No:</strong> ${data.loan_ref_no}
-                </div>
-                <div class="detail-row">
-                    <strong>Amount Paid:</strong> ${formatCurrency(data.amount_repaid)}
-                </div>
-                <div class="detail-row">
-                    <strong>Payment Mode:</strong> ${data.payment_mode}
-                </div>
-                <div class="detail-row">
-                    <strong>Served By:</strong> ${data.served_by || 'System'}
-                </div>
-                <div class="footer">
-                    <p>Thank you for banking with us!</p>
-                    <p>Printed on: ${formatDateTime(new Date())}</p>
-                </div>
-            </div>
-        </body>
-        </html>
-    `;
-    
-    receiptWindow.document.write(content);
-    receiptWindow.document.close();
-    
-    setTimeout(() => {
-        receiptWindow.print();
-        receiptWindow.close();
-    }, 500);
-}
-
-// Print Savings/Withdrawal Receipt
-function printSavingsReceipt(data, type) {
-    var receiptWindow = window.open('', '_blank', 'width=400,height=600');
-    var content = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>${type} Receipt</title>
-            <style>
-                body { 
-                    font-family: Arial, sans-serif;
-                    margin: 20px;
-                    line-height: 1.6;
-                }
-                .receipt {
-                    border: 1px solid #ccc;
-                    padding: 20px;
-                    max-width: 800px;
-                    margin: 0 auto;
-                }
-                .header {
-                    text-align: center;
-                    margin-bottom: 20px;
-                    border-bottom: 2px solid #333;
-                    padding-bottom: 10px;
-                }
-                .detail-row {
-                    margin: 10px 0;
-                    border-bottom: 1px solid #eee;
-                    padding-bottom: 5px;
-                }
-                .footer {
-                    text-align: center;
-                    margin-top: 20px;
-                    border-top: 2px solid #333;
-                    padding-top: 10px;
-                }
-                @media print {
-                    body { print-color-adjust: exact; }
-                }
-            </style>
-        </head>
-        <body>
-            <div class="receipt">
-                <div class="header">
-                    <h2>Lato Lato LTD</h2>
-                    <h3>${type} Receipt</h3>
-                </div>
-                <div class="detail-row">
-                    <strong>Receipt No:</strong> ${data.receipt_number}
-                </div>
-                <div class="detail-row">
-                    <strong>Date:</strong> ${formatDateTime(data.date)}
-                </div>
-                <div class="detail-row">
-                    <strong>Client Name:</strong> ${data.client_name}
-                </div>
-                <div class="detail-row">
-                    <strong>Account Type:</strong> ${data.account_type}
-                </div>
-                <div class="detail-row">
-                    <strong>Amount:</strong> ${formatCurrency(data.amount)}
-                </div>
-                ${data.withdrawal_fee ? `
-                <div class="detail-row">
-                    <strong>Withdrawal Fee:</strong> ${formatCurrency(data.withdrawal_fee)}
-                </div>
-                <div class="detail-row">
-                    <strong>Total Amount:</strong> ${formatCurrency(parseFloat(data.amount) + parseFloat(data.withdrawal_fee))}
-                </div>
-                ` : ''}
-                <div class="detail-row">
-                    <strong>Payment Mode:</strong> ${data.payment_mode}
-                </div>
-                <div class="detail-row">
-                    <strong>Served By:</strong> ${data.served_by || 'System'}
-                </div>
-                <div class="footer">
-                    <p>Thank you for banking with us!</p>
-                    <p>Printed on: ${formatDateTime(new Date())}</p>
-                </div>
-            </div>
-        </body>
-        </html>
-    `;
-    
-    receiptWindow.document.write(content);
-    receiptWindow.document.close();
-    
-    setTimeout(() => {
-        receiptWindow.print();
-        receiptWindow.close();
-    }, 500);
-}
-
-
-
-    // =====================================
-    // STATEMENT COMPONENTS
-    // =====================================
-    $('#printStatement').click(function() {
-    var filter = $('#transactionFilter').val();
-    var startDate, endDate;
-    
-    switch(filter) {
-        case 'week':
-            startDate = moment().subtract(1, 'weeks').format('YYYY-MM-DD');
-            endDate = moment().format('YYYY-MM-DD');
-            break;
-        case 'month':
-            startDate = moment().subtract(1, 'months').format('YYYY-MM-DD');
-            endDate = moment().format('YYYY-MM-DD');
-            break;
-        case 'year':
-            startDate = moment().subtract(1, 'years').format('YYYY-MM-DD');
-            endDate = moment().format('YYYY-MM-DD');
-            break;
-        case 'custom':
-            startDate = $('#startDate').val();
-            endDate = $('#endDate').val();
-            if (!startDate || !endDate) {
-                alert('Please select both start and end dates for custom range');
-                return;
-            }
-            break;
-        default:
-            startDate = null;
-            endDate = null;
-    }
-
-    printStatement(startDate, endDate);
-});
-
-
-
-// Function to print statement
-function printStatement(startDate, endDate) {
-    // Get filtered transactions
-    var transactions = [];
-    var table = $('#transactionTable').DataTable();
-    table.rows({ search: 'applied' }).every(function(rowIdx) {
-        transactions.push(this.data());
-    });
-
-    // Calculate totals
-    var totalCredit = 0;
-    var totalDebit = 0;
-    transactions.forEach(function(trans) {
-        var amount = parseFloat(trans[2].replace(/[^0-9.-]+/g, ""));
-        if (trans[1].toLowerCase().includes('savings') || trans[1].toLowerCase().includes('deposit')) {
-            totalCredit += amount;
-        } else {
-            totalDebit += amount;
-        }
-    });
-
-    var statementWindow = window.open('', '_blank', 'width=800,height=600');
-    var content = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Account Statement</title>
-            <style>
-                body { 
-                    font-family: Arial, sans-serif;
-                    margin: 20px;
-                    line-height: 1.6;
-                }
-                .statement {
-                    padding: 20px;
-                    max-width: 1000px;
-                    margin: 0 auto;
-                }
-                .header {
-                    text-align: center;
-                    margin-bottom: 20px;
-                    border-bottom: 2px solid #333;
-                    padding-bottom: 10px;
-                }
-                .client-info {
-                    margin-bottom: 20px;
-                }
-                .statement-period {
-                    margin-bottom: 20px;
-                    padding: 10px;
-                    background-color: #f8f9fa;
-                }
-                .summary {
-                    margin: 20px 0;
-                    padding: 10px;
-                    background-color: #f8f9fa;
-                }
-                table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    margin: 20px 0;
-                }
-                th, td {
-                    padding: 10px;
-                    border: 1px solid #ddd;
-                    text-align: left;
-                }
-                th {
-                    background-color: #51087E;
-                    color: white;
-                }
-                .credits {
-                    color: green;
-                }
-                .debits {
-                    color: red;
-                }
-                .footer {
-                    text-align: center;
-                    margin-top: 20px;
-                    border-top: 2px solid #333;
-                    padding-top: 10px;
-                }
-                @media print {
-                    body { print-color-adjust: exact; }
-                    .statement-period, .summary {
-                        -webkit-print-color-adjust: exact;
-                        background-color: #f8f9fa !important;
-                    }
-                    th {
-                        -webkit-print-color-adjust: exact;
-                        background-color: #51087E !important;
-                        color: white !important;
-                    }
-                }
-            </style>
-        </head>
-        <body>
-            <div class="statement">
-                <div class="header">
-                    <h2>Lato Sacco LTD</h2>
-                    <h3>Account Statement</h3>
-                </div>
-                <div class="client-info">
-                    <p><strong>Account Name:</strong> <?= htmlspecialchars($accountDetails['first_name'] . ' ' . $accountDetails['last_name']) ?></p>
-                    <p><strong>Shareholder No:</strong> <?= htmlspecialchars($accountDetails['shareholder_no']) ?></p>
-                    <p><strong>Account Type:</strong> <?= htmlspecialchars($accountDetails['account_type']) ?></p>
-                </div>
-                <div class="statement-period">
-                    <h4>Statement Period</h4>
-                    <p><strong>From:</strong> ${startDate ? formatStatementDate(startDate) : 'Beginning'}</p>
-                    <p><strong>To:</strong> ${endDate ? formatStatementDate(endDate) : 'Present'}</p>
-                </div>
-                <div class="summary">
-                    <h4>Transaction Summary</h4>
-                    <p><strong>Total Credits:</strong> <span class="credits">${formatStatementCurrency(totalCredit)}</span></p>
-                    <p><strong>Total Debits:</strong> <span class="debits">${formatStatementCurrency(totalDebit)}</span></p>
-                    <p><strong>Net Movement:</strong> ${formatStatementCurrency(totalCredit - totalDebit)}</p>
-                </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Type</th>
-                            <th>Amount</th>
-                            <th>Description</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${transactions.map(trans => `
-                            <tr>
-                                <td>${trans[0]}</td>
-                                <td>${trans[1]}</td>
-                                <td>${trans[2]}</td>
-                                <td>${trans[3]}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-                <div class="footer">
-                    <p>Statement generated on: ${new Date().toLocaleString('en-KE')}</p>
-                    <p>This is a computer generated statement and requires no signature</p>
-                </div>
-            </div>
-        </body>
-        </html>
-    `;
-    
-    statementWindow.document.write(content);
-    statementWindow.document.close();
-    
-    setTimeout(() => {
-        statementWindow.print();
-        // Don't close the window after printing so user can save as PDF if needed
-    }, 500);
-}
-
-
-
-
-
-    // =====================================
-    // HELPER FUNCTIONS
-    // =====================================
-    
-    
-    const updateSummaryCards = (response) => {
-        $('#totalSavings').text(formatCurrency(response.totalSavings));
-        $('#outstandingLoans').text(formatCurrency(response.totalLoanAmount));
-        $('#netBalance').text(formatCurrency(response.netBalance));
-    };
-
-    const updateWithdrawalTotal = () => {
-        const amount = parseFloat($('#withdrawAmount').val()) || 0;
-        const fee = parseFloat($('#withdrawalFee').val()) || 0;
-        const total = amount + fee;
-        $('#totalWithdrawal').val(formatCurrency(total));
-    };
-
-
-    const getFilteredTransactions = () => {
-        const transactions = [];
-        const table = $('#transactionTable').DataTable();
-        table.rows({ search: 'applied' }).every(function(rowIdx) {
-            transactions.push(this.data());
-        });
-        return transactions;
-    };
-
-    const calculateTransactionTotals = (transactions) => {
-        let totalCredit = 0;
-        let totalDebit = 0;
-        
-        transactions.forEach(trans => {
-            const amount = parseFloat(trans[2].replace(/[^0-9.-]+/g, ""));
-            if (trans[1].toLowerCase().includes('savings') || trans[1].toLowerCase().includes('deposit')) {
-                totalCredit += amount;
-            } else {
-                totalDebit += amount;
-            }
-        });
-
-        return { totalCredit, totalDebit };
-    };
-
-    const handleResponsiveDesign = () => {
-        if ($(window).width() < 768) {
-            $('.summary-card').removeClass('h-100');
-        } else {
-            $('.summary-card').addClass('h-100');
-        }
-    };
-
-    // =====================================
-    // INITIALIZATION
-    // =====================================
-
-     // Savings Trend Chart
-     var savingsTrendCtx = document.getElementById('savingsTrendChart').getContext('2d');
-    var savingsTrendData = <?= safeJsonEncode($monthlySavings) ?>;
-    new Chart(savingsTrendCtx, {
-        type: 'line',
-        data: {
-            labels: Object.keys(savingsTrendData),
-            datasets: [{
-                label: 'Monthly Savings',
-                data: Object.values(savingsTrendData),
-                borderColor: 'rgba(75, 192, 192, 1)',
-                borderWidth: 2,
-                fill: false
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        callback: function(value) {
-                            return 'KSh ' + value.toLocaleString();
-                        }
-                    }
-                }
-            },
-            plugins: {
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            return 'Savings: KSh ' + context.parsed.y.toLocaleString();
-                        }
-                    }
-                }
-            }
-        }
-    });
-
-    // Account Performance Chart
-    var performanceCtx = document.getElementById('accountPerformanceChart').getContext('2d');
-    new Chart(performanceCtx, {
-        type: 'bar',
-        data: {
-            labels: ['Total Savings', 'Outstanding Loans', 'Net Balance'],
-            datasets: [{
-                label: 'Account Performance',
-                data: [
-                    <?= $totalSavings ?>, 
-                    <?= $totalLoans ?>, 
-                    <?= $netBalance ?>
-                ],
-                backgroundColor: [
-                    'rgba(75, 192, 192, 0.6)',
-                    'rgba(255, 99, 132, 0.6)',
-                    'rgba(54, 162, 235, 0.6)'
-                ],
-                borderColor: [
-                    'rgba(75, 192, 192, 1)',
-                    'rgba(255, 99, 132, 1)',
-                    'rgba(54, 162, 235, 1)'
-                ],
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        callback: function(value) {
-                            return 'KSh ' + value.toLocaleString();
-                        }
-                    }
-                }
-            },
-            plugins: {
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            return context.label + ': KSh ' + context.parsed.y.toLocaleString();
-                        }
-                    }
-                }
-            }
-        }
-    });
-
-    // Transaction Distribution Chart
-    var transactionCtx = document.getElementById('transactionDistributionChart').getContext('2d');
-    var transactionData = <?= safeJsonEncode($monthlyTransactions) ?>;
-    new Chart(transactionCtx, {
-        type: 'bar',
-        data: {
-            labels: Object.keys(transactionData),
-            datasets: [{
-                label: 'Monthly Transactions',
-                data: Object.values(transactionData),
-                backgroundColor: 'rgba(54, 162, 235, 0.6)',
-                borderColor: 'rgba(54, 162, 235, 1)',
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        callback: function(value) {
-                            return 'KSh ' + value.toLocaleString();
-                        }
-                    }
-                }
-            },
-            plugins: {
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            return 'Transactions: KSh ' + context.parsed.y.toLocaleString();
-                        }
-                    }
-                }
-            }
-        }
-    });
-
-
-
-    
-    // Initialize all components
-    initializeTables();
-    initializeAccountTypeFilter();
-    initializeCharts();
-    handleAccountTypeFilter();
-    handleSavingsForm();
-    handleWithdrawalForm();
-    handleLoanRepayment();
-    handleLoanSelect();
-    handleViewSchedule();
-    setupEventListeners();
-
-    // Trigger initial data load
-    $('#accountTypeFilter').trigger('change');
-    $('#loanSelect').trigger('change');
-});
-</script>
+    </script>
 </body>
 </html>

@@ -595,9 +595,10 @@ function safeJsonEncode($data) {
 
                 <!-- Include Component Sections -->
                 <?php include '../components/account/savings.php'; ?>
-                <?php include '../components/account/transactions.php'; ?>
+                <?php include '../components/account/transactions.php'; ?>          
                 <?php include '../components/account/client-info.php'; ?>
-                <?php include '../components/account/loans.php'; ?>
+                 <?php include '../components/account/fully-paid-loans.php'; ?>
+                <?php include '../components/account/loans.php'; ?>            
                 <?php include '../components/account/repayments.php'; ?>
              
             <?php endif; ?>

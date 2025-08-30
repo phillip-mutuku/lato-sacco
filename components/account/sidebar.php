@@ -433,11 +433,19 @@ body.sidebar-toggled .topbar {
         </a>
     </li>
 
-    <!-- Loans -->
+    <!-- Active Loans -->
     <li class="nav-item">
         <a class="nav-link" href="#" data-section="loans">
             <i class="fas fa-fw fa-money-bill-wave"></i>
             <span>Active Loans</span>
+        </a>
+    </li>
+
+    <!-- Fully Paid Loans -->
+    <li class="nav-item">
+        <a class="nav-link" href="#" data-section="fully-paid-loans">
+            <i class="fas fa-fw fa-check-circle"></i>
+            <span>Fully Paid Loans</span>
         </a>
     </li>
 
@@ -508,7 +516,7 @@ body.sidebar-toggled .topbar {
         </nav>
         <!-- End of Topbar -->
 
-            <!-- Bootstrap core JavaScript-->
+        <!-- Bootstrap core JavaScript-->
     <script src="../public/js/jquery.js"></script>
     <script src="../public/js/bootstrap.bundle.js"></script>
     <script src="../public/js/jquery.easing.js"></script>
@@ -554,66 +562,66 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Handle sidebar navigation - Use jQuery for consistency
-        $(document).on('click', '.nav-link[data-section]', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            const section = $(this).data('section');
-            
-            // DEBUG LOGGING
-            console.log('=== Navigation Debug ===');
-            console.log('1. Section clicked:', section);
-            console.log('2. Target selector:', `#${section}-section`);
-            console.log('3. Element exists:', $(`#${section}-section`).length);
-            console.log('4. All content sections found:', $('.content-section').length);
-            
-            // List all sections
-            $('.content-section').each(function(index) {
-                console.log(`   Section ${index}: ID=${this.id}, classes=${this.className}`);
-            });
-            
-            // Remove active class from all nav links
-            $('.nav-link').removeClass('active');
-            $('.nav-item').removeClass('active');
-            
-            // Add active class to clicked nav link
-            $(this).addClass('active');
-            $(this).parent().addClass('active');
-            
-            // Hide all content sections
-            $('.content-section').removeClass('active');
-            console.log('5. All sections hidden');
-            
-            // Show selected content section
-            const targetElement = $(`#${section}-section`);
-            console.log('6. Target element found:', targetElement.length);
-            
-            if (targetElement.length > 0) {
-                targetElement.addClass('active');
-                console.log('7. Active class added to target');
-                
-                // Check if it's actually visible
-                setTimeout(() => {
-                    console.log('8. Is target visible?', targetElement.is(':visible'));
-                    console.log('9. Target display style:', targetElement.css('display'));
-                    console.log('10. Target classes after:', targetElement.attr('class'));
-                }, 100);
-            } else {
-                console.log('7. ERROR: Target element not found!');
-            }
-            
-            console.log('=== End Debug ===');
-            
-            // Close mobile sidebar on selection
-            if (window.innerWidth <= 768) {
-                if (document.querySelector('.sidebar').classList.contains('toggled')) {
-                    toggleSidebar();
-                }
-            }
-            
-            // Trigger custom event for section change
-            $(document).trigger('sectionChanged', [section]);
+    $(document).on('click', '.nav-link[data-section]', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const section = $(this).data('section');
+        
+        // DEBUG LOGGING
+        console.log('=== Navigation Debug ===');
+        console.log('1. Section clicked:', section);
+        console.log('2. Target selector:', `#${section}-section`);
+        console.log('3. Element exists:', $(`#${section}-section`).length);
+        console.log('4. All content sections found:', $('.content-section').length);
+        
+        // List all sections
+        $('.content-section').each(function(index) {
+            console.log(`   Section ${index}: ID=${this.id}, classes=${this.className}`);
         });
+        
+        // Remove active class from all nav links
+        $('.nav-link').removeClass('active');
+        $('.nav-item').removeClass('active');
+        
+        // Add active class to clicked nav link
+        $(this).addClass('active');
+        $(this).parent().addClass('active');
+        
+        // Hide all content sections
+        $('.content-section').removeClass('active');
+        console.log('5. All sections hidden');
+        
+        // Show selected content section
+        const targetElement = $(`#${section}-section`);
+        console.log('6. Target element found:', targetElement.length);
+        
+        if (targetElement.length > 0) {
+            targetElement.addClass('active');
+            console.log('7. Active class added to target');
+            
+            // Check if it's actually visible
+            setTimeout(() => {
+                console.log('8. Is target visible?', targetElement.is(':visible'));
+                console.log('9. Target display style:', targetElement.css('display'));
+                console.log('10. Target classes after:', targetElement.attr('class'));
+            }, 100);
+        } else {
+            console.log('7. ERROR: Target element not found!');
+        }
+        
+        console.log('=== End Debug ===');
+        
+        // Close mobile sidebar on selection
+        if (window.innerWidth <= 768) {
+            if (document.querySelector('.sidebar').classList.contains('toggled')) {
+                toggleSidebar();
+            }
+        }
+        
+        // Trigger custom event for section change
+        $(document).trigger('sectionChanged', [section]);
+    });
 
     // Handle dropdown clicks - prevent event bubbling
     $(document).on('click', '.dropdown-toggle', function(e) {

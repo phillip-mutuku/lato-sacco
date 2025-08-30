@@ -4,8 +4,8 @@
     require_once '../config/class.php';
     $db = new db_class();
 
-// Check if user is logged in and is a cashier
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'cashier') {
+// Check if user is logged in and is either an admin or manager
+if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'cashier')) {
     $_SESSION['error_msg'] = "Unauthorized access";
     header('Location: index.php');
     exit();
@@ -111,7 +111,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'cashier') {
         $total_group_savings += $row['amount'];
     }
 
-    // Group Withdrawals Query
+    // Business Group Savings Query
     $business_savings_query = "SELECT 
     bgt.transaction_id,
     bgt.group_id,
@@ -223,12 +223,6 @@ while ($row = $result->fetch_assoc()) {
     }
 }
 
-
-
-  
-
-   
-
     // Loan Payments Query
     $payments_query = "SELECT p.*, l.ref_no, u.username as disbursed_by 
                       FROM payment p 
@@ -278,13 +272,11 @@ while ($row = $result->fetch_assoc()) {
 
     // Calculate total inflows and outflows
     $total_inflows = $total_group_savings + $total_business_savings + $total_repayments + $total_individual_savings;
-
     $total_outflows = $total_group_withdrawals + $total_business_withdrawals + $total_payments + $total_expenses + $total_individual_withdrawals;
     
     // Recalculate net position
     $net_position = $total_inflows - $total_outflows;
 ?>
-
 
 <!DOCTYPE html>
 <html lang="en">
@@ -300,764 +292,123 @@ while ($row = $result->fetch_assoc()) {
     <link href="../public/css/dataTables.bootstrap4.css" rel="stylesheet">
     
     <style>
-        .float-card {
-            background: linear-gradient(135deg, #fff 0%, #f8f9fc 100%);
-            border-radius: 15px;
-            padding: 25px;
-            margin-bottom: 20px;
-            box-shadow: rgb(204, 219, 232) 3px 3px 6px 0px inset, rgba(255, 255, 255, 0.5) -3px -3px 6px 1px inset;
-            transition: transform 0.3s ease;
+        :root {
+            --primary-color: #51087E;
         }
-        
-        .float-card:hover {
-            transform: translateY(-5px);
+
+        /* Dashboard Cards */
+        .card {
+            box-shadow: 0 0.15rem 1.75rem 0 rgba(33, 40, 50, 0.15);
+            border: none;
+            border-radius: 0.35rem;
+            transition: all 0.3s ease;
         }
-        
-        .float-title {
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0.25rem 2rem 0 rgba(33, 40, 50, 0.2);
+        }
+
+        /* Ensure content is always visible */
+        .container-fluid {
+            overflow: visible !important;
+            min-width: 0 !important;
+        }
+
+        .row {
+            margin-right: 0 !important;
+            margin-left: 0 !important;
+        }
+
+        .col-xl-3, .col-xl-6, .col-xl-8, .col-xl-4, .col-lg-6, .col-lg-7, .col-lg-5, .col-md-6 {
+            padding-left: 0.75rem !important;
+            padding-right: 0.75rem !important;
+            min-width: 0 !important;
+        }
+
+        /* Page title styling */
+        .page-title {
             color: #51087E;
-            font-size: 1.1rem;
-            font-weight: 600;
-            margin-bottom: 15px;
+            font-weight: 700;
+            margin-bottom: 2rem;
         }
-        
-        .float-amount {
-            font-size: 28px;
-            font-weight: bold;
-            color: #2c3e50;
-            margin-bottom: 10px;
-        }
-        
-        .action-buttons {
-            display: flex;
-            gap: 15px;
-            margin: 25px 0;
-        }
-        
-        .action-buttons button {
-            padding: 10px 20px;
+
+        .generate-report-btn {
+            background: linear-gradient(135deg, #51087E 0%, #6a1b99 100%);
+            border: none;
+            color: white;
             font-weight: 500;
             transition: all 0.3s ease;
         }
-        
-        .nav-tabs .nav-link {
-            color: #51087E;
-            font-weight: 500;
-            padding: 12px 20px;
-            border-radius: 10px 10px 0 0;
+
+        .generate-report-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(81, 8, 126, 0.3);
+            color: white;
         }
-        
-        .nav-tabs .nav-link.active {
-            color: #fff;
-            background-color: #51087E;
-            border-color: #51087E;
-        }
-        
-        .table thead th {
-            background-color: #f8f9fc;
-            color: #51087E;
-            font-weight: 600;
-            border-bottom: 2px solid #51087E;
-        }
-        
-        .transaction-summary {
-            background-color: #f8f9fc;
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-        }
-        
-        .transaction-summary h6 {
-            color: #51087E;
-            margin-bottom: 10px;
-        }
-        
-        .loading-overlay {
+
+        /* Fullscreen styles */
+        .fullscreen-active {
             position: fixed;
             top: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(255, 255, 255, 0.9);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-        }
-
-        .receipt {
-            max-width: 400px;
-            margin: 0 auto;
-            padding: 20px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            background-color: #fff;
-        }
-        
-        .receipt-header {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        
-        .receipt-details {
-            margin-bottom: 20px;
-        }
-        
-        .receipt-footer {
-            text-align: center;
-            font-size: 14px;
-            color: #666;
-        }
-
-        .tab-pane {
-            padding: 20px;
-            background-color: #fff;
-            border: 1px solid #dee2e6;
-            border-top: 0;
-            border-radius: 0 0 10px 10px;
-        }
-
-        .row .card{
-            box-shadow: rgba(50, 50, 93, 0.25) 0px 13px 27px -5px, rgba(0, 0, 0, 0.3) 0px 8px 16px -8px;
-            border: 0;
-        }
-
-
-
-        html, body {
-            overflow-x: hidden;
-        }
-        #accordionSidebar {
-            position: fixed;
-            top: 0;
-            left: 0;
+            width: 100vw;
             height: 100vh;
-            z-index: 1000;
-            overflow-y: auto;
-            width: 225px;
-            transition: width 0.3s ease;
-        }
-        #content-wrapper {
-            margin-left: 225px;
-            width: calc(100% - 225px);
-            transition: margin-left 0.3s ease, width 0.3s ease;
-        }
-        .topbar {
-            position: fixed;
-            top: 0;
-            right: 0;
-            left: 225px;
-            z-index: 1000;
-            transition: left 0.3s ease;
-        }
-        .container-fluid {
-            margin-top: 70px;
-            padding-left: 1.5rem;
-            padding-right: 1.5rem;
-        }
-        @media (max-width: 768px) {
-            #accordionSidebar {
-                width: 100px;
-            }
-            #content-wrapper {
-                margin-left: 100px;
-                width: calc(100% - 100px);
-            }
-            .topbar {
-                left: 100px;
-            }
-            .sidebar .nav-item .nav-link span {
-                display: none;
-            }
+            z-index: 9999;
+            background: white;
         }
 
+        .fullscreen-active .sidebar {
+            display: none;
+        }
 
+        .fullscreen-active #content-wrapper {
+            margin-left: 0;
+            width: 100%;
+        }
     </style>
 </head>
 
 <body id="page-top">
-    <!-- Page Wrapper -->
     <div id="wrapper">
-        <!-- Sidebar -->
-        <ul style="background: #51087E;"  class="navbar-nav sidebar sidebar-dark accordion" id="accordionSidebar">
-            <a class="sidebar-brand d-flex align-items-center justify-content-center" href="index.html">
-                <div class="sidebar-brand-text mx-3">LATO SACCO</div>
-            </a>
+        <!-- Include Sidebar and Header -->
+        <?php include '../components/includes/sidebar.php'; ?>
 
-            <hr class="sidebar-divider my-0">
-
-  
-            <li class="nav-item">
-                <a class="nav-link" href="cashier.php">
-                    <i class="fas fa-fw fa-home"></i>
-                    <span>Home</span>
-                </a>
-            </li>
-
-            <hr class="sidebar-divider">
-
-            <div class="sidebar-heading">
-                Management
+        <!-- Begin Page Content -->
+        <div class="container-fluid">
+            <!-- Page Heading -->
+            <div class="d-sm-flex align-items-center justify-content-between mb-4">
+                <h1 class="page-title mb-0">Daily Reconciliation</h1>
+                <button class="btn generate-report-btn" onclick="generateReport()">
+                    <i class="fas fa-download fa-sm"></i> Generate Report
+                </button>
             </div>
 
-            <li class="nav-item">
-                <a class="nav-link" href="../models/cashier_disbursement.php">
-                    <i class="fas fa-fw fas fa-coins"></i>
-                    <span>Disbursements</span>
-                </a>
-            </li>
+            <!-- Float Management Component -->
+            <?php include '../components/reconciliation/float_management.php'; ?>
 
-            <li class="nav-item active">
-                <a class="nav-link" href="cashier-daily-reconciliation.php">
-                    <i class="fas fa-fw fa-balance-scale"></i>
-                    <span>Daily Reconciliation</span>
-                </a>
-            </li>
+            <!-- Float Transactions Component -->
+            <?php include '../components/reconciliation/float_transactions.php'; ?>
 
+            <!-- Transactions Filter Component -->
+            <?php include '../components/reconciliation/transactions_filter.php'; ?>
 
-            <li class="nav-item active">
-                <a class="nav-link" href="cashier_manage_expenses.php">
-                <i class="fas fa-dollar-sign fa-2x text-gray-300"></i>
-                    <span>Manage Expenses</span>
-                </a>
-            </li>
-
-            <li class="nav-item active">
-                <a class="nav-link" href="../models/cashier_arrears.php">
-                <i class="fas fa-users-slash fa-2x text-gray-300"></i>
-                    <span>Arrears</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="cashier-account.php">
-                <i class="fas fa-fw fa-user"></i>
-                    <span>Client Accounts</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="../models/cashier_groups.php">
-                <i class="fas fa-users fa-2x text-gray-300"></i>
-                    <span>Wekeza Groups</span>
-                </a>
-            </li>
-
-            <li class="nav-item">
-                <a class="nav-link" href="../models/cashier_business_groups.php">
-                <i class="fas fa-users fa-2x text-gray-300"></i>
-                    <span>Business Groups</span>
-                </a>
-            </li>
-
-            <hr class="sidebar-divider">
-
-            <div class="sidebar-heading">
-                System
-            </div>
-
-            <li class="nav-item active">
-                <a class="nav-link" href="cashier_announcements.php">
-                    <i class="fas fa-fw fa-bullhorn"></i>
-                    <span>Announcements</span>
-                </a>
-            </li>
-        </ul>
-        <!-- End of Sidebar -->
-
-
-
-
-        <!-- Content Wrapper -->
-        <div id="content-wrapper" class="d-flex flex-column">
-            <!-- Main Content -->
-            <div id="content">
-                <!-- Topbar -->
-                <nav class="navbar navbar-expand navbar-light bg-white topbar mb-4 static-top shadow">
-                    <!-- Sidebar Toggle (Topbar) -->
-                    <button id="sidebarToggleTop" class="btn btn-link d-md-none rounded-circle mr-3">
-                        <i class="fa fa-bars"></i>
-                    </button>
-                    
-                    <!-- Topbar Navbar -->
-                    <ul class="navbar-nav ml-auto">
-                        <!-- Nav Item - User Information -->
-                        <li class="nav-item dropdown no-arrow">
-                            <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button"
-                                data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                                <span class="mr-2 d-none d-lg-inline text-gray-600 small"><?php echo $db->user_acc($_SESSION['user_id'])?></span>
-                                <img class="img-profile rounded-circle" src="../public/image/logo.jpg">
-                            </a>
-                            <!-- Dropdown - User Information -->
-                            <div class="dropdown-menu dropdown-menu-right shadow animated--grow-in"
-                                aria-labelledby="userDropdown">
-                                <a class="dropdown-item" href="#" data-toggle="modal" data-target="#logoutModal">
-                                    <i class="fas fa-sign-out-alt fa-sm fa-fw mr-2 text-gray-400"></i>
-                                    Logout
-                                </a>
-                            </div>
-                        </li>
-                    </ul>
-                </nav>
-                <!-- End of Topbar -->
-
-                <!-- Begin Page Content -->
-                <div class="container-fluid pt-4">
-                    <!-- Page Heading -->
-                    <div class="d-sm-flex align-items-center justify-content-between mb-4">
-                        <h1 class="h3 mb-0 text-gray-800">Daily Reconciliation</h1>
-                        <button class="btn btn-warning" onclick="generateReport()">
-                            <i class="fas fa-download fa-sm text-white-50"></i> Generate Report
-                        </button>
-                    </div>
-
-                    <!-- Float Management Section -->
-                    <div class="row mb-4">
-                        <div class="col-md-4">
-                            <div class="float-card">
-                                <div class="float-title">Opening Float</div>
-                                <div class="float-amount">KSh <?= number_format($opening_float, 2) ?></div>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="float-card">
-                                <div class="float-title">Total Offloaded</div>
-                                <div class="float-amount">KSh <?= number_format($total_offloaded, 2) ?></div>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="float-card">
-                                <div class="float-title">Closing Float</div>
-                                <div class="float-amount" id="closingFloatAmount">KSh <?= number_format($closing_float, 2) ?></div>
-                                <button class="btn btn-warning mt-3 w-100" onclick="calculateClosingFloat()">
-                                    <i class="fas fa-calculator"></i> Calculate
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Action Buttons -->
-                    <div class="action-buttons mb-4">
-                        <button class="btn btn-success" data-toggle="modal" data-target="#addFloatModal">
-                            <i class="fas fa-plus"></i> Add Float
-                        </button>
-                        <button class="btn btn-danger" data-toggle="modal" data-target="#offloadFloatModal">
-                            <i class="fas fa-minus"></i> Offload Float
-                        </button>
-                    </div>
-
-                    <!-- Float Transactions -->
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h6 class="m-0 font-weight-bold" style="color: #51087E;">Float Transactions</h6>
-                        </div>
-                        <div class="card-body">
-                            <div class="table-responsive">
-                                <table class="table table-bordered" id="floatTable" width="100%" cellspacing="0">
-                                    <thead>
-                                        <tr>
-                                            <th>Receipt No</th>
-                                            <th>Amount</th>
-                                            <th>Transaction Type</th>
-                                            <th>Date</th>
-                                            <th>Served By</th>
-                                            <th>Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <?php foreach ($float_transactions as $transaction): ?>
-                                        <tr>
-                                            <td><?= $transaction['receipt_no'] ?></td>
-                                            <td>KSh <?= number_format($transaction['amount'], 2) ?></td>
-                                            <td><?= ucfirst($transaction['type']) ?> Float</td>
-                                            <td><?= date('M d, Y H:i', strtotime($transaction['date_created'])) ?></td>
-                                            <td><?= $transaction['served_by'] ?></td>
-                                            <td>
-                                                <button class="btn btn-warning btn-sm print-receipt" 
-                                                        data-receipt="<?= $transaction['receipt_no'] ?>"
-                                                        data-amount="<?= $transaction['amount'] ?>"
-                                                        data-type="<?= ucfirst($transaction['type']) ?> Float"
-                                                        data-date="<?= $transaction['date_created'] ?>"
-                                                        data-served="<?= $transaction['served_by'] ?>">
-                                                    <i class="fas fa-print"></i> Print
-                                                </button>
-                                            </td>
-                                        </tr>
-                                        <?php endforeach; ?>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Transaction Filter Section -->
-                    <div class="card mb-4">
-                        <div class="card-header">
-                            <h6 class="m-0 font-weight-bold" style="color: #51087E;">Transaction Filter</h6>
-                        </div>
-                        <div class="card-body">
-                            <form id="filterForm" method="GET" class="mb-4">
-                                <div class="row">
-                                    <div class="col-md-5">
-                                        <label>Start Date</label>
-                                        <input type="date" name="start_date" class="form-control" 
-                                               value="<?= isset($_GET['start_date']) ? $_GET['start_date'] : date('Y-m-d') ?>">
-                                    </div>
-                                    <div class="col-md-5">
-                                        <label>End Date</label>
-                                        <input type="date" name="end_date" class="form-control"
-                                               value="<?= isset($_GET['end_date']) ? $_GET['end_date'] : date('Y-m-d') ?>">
-                                    </div>
-                                    <div class="col-md-2">
-                                        <label>&nbsp;</label>
-                                        <button type="submit" class="btn btn-primary btn-block">
-                                            <i class="fas fa-filter"></i> Filter
-                                        </button>
-                                    </div>
-                                </div>
-                            </form>
-
-                            <!-- Filtered Results -->
-                            <ul class="nav nav-tabs" id="transactionTabs" role="tablist">
-                                <li class="nav-item">
-                                    <a class="nav-link active" id="groupSavings-tab" data-toggle="tab" href="#groupSavings" role="tab">
-                                        Group Savings
-                                    </a>
-                                </li>
-                                <li class="nav-item">
-                                    <a class="nav-link" id="groupWithdrawals-tab" data-toggle="tab" href="#groupWithdrawals" role="tab">
-                                        Group Withdrawals
-                                    </a>
-                                </li>
-                                <li class="nav-item">
-                                    <a class="nav-link" id="businessSavings-tab" data-toggle="tab" href="#businessSavings" role="tab">
-                                        Business Savings
-                                    </a>
-                                </li>
-                                <li class="nav-item">
-                                    <a class="nav-link" id="businessWithdrawals-tab" data-toggle="tab" href="#businessWithdrawals" role="tab">
-                                        Business Withdrawals
-                                    </a>
-                                </li>
-                                <li class="nav-item">
-                                    <a class="nav-link" id="payments-tab" data-toggle="tab" href="#payments" role="tab">
-                                        Loan Disbursements
-                                    </a>
-                                </li>
-                                <li class="nav-item">
-                                    <a class="nav-link" id="repayments-tab" data-toggle="tab" href="#repayments" role="tab">
-                                        Loan Repayments
-                                    </a>
-                                </li>
-                                <li class="nav-item">
-                                    <a class="nav-link" id="expenses-tab" data-toggle="tab" href="#expenses" role="tab">
-                                        Expenses
-                                    </a>
-                                </li>
-                                <li class="nav-item">
-                                    <a class="nav-link" id="individual-savings-tab" data-toggle="tab" href="#individualSavings" role="tab">
-                                        Individual Savings
-                                    </a>
-                                </li>
-                                </ul>
-
-                            <div class="tab-content mt-3" id="transactionTabContent">
-                                <!-- Group Savings Tab -->
-                                <div class="tab-pane fade show active" id="groupSavings" role="tabpanel">
-                                    <div class="transaction-summary">
-                                        <h6>Total Group Savings: <span class="text-success">KSh <?= number_format($total_group_savings, 2) ?></span></h6>
-                                    </div>
-                                    <div class="table-responsive">
-                                        <table class="table table-bordered transactionTable">
-                                            <thead>
-                                                <tr>
-                                                    <th>Group Name</th>
-                                                    <th>Amount</th>
-                                                    <th>Payment Mode</th>
-                                                    <th>Receipt No</th>
-                                                    <th>Date</th>
-                                                    <th>Served By</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php foreach ($group_savings_data as $row): ?>
-                                                <tr>
-                                                    <td><?= $row['group_name'] ?></td>
-                                                    <td>KSh <?= number_format($row['amount'], 2) ?></td>
-                                                    <td><?= $row['payment_mode'] ?></td>
-                                                    <td><?= $row['receipt_no'] ?></td>
-                                                    <td><?= date('M d, Y', strtotime($row['date_saved'])) ?></td>
-                                                    <td><?= $row['served_by_name'] ?></td>
-                                                </tr>
-                                                <?php endforeach; ?>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-
-                                <!-- Group Withdrawals Tab -->
-                                <div class="tab-pane fade" id="groupWithdrawals" role="tabpanel">
-                                    <div class="transaction-summary">
-                                        <h6>Total Group Withdrawals: <span class="text-danger">KSh <?= number_format($total_group_withdrawals, 2) ?></span></h6>
-                                    </div>
-                                    <div class="table-responsive">
-                                        <table class="table table-bordered transactionTable">
-                                            <thead>
-                                                <tr>
-                                                    <th>Group Name</th>
-                                                    <th>Amount</th>
-                                                    <th>Payment Mode</th>
-                                                    <th>Receipt No</th>
-                                                    <th>Date</th>
-                                                    <th>Served By</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php foreach ($group_withdrawals_data as $row): ?>
-                                                <tr>
-                                                    <td><?= $row['group_name'] ?></td>
-                                                    <td>KSh <?= number_format($row['amount'], 2) ?></td>
-                                                    <td><?= $row['payment_mode'] ?></td>
-                                                    <td><?= $row['receipt_no'] ?></td>
-                                                    <td><?= date('M d, Y', strtotime($row['date_withdrawn'])) ?></td>
-                                                    <td><?= $row['served_by_name'] ?></td>
-                                                </tr>
-                                                <?php endforeach; ?>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-
-                                <!-- Business Group Savings Tab -->
-                                <div class="tab-pane fade" id="businessSavings" role="tabpanel">
-                                    <div class="transaction-summary">
-                                        <h6>Total Business Group Savings: <span class="text-success">KSh <?= number_format($total_business_savings, 2) ?></span></h6>
-                                    </div>
-                                    <div class="table-responsive">
-                                        <table class="table table-bordered transactionTable">
-                                            <thead>
-                                                <tr>
-                                                    <th>Group Name</th>
-                                                    <th>Amount</th>
-                                                    <th>Payment Mode</th>
-                                                    <th>Receipt No</th>
-                                                    <th>Date</th>
-                                                    <th>Served By</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php foreach ($business_savings_data as $row): ?>
-                                                <tr>
-                                                    <td><?= $row['group_name'] ?></td>
-                                                    <td>KSh <?= number_format($row['amount'], 2) ?></td>
-                                                    <td><?= $row['payment_mode'] ?></td>
-                                                    <td><?= $row['receipt_no'] ?></td>
-                                                    <td><?= date('M d, Y', strtotime($row['date'])) ?></td>
-                                                    <td><?= $row['served_by_name'] ?></td>
-                                                </tr>
-                                                <?php endforeach; ?>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-
-                                <!-- Business Group Withdrawals Tab -->
-                                <div class="tab-pane fade" id="businessWithdrawals" role="tabpanel">
-                                    <div class="transaction-summary">
-                                        <h6>Total Business Group Withdrawals: <span class="text-danger">KSh <?= number_format($total_business_withdrawals, 2) ?></span></h6>
-                                    </div>
-                                    <div class="table-responsive">
-                                        <table class="table table-bordered transactionTable">
-                                            <thead>
-                                                <tr>
-                                                    <th>Group Name</th>
-                                                    <th>Amount</th>
-                                                    <th>Withdrawal Fee</th>
-                                                    <th>Payment Mode</th>
-                                                    <th>Receipt No</th>
-                                                    <th>Date</th>
-                                                    <th>Served By</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php foreach ($business_withdrawals_data as $row): ?>
-                                                <tr>
-                                                    <td><?= $row['group_name'] ?></td>
-                                                    <td>KSh <?= number_format($row['amount'], 2) ?></td>
-                                                    <td>KSh <?= number_format($row['withdrawal_fee'], 2) ?></td>
-                                                    <td><?= $row['payment_mode'] ?></td>
-                                                    <td><?= $row['receipt_no'] ?></td>
-                                                    <td><?= date('M d, Y', strtotime($row['date'])) ?></td>
-                                                    <td><?= $row['served_by_name'] ?></td>
-                                                </tr>
-                                                <?php endforeach; ?>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-
-                                <!-- Loan Payments Tab -->
-                                <div class="tab-pane fade" id="payments" role="tabpanel">
-                                    <div class="transaction-summary">
-                                        <h6>Total Loan Disbursements: <span class="text-primary">KSh <?= number_format($total_payments, 2) ?></span></h6>
-                                    </div>
-                                    <div class="table-responsive">
-                                        <table class="table table-bordered transactionTable">
-                                            <thead>
-                                                <tr>
-                                                    <th>Loan Ref No</th>
-                                                    <th>Payee</th>
-                                                    <th>Amount</th>
-                                                    <th>Receipt No</th>
-                                                    <th>Withdrawal Fee</th>
-                                                    <th>Date</th>
-                                                    <th>Disbursed By</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php foreach ($payments_data as $row): ?>
-                                                <tr>
-                                                    <td><?= $row['ref_no'] ?></td>
-                                                    <td><?= $row['payee'] ?></td>
-                                                    <td>KSh <?= number_format($row['pay_amount'], 2) ?></td>
-                                                    <td><?= $row['receipt_no'] ?></td>
-                                                    <td>KSh <?= number_format($row['withdrawal_fee'], 2) ?></td>
-                                                    <td><?= date('M d, Y', strtotime($row['date_created'])) ?></td>
-                                                    <td><?= $row['disbursed_by'] ?></td>
-                                                </tr>
-                                                <?php endforeach; ?>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-
-                                <!-- Loan Repayments Tab -->
-                                <div class="tab-pane fade" id="repayments" role="tabpanel">
-                                    <div class="transaction-summary">
-                                        <h6>Total Loan Repayments: <span class="text-success">KSh <?= number_format($total_repayments, 2) ?></span></h6>
-                                    </div>
-                                    <div class="table-responsive">
-                                        <table class="table table-bordered transactionTable">
-                                            <thead>
-                                                <tr>
-                                                    <th>Loan Ref No</th>
-                                                    <th>Amount Repaid</th>
-                                                    <th>Payment Mode</th>
-                                                    <th>Receipt Number</th>
-                                                    <th>Date Paid</th>
-                                                    <th>Served By</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php foreach ($repayments_data as $row): ?>
-                                                <tr>
-                                                    <td><?= $row['ref_no'] ?></td>
-                                                    <td>KSh <?= number_format($row['amount_repaid'], 2) ?></td>
-                                                    <td><?= $row['payment_mode'] ?></td>
-                                                    <td><?= $row['receipt_number'] ?></td>
-                                                    <td><?= date('M d, Y', strtotime($row['date_paid'])) ?></td>
-                                                    <td><?= $row['served_by_name'] ?></td>
-                                                </tr>
-                                                <?php endforeach; ?>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-
-                                <!---Individuals transactions tab--->
-                                <div class="tab-pane fade" id="individualSavings" role="tabpanel">
-                                        <div class="transaction-summary">
-                                            <h6>Total Individual Savings: <span class="text-success">KSh <?= number_format($total_individual_savings, 2) ?></span></h6>
-                                            <h6>Total Individual Withdrawals: <span class="text-danger">KSh <?= number_format($total_individual_withdrawals, 2) ?></span></h6>
-                                        </div>
-                                        <div class="table-responsive">
-                                            <table class="table table-bordered transactionTable">
-                                                <thead>
-                                                    <tr>
-                                                        <th>Account Name</th>
-                                                        <th>Type</th>
-                                                        <th>Amount</th>
-                                                        <th>Withdrawal Fee</th>
-                                                        <th>Payment Mode</th>
-                                                        <th>Receipt Number</th>
-                                                        <th>Date</th>
-                                                        <th>Served By</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    <?php foreach ($savings_data as $row): ?>
-                                                    <tr>
-                                                        <td><?= htmlspecialchars($row['account_name']) ?></td>
-                                                        <td><?= htmlspecialchars($row['type']) ?></td>
-                                                        <td>KSh <?= number_format($row['amount'], 2) ?></td>
-                                                        <td>KSh <?= number_format($row['withdrawal_fee'], 2) ?></td>
-                                                        <td><?= htmlspecialchars($row['payment_mode']) ?></td>
-                                                        <td><?= htmlspecialchars($row['receipt_number']) ?></td>
-                                                        <td><?= date('M d, Y', strtotime($row['date'])) ?></td>
-                                                        <td><?= htmlspecialchars($row['served_by_name']) ?></td>
-                                                    </tr>
-                                                    <?php endforeach; ?>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-
-
-                                <!-- Expenses Tab -->
-                                <div class="tab-pane fade" id="expenses" role="tabpanel">
-                                    <div class="transaction-summary">
-                                        <h6>Total Expenses: <span class="text-danger">KSh <?= number_format($total_expenses, 2) ?></span></h6>
-                                    </div>
-                                    <div class="table-responsive">
-                                        <table class="table table-bordered transactionTable">
-                                            <thead>
-                                                <tr>
-                                                    <th>Category</th>
-                                                    <th>Description</th>
-                                                    <th>Amount</th>
-                                                    <th>Reference No</th>
-                                                    <th>Receipt No</th>
-                                                    <th>Payment Method</th>
-                                                    <th>Date</th>
-                                                    <th>Created By</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                <?php foreach ($expenses_data as $row): ?>
-                                                <tr>
-                                                    <td><?= $row['category'] ?></td>
-                                                    <td><?= $row['description'] ?></td>
-                                                    <td>KSh <?= number_format($row['amount'], 2) ?></td>
-                                                    <td><?= $row['reference_no'] ?></td>
-                                                    <td><?= $row['receipt_no'] ?></td>
-                                                    <td><?= $row['payment_method'] ?></td>
-                                                    <td><?= date('M d, Y', strtotime($row['date'])) ?></td>
-                                                    <td><?= $row['created_by_name'] ?></td>
-                                                </tr>
-                                                <?php endforeach; ?>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <!-- /.container-fluid -->
-            </div>
-            <!-- End of Main Content -->
-
-            <!-- Footer -->
-            <footer class="sticky-footer bg-white">
-                <div class="container my-auto">
-                    <div class="copyright text-center my-auto">
-                        <span>Copyright &copy; Lato Management System <?php echo date("Y")?></span>
-                    </div>
-                </div>
-            </footer>
-            <!-- End of Footer -->
         </div>
-        <!-- End of Content Wrapper -->
+        <!-- /.container-fluid -->
+    </div>
+    <!-- End of Main Content -->
+
+    <!-- Footer -->
+    <footer class="sticky-footer bg-white">
+        <div class="container my-auto">
+            <div class="copyright text-center my-auto">
+                <span>Copyright &copy; Lato Management System <?php echo date("Y")?></span>
+            </div>
+        </div>
+    </footer>
+    <!-- End of Footer -->
+    </div>
+    <!-- End of Content Wrapper -->
     </div>
     <!-- End of Page Wrapper -->
 
@@ -1066,145 +417,13 @@ while ($row = $result->fetch_assoc()) {
         <i class="fas fa-angle-up"></i>
     </a>
 
-    <!-- Add Float Modal -->
-    <div class="modal fade" id="addFloatModal" tabindex="-1" role="dialog" aria-hidden="true">
-        <div class="modal-dialog" role="document">
-            <div class="modal-content">
-                <div class="modal-header" style="background-color: #51087E;">
-                    <h5 class="modal-title text-white">Add Float</h5>
-                    <button class="close text-white" type="button" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">×</span>
-                    </button>
-                </div>
-                <form method="POST" id="addFloatForm">
-                    <div class="modal-body">
-                        <div class="form-group">
-                            <label>Receipt Number</label>
-                            <input type="text" name="receipt_no" class="form-control" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Amount</label>
-                            <div class="input-group">
-                                <div class="input-group-prepend">
-                                    <span class="input-group-text">KSh</span>
-                                </div>
-                                <input type="number" step="0.01" name="amount" class="form-control" required>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button class="btn btn-secondary" type="button" data-dismiss="modal">Cancel</button>
-                        <button type="submit" name="add_float" class="btn btn-success">
-                            <i class="fas fa-plus-circle"></i> Add Float
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <!-- Offload Float Modal -->
-    <div class="modal fade" id="offloadFloatModal" tabindex="-1" role="dialog" aria-hidden="true">
-        <div class="modal-dialog" role="document">
-            <div class="modal-content">
-                <div class="modal-header" style="background-color: #51087E;">
-                    <h5 class="modal-title text-white">Offload Float</h5>
-                    <button class="close text-white" type="button" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">×</span>
-                    </button>
-                </div>
-                <form method="POST" id="offloadFloatForm">
-                    <div class="modal-body">
-                        <div class="form-group">
-                            <label>Receipt Number</label>
-                            <input type="text" name="receipt_no" class="form-control" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Amount</label>
-                            <div class="input-group">
-                                <div class="input-group-prepend">
-                                    <span class="input-group-text">KSh</span>
-                                </div>
-                                <input type="number" step="0.01" name="amount" class="form-control" required>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button class="btn btn-secondary" type="button" data-dismiss="modal">Cancel</button>
-                        <button type="submit" name="offload_float" class="btn btn-danger">
-                            <i class="fas fa-minus-circle"></i> Offload Float
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <!-- Receipt Print Modal -->
-    <div class="modal fade" id="receiptModal" tabindex="-1" role="dialog" aria-hidden="true">
-        <div class="modal-dialog" role="document">
-            <div class="modal-content">
-                <div class="modal-header" style="background-color: #51087E;">
-                    <h5 class="modal-title text-white">Transaction Receipt</h5>
-                    <button class="close text-white" type="button" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">×</span>
-                    </button>
-                </div>
-                <div class="modal-body">
-                    <div class="receipt" id="receiptContent">
-                        <div class="receipt-header">
-                            <img src="../public/image/mylogo.png" alt="Lato Management System Logo" style="width: 150px;">
-                            <h4 class="mt-3">Transaction Receipt</h4>
-                            <p class="text-muted">Lato Sacco LTD</p>
-                        </div>
-                        <div class="receipt-details">
-                            <table class="table table-borderless">
-                                <tr>
-                                    <td><strong>Receipt No:</strong></td>
-                                    <td id="receiptNo"></td>
-                                </tr>
-                                <tr>
-                                    <td><strong>Amount:</strong></td>
-                                    <td id="receiptAmount"></td>
-                                </tr>
-                                <tr>
-                                    <td><strong>Transaction Type:</strong></td>
-                                    <td id="receiptType"></td>
-                                </tr>
-                                <tr>
-                                    <td><strong>Date:</strong></td>
-                                    <td id="receiptDate"></td>
-                                </tr>
-                                <tr>
-                                    <td><strong>Served By:</strong></td>
-                                    <td id="receiptServedBy"></td>
-                                </tr>
-                            </table>
-                        </div>
-                        <div class="receipt-footer">
-                            <hr>
-                            <p class="mb-1">Thank you for choosing Lato Sacco LTD</p>
-                            <p class="small text-muted">This is a computer generated receipt</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-secondary" type="button" data-dismiss="modal">Close</button>
-                    <button class="btn btn-primary" onclick="printReceipt()">
-                        <i class="fas fa-print"></i> Print Receipt
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- Logout Modal-->
-    <div class="modal fade" id="logoutModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal fade" id="logoutModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true">
         <div class="modal-dialog" role="document">
             <div class="modal-content">
-                <div class="modal-header bg-danger">
-                    <h5 class="modal-title text-white">Ready to Leave?</h5>
-                    <button class="close text-white" type="button" data-dismiss="modal" aria-label="Close">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="exampleModalLabel">Ready to Leave?</h5>
+                    <button class="close" type="button" data-dismiss="modal" aria-label="Close">
                         <span aria-hidden="true">×</span>
                     </button>
                 </div>
@@ -1228,100 +447,112 @@ while ($row = $result->fetch_assoc()) {
     <script src="../public/js/jquery.dataTables.js"></script>
     <script src="../public/js/dataTables.bootstrap4.js"></script>
 
-    <!-- Custom scripts -->
+    <!-- Custom scripts for all pages-->
+    <script src="../public/js/sb-admin-2.js"></script>
+
     <script>
-        $(document).ready(function() {
-            // Initialize all DataTables
-            $('.transactionTable').each(function() {
-                $(this).DataTable({
-                    "order": [[4, "desc"]],
-                    "pageLength": 25,
-                    "responsive": true,
-                    "language": {
-                        "search": "Search: ",
-                        "lengthMenu": "Show _MENU_ entries per page",
-                        "info": "Showing _START_ to _END_ of _TOTAL_ entries",
-                        "infoEmpty": "Showing 0 to 0 of 0 entries",
-                        "infoFiltered": "(filtered from _MAX_ total entries)"
-                    }
-                });
-            });
+    document.addEventListener('DOMContentLoaded', function() {
+        // Enhanced Sidebar Toggle Functionality
+        function toggleSidebar() {
+            document.body.classList.toggle('sidebar-toggled');
+            document.querySelector('.sidebar').classList.toggle('toggled');
+        }
 
-            // Handle float form submissions
-            $('#addFloatForm, #offloadFloatForm').on('submit', function() {
-                showLoadingSpinner();
-            });
+        // Sidebar toggle buttons
+        const sidebarToggle = document.querySelector('#sidebarToggle');
+        const sidebarToggleTop = document.querySelector('#sidebarToggleTop');
 
-            // Handle receipt printing
-            $('.print-receipt').click(function() {
-                const data = $(this).data();
-                $('#receiptNo').text(data.receipt);
-                $('#receiptAmount').text('KSh ' + parseFloat(data.amount).toLocaleString('en-US', {minimumFractionDigits: 2}));
-                $('#receiptType').text(data.type);
-                $('#receiptDate').text(new Date(data.date).toLocaleString());
-                $('#receiptServedBy').text(data.served);
-                $('#receiptModal').modal('show');
-            });
+        if (sidebarToggle) {
+            sidebarToggle.addEventListener('click', toggleSidebar);
+        }
 
-            // Handle filter form submission
-            $('#filterForm').on('submit', function(e) {
+        if (sidebarToggleTop) {
+            sidebarToggleTop.addEventListener('click', toggleSidebar);
+        }
+
+        // Fullscreen Toggle Functionality
+        const fullscreenToggle = document.querySelector('#fullscreenToggle');
+        if (fullscreenToggle) {
+            fullscreenToggle.addEventListener('click', function(e) {
                 e.preventDefault();
-                const startDate = $('input[name="start_date"]').val();
-                const endDate = $('input[name="end_date"]').val();
-
-                if (!startDate || !endDate) {
-                    alert('Please select both start and end dates');
-                    return false;
+                
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen().catch(err => {
+                        console.log(`Error attempting to enable fullscreen: ${err.message}`);
+                    });
+                    this.innerHTML = '<i class="fas fa-compress-arrows-alt fa-fw"></i>';
+                } else {
+                    document.exitFullscreen();
+                    this.innerHTML = '<i class="fas fa-expand-arrows-alt fa-fw"></i>';
                 }
+            });
+        }
 
-                if (startDate > endDate) {
-                    alert('Start date cannot be later than end date');
-                    return false;
+        // Responsive behavior
+        function handleResize() {
+            if (window.innerWidth < 768) {
+                document.body.classList.add('sidebar-toggled');
+                document.querySelector('.sidebar').classList.add('toggled');
+                // Collapse any open accordions
+                document.querySelectorAll('.sidebar .collapse.show').forEach(collapse => {
+                    collapse.classList.remove('show');
+                });
+            }
+        }
+
+        window.addEventListener('resize', handleResize);
+        handleResize(); // Call on load
+
+        // Enhanced dropdown animations
+        document.querySelectorAll('.dropdown-toggle').forEach(toggle => {
+            toggle.addEventListener('click', function() {
+                const dropdown = this.nextElementSibling;
+                if (dropdown && dropdown.classList.contains('dropdown-menu')) {
+                    dropdown.classList.add('animated--grow-in');
                 }
-
-                showLoadingSpinner();
-                this.submit();
             });
         });
 
-        function calculateClosingFloat() {
-            const openingFloat = parseFloat('<?= $opening_float ?>');
-            const totalOffloaded = parseFloat('<?= $total_offloaded ?>');
-            const closingFloat = openingFloat - totalOffloaded;
-            
-            $('#closingFloatAmount').text('KSh ' + closingFloat.toLocaleString('en-US', {minimumFractionDigits: 2}));
-            
-            // Animate the calculation
-            $('#closingFloatAmount').fadeOut(200).fadeIn(200);
-        }
+        // Card hover effects
+        document.querySelectorAll('.card').forEach(card => {
+            card.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateY(-2px)';
+                this.style.boxShadow = '0 0.25rem 2rem 0 rgba(33, 40, 50, 0.2)';
+            });
 
-        function printReceipt() {
-            const printContents = document.getElementById('receiptContent').innerHTML;
-            const originalContents = document.body.innerHTML;
+            card.addEventListener('mouseleave', function() {
+                this.style.transform = 'translateY(0)';
+                this.style.boxShadow = '0 0.15rem 1.75rem 0 rgba(33, 40, 50, 0.15)';
+            });
+        });
 
-            document.body.innerHTML = printContents;
-            window.print();
-            document.body.innerHTML = originalContents;
-            
-            // Reinitialize event handlers
-            $(document).ready();
-        }
+        // Smooth scrolling
+        document.querySelectorAll('a.scroll-to-top').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                window.scrollTo({
+                    top: 0,
+                    behavior: 'smooth'
+                });
+            });
+        });
 
-        function showLoadingSpinner() {
-            $('body').append(`
-                <div class="loading-overlay">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="sr-only">Loading...</span>
-                    </div>
-                </div>
-            `);
-        }
+        // Show/hide scroll to top button
+        window.addEventListener('scroll', function() {
+            const scrollButton = document.querySelector('.scroll-to-top');
+            if (window.pageYOffset > 100) {
+                scrollButton.style.display = 'block';
+            } else {
+                scrollButton.style.display = 'none';
+            }
+        });
+    });
 
-        function generateReport() {
-            const startDate = $('input[name="start_date"]').val();
-            const endDate = $('input[name="end_date"]').val();
-            window.location.href = `../controllers/generate_reconciliation_report.php?start_date=${startDate}&end_date=${endDate}`;
-        }
+    function generateReport() {
+        const startDate = document.querySelector('input[name="start_date"]') ? document.querySelector('input[name="start_date"]').value : '';
+        const endDate = document.querySelector('input[name="end_date"]') ? document.querySelector('input[name="end_date"]').value : '';
+        window.location.href = `../controllers/generate_reconciliation_report.php?start_date=${startDate}&end_date=${endDate}`;
+    }
     </script>
 </body>
 </html>
