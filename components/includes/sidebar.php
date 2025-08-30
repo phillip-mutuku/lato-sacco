@@ -584,7 +584,7 @@ body.sidebar-toggled .topbar {
             <ul class="navbar-nav ml-auto">
                 <!-- Nav Item - Notifications -->
                 <li class="nav-item dropdown no-arrow mx-1">
-                    <a class="nav-link" href="notifications.php" title="Notifications">
+                    <a class="nav-link" href="../views/notifications.php" title="Notifications">
                         <i class="fas fa-bell fa-fw"></i>
                         <span class="notification-dot"></span>
                     </a>
@@ -592,7 +592,7 @@ body.sidebar-toggled .topbar {
 
                 <!-- Nav Item - Announcements -->
                 <li class="nav-item dropdown no-arrow mx-1">
-                    <a class="nav-link" href="announcements.php" title="Announcements">
+                    <a class="nav-link" href="../views/announcements.php" title="Announcements">
                         <i class="fas fa-bullhorn fa-fw"></i>
                         <span class="notification-dot"></span>
                     </a>
