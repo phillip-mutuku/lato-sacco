@@ -195,15 +195,41 @@ $(document).ready(function() {
         }
     });
 
-    // Initialize Select2 for member selection with search in modals
-    $('.member-select').select2({
-        placeholder: 'Search and select member',
-        width: '100%',
-        allowClear: true
+    // Initialize Select2 when modals are shown
+    $('#addSavingsModal, #withdrawModal').on('shown.bs.modal', function() {
+        // Initialize Select2 for member selection with search in this modal
+        $(this).find('.member-select').select2({
+            placeholder: 'Search and select member',
+            width: '100%',
+            allowClear: true,
+            dropdownParent: $(this), // This ensures dropdown appears within modal
+            matcher: function(params, data) {
+                // If there are no search terms, return all data
+                if ($.trim(params.term) === '') {
+                    return data;
+                }
+
+                // Skip if there is no 'children' property
+                if (typeof data.children === 'undefined') {
+                    // Check if the text contains the term
+                    if (data.text.toLowerCase().indexOf(params.term.toLowerCase()) > -1) {
+                        return data;
+                    }
+                }
+
+                // Return `null` if the term should not be displayed
+                return null;
+            }
+        });
+    });
+
+    // Destroy Select2 when modals are hidden to prevent conflicts
+    $('#addSavingsModal, #withdrawModal').on('hidden.bs.modal', function() {
+        $(this).find('.member-select').select2('destroy');
     });
 
     // Auto-fill balance when member is selected in withdrawal form
-    $('#withdrawModal select[name="account_id"]').change(function() {
+    $('#withdrawModal').on('change', 'select[name="account_id"]', function() {
         var selectedOption = $(this).find('option:selected');
         var balance = selectedOption.data('balance') || 0;
         $('#availableBalance').val('KSh ' + balance.toLocaleString(undefined, {
@@ -213,7 +239,7 @@ $(document).ready(function() {
     });
 
     // Print Receipt functionality
-    $('.print-receipt').click(function() {
+    $(document).on('click', '.print-receipt', function() {
         var id = $(this).data('id');
         var type = $(this).data('type');
         $.ajax({
@@ -269,12 +295,12 @@ $(document).ready(function() {
     }
 
     // Apply validation on input
-    $('#addSavingsForm input[name="receipt_no"], #withdrawForm input[name="receipt_no"]').on('input', function() {
+    $(document).on('input', '#addSavingsForm input[name="receipt_no"], #withdrawForm input[name="receipt_no"]', function() {
         validateReceiptNumber($(this));
     });
 
     // Validate before form submission
-    $('#addSavingsForm, #withdrawForm').on('submit', function(e) {
+    $(document).on('submit', '#addSavingsForm, #withdrawForm', function(e) {
         const receiptInput = $(this).find('input[name="receipt_no"]');
         if (!validateReceiptNumber(receiptInput)) {
             e.preventDefault();
@@ -284,7 +310,7 @@ $(document).ready(function() {
     });
 
     // Add Savings Form Submit
-    $('#addSavingsForm').submit(function(e) {
+    $(document).on('submit', '#addSavingsForm', function(e) {
         e.preventDefault();
         var formData = $(this).serialize() + '&action=addSavings';
         $.ajax({
@@ -295,6 +321,7 @@ $(document).ready(function() {
             success: function(response) {
                 if (response.status === 'success') {
                     showMessage('Savings added successfully', 'success');
+                    $('#addSavingsModal').modal('hide');
                     setTimeout(function() {
                         location.reload();
                     }, 1500);
@@ -309,7 +336,7 @@ $(document).ready(function() {
     });
 
     // Withdraw Form Submit
-    $('#withdrawForm').submit(function(e) {
+    $(document).on('submit', '#withdrawForm', function(e) {
         e.preventDefault();
         var formData = $(this).serialize() + '&action=withdraw';
         $.ajax({
@@ -320,6 +347,7 @@ $(document).ready(function() {
             success: function(response) {
                 if (response.status === 'success') {
                     showMessage('Withdrawal processed successfully', 'success');
+                    $('#withdrawModal').modal('hide');
                     setTimeout(function() {
                         location.reload();
                     }, 1500);
@@ -334,14 +362,18 @@ $(document).ready(function() {
     });
 
     // Form validation for savings and withdrawals
-    $('form').on('submit', function(e) {
+    $(document).on('submit', 'form', function(e) {
         var amount = parseFloat($(this).find('input[name="amount"]').val());
-        var availableBalance = parseFloat($('#availableBalance').val().replace('KSh ', '').replace(/,/g, ''));
-
-        if ($(this).attr('id') === 'withdrawForm' && amount > availableBalance) {
-            e.preventDefault();
-            showMessage('Withdrawal amount cannot exceed available balance', 'error');
-            return false;
+        
+        if ($(this).attr('id') === 'withdrawForm') {
+            var availableBalanceText = $('#availableBalance').val();
+            var availableBalance = parseFloat(availableBalanceText.replace('KSh ', '').replace(/,/g, ''));
+            
+            if (amount > availableBalance) {
+                e.preventDefault();
+                showMessage('Withdrawal amount cannot exceed available balance', 'error');
+                return false;
+            }
         }
 
         if (amount <= 0) {

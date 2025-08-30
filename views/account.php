@@ -62,13 +62,215 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
         }
 
         .select2-container--default .select2-selection--multiple {
-    min-height: 38px;
-}
-  
+            min-height: 38px;
+        }
+
+       
+/* Enhanced Input Group Styles */
+        .input-group {
+            position: relative;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: stretch;
+            width: 100%;
+        }
+
+        .input-group .form-control {
+            position: relative;
+            flex: 1 1 auto;
+            width: 1%;
+            min-width: 0;
+            margin-bottom: 0;
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+            border-right: 0;
+        }
+
+        .input-group-append {
+            margin-left: 0;
+            display: flex;
+        }
+
+        .input-group-append .btn {
+            position: relative;
+            z-index: 2;
+            border-top-left-radius: 0;
+            border-bottom-left-radius: 0;
+            border-left: 1px solid #ced4da;
+            background-color: #f8f9fa;
+            border-color: #ced4da;
+            color: #6c757d;
+            padding: 0.375rem 0.75rem;
+            font-size: 0.875rem;
+            line-height: 1.5;
+            transition: all 0.15s ease-in-out;
+        }
+
+        .input-group-append .btn:hover {
+            background-color: #e9ecef;
+            border-color: #adb5bd;
+            color: #495057;
+        }
+
+        .input-group-append .btn:focus {
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+            z-index: 3;
+        }
+
+        .input-group .form-control:focus {
+            z-index: 3;
+            border-color: #80bdff;
+            outline: 0;
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+        }
+
+        /* Loading animation for the button */
+        .btn-loading {
+            pointer-events: none;
+            opacity: 0.6;
+        }
+
+        .btn-loading .fas {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Ensure proper form control sizing */
+        .form-group .input-group .form-control {
+            height: calc(1.5em + 0.75rem + 2px);
+        }
+
+        .form-group .input-group .btn {
+            height: calc(1.5em + 0.75rem + 2px);
+        }
+
+        /* Remove any conflicting styles */
+        .input-group > .form-control:not(:last-child) {
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+
+        .input-group > .input-group-append:last-child > .btn:not(:last-child):not(.dropdown-toggle) {
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+
+        .input-group > .input-group-append:last-child > .btn:last-child {
+            border-top-right-radius: 0.25rem;
+            border-bottom-right-radius: 0.25rem;
+        }
+        
+        /* Toast Container Styles */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            max-width: 350px;
+        }
+
+        .toast {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            margin-bottom: 10px;
+            opacity: 0;
+            transform: translateX(100%);
+            transition: all 0.3s ease;
+            overflow: hidden;
+            border-left: 4px solid #28a745;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .toast.toast-error {
+            border-left-color: #dc3545;
+        }
+
+        .toast.toast-success {
+            border-left-color: #28a745;
+        }
+
+        .toast.toast-warning {
+            border-left-color: #ffc107;
+        }
+
+        .toast-header {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
+            background: rgba(0, 0, 0, 0.03);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+        }
+
+        .toast-icon {
+            margin-right: 8px;
+            font-size: 16px;
+        }
+
+        .toast-title {
+            font-weight: 600;
+            font-size: 14px;
+            flex: 1;
+            margin: 0;
+        }
+
+        .toast-close {
+            background: none;
+            border: none;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 0;
+            margin-left: 10px;
+            color: #666;
+        }
+
+        .toast-close:hover {
+            color: #000;
+        }
+
+        .toast-body {
+            padding: 12px 16px;
+            font-size: 13px;
+            color: #666;
+        }
+
+        .toast-success .toast-icon {
+            color: #28a745;
+        }
+
+        .toast-error .toast-icon {
+            color: #dc3545;
+        }
+
+        .toast-warning .toast-icon {
+            color: #ffc107;
+        }
+
+        .toast-success .toast-title {
+            color: #28a745;
+        }
+
+        .toast-error .toast-title {
+            color: #dc3545;
+        }
+
+        .toast-warning .toast-title {
+            color: #ffc107;
+        }
     </style>
 </head>
 
 <body id="page-top">
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
 
     <!-- Page Wrapper -->
     <div id="wrapper">
@@ -184,7 +386,15 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
                                     </div>
                                     <div class="form-group">
                                         <label for="shareholder_no">Shareholder No</label>
+                                        <div class="input-group">
                                             <input type="text" class="form-control" name="shareholder_no" id="shareholder_no" required>
+                                            <div class="input-group-append">
+                                                <button class="btn btn-outline-secondary" type="button" id="suggestShareholderNo" title="Suggest next shareholder number">
+                                                    <i class="fas fa-magic"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <small class="form-text text-muted">Click the magic wand to auto-suggest the next number</small>
                                     </div>
                                     <div class="form-group">
                                         <label for="national_id">National ID</label>
@@ -376,49 +586,211 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
 
     <!-- Custom scripts for all pages-->
     <script src="../public/js/sb-admin-2.js"></script>
+
     <script>
+    // Toast notification system
+    class ToastManager {
+        constructor() {
+            this.container = document.getElementById('toastContainer');
+            this.toastCount = 0;
+        }
+
+        show(message, type = 'success', title = null, duration = 5000) {
+            const toastId = 'toast-' + (++this.toastCount);
+            
+            // Set default titles and icons based on type
+            const config = {
+                success: { title: title || 'Success', icon: 'fas fa-check-circle' },
+                error: { title: title || 'Error', icon: 'fas fa-exclamation-circle' },
+                warning: { title: title || 'Warning', icon: 'fas fa-exclamation-triangle' },
+                info: { title: title || 'Information', icon: 'fas fa-info-circle' }
+            };
+
+            const toastConfig = config[type] || config.info;
+
+            const toast = document.createElement('div');
+            toast.id = toastId;
+            toast.className = `toast toast-${type}`;
+            toast.innerHTML = `
+                <div class="toast-header">
+                    <i class="${toastConfig.icon} toast-icon"></i>
+                    <h6 class="toast-title">${toastConfig.title}</h6>
+                    <button class="toast-close" onclick="toastManager.hide('${toastId}')">&times;</button>
+                </div>
+                <div class="toast-body">${message}</div>
+            `;
+
+            this.container.appendChild(toast);
+
+            // Trigger animation
+            setTimeout(() => {
+                toast.classList.add('show');
+            }, 100);
+
+            // Auto hide
+            if (duration > 0) {
+                setTimeout(() => {
+                    this.hide(toastId);
+                }, duration);
+            }
+
+            return toastId;
+        }
+
+        hide(toastId) {
+            const toast = document.getElementById(toastId);
+            if (toast) {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    if (toast.parentNode) {
+                        toast.parentNode.removeChild(toast);
+                    }
+                }, 300);
+            }
+        }
+
+        success(message, title = null, duration = 5000) {
+            return this.show(message, 'success', title, duration);
+        }
+
+        error(message, title = null, duration = 7000) {
+            return this.show(message, 'error', title, duration);
+        }
+
+        warning(message, title = null, duration = 6000) {
+            return this.show(message, 'warning', title, duration);
+        }
+
+        info(message, title = null, duration = 5000) {
+            return this.show(message, 'info', title, duration);
+        }
+    }
+
+    // Initialize toast manager
+    const toastManager = new ToastManager();
+
     $(document).ready(function () {
         $('#dataTable').DataTable();
-            // Initialize Select2 for both add and update forms
-    $('select[name="account_type[]"]').select2({
-        placeholder: 'Select account types',
-        width: '100%'
-    });
+        
+        // Initialize Select2 for both add and update forms
+        $('select[name="account_type[]"]').select2({
+            placeholder: 'Select account types',
+            width: '100%'
+        });
 
-    // Reinitialize Select2 when update modal is shown
-    $('#updateAccountModal').on('shown.bs.modal', function () {
+        // Reinitialize Select2 when update modal is shown
+        $('#updateAccountModal').on('shown.bs.modal', function () {
+            $('#update_account_type').select2({
+                placeholder: 'Select account types',
+                width: '100%',
+                dropdownParent: $('#updateAccountModal')
+            });
+        });
+
+        // Initialize Select2
         $('#update_account_type').select2({
             placeholder: 'Select account types',
             width: '100%',
             dropdownParent: $('#updateAccountModal')
         });
-    });
 
-        // Initialize Select2
-        $('#update_account_type').select2({
-        placeholder: 'Select account types',
-        width: '100%',
-        dropdownParent: $('#updateAccountModal')
-    });
+        // Add form submit handler to prevent default form submission
+        $('#updateAccountForm').on('submit', function(e) {
+            e.preventDefault();
+            updateAccount();
+        });
 
-    // Add form submit handler to prevent default form submission
-    $('#updateAccountForm').on('submit', function(e) {
-        e.preventDefault();
-        updateAccount();
-    });
+        // Add event listener for the suggest button
+        $('#suggestShareholderNo').on('click', function() {
+            suggestNextShareholderNumber();
+        });
+        
+        // Optional: Auto-suggest when the input gets focus for the first time
+        $('#shareholder_no').one('focus', function() {
+            if ($(this).val() === '') {
+                suggestNextShareholderNumber();
+            }
+        });
 
-    // Log form data when update button is clicked (for debugging)
-    $('.btn-update-account').on('click', function() {
-        console.log('Form values:', {
-            accountId: $('#account_id').val(),
-            firstName: $('#update_first_name').val(),
-            lastName: $('#update_last_name').val(),
-            accountType: $('#update_account_type').val()
+        // Add debounced validation on input change
+        let shareholderValidationTimeout;
+        $('#shareholder_no').on('input', function() {
+            const value = $(this).val();
+            clearTimeout(shareholderValidationTimeout);
+            
+            if (value) {
+                shareholderValidationTimeout = setTimeout(() => {
+                    validateShareholderNumber(value);
+                }, 500); // Wait 500ms after user stops typing
+            } else {
+                $(this).removeClass('is-invalid');
+                $(this).siblings('.invalid-feedback').remove();
+            }
         });
     });
-    });
 
+    function suggestNextShareholderNumber() {
+        const button = $('#suggestShareholderNo');
+        const input = $('#shareholder_no');
+        
+        // Add loading state
+        button.addClass('btn-loading');
+        button.find('.fas').removeClass('fa-magic').addClass('fa-spinner');
+        
+        $.ajax({
+            url: '../controllers/accountController.php?action=getNextShareholderNo',
+            method: 'GET',
+            dataType: 'json',
+            success: function(response) {
+                if (response.status === 'success') {
+                    // Set the suggested number in the input
+                    input.val(response.next_number);
+                    
+                    // Focus and select the text so user can easily modify it
+                    input.focus().select();
+                    
+                    // Show success toast
+                    toastManager.success(`Next available number: ${response.next_number}`, 'Auto-Suggested', 2000);
+                } else {
+                    toastManager.error(response.message || 'Could not fetch next shareholder number');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Error fetching next shareholder number:', error);
+                toastManager.error('Error fetching next shareholder number. Please try again.');
+            },
+            complete: function() {
+                // Remove loading state
+                button.removeClass('btn-loading');
+                button.find('.fas').removeClass('fa-spinner').addClass('fa-magic');
+            }
+        });
+    }
 
+    // Optional: Add validation to prevent duplicate shareholder numbers
+    function validateShareholderNumber(shareholderNo) {
+        if (!shareholderNo) return;
+        
+        $.ajax({
+            url: '../controllers/accountController.php?action=checkShareholderNo',
+            method: 'POST',
+            data: { shareholder_no: shareholderNo },
+            dataType: 'json',
+            success: function(response) {
+                const input = $('#shareholder_no');
+                if (response.exists) {
+                    input.addClass('is-invalid');
+                    // Show error message
+                    if (!input.siblings('.invalid-feedback').length) {
+                        input.after('<div class="invalid-feedback">This shareholder number already exists</div>');
+                    }
+                } else {
+                    input.removeClass('is-invalid');
+                    input.siblings('.invalid-feedback').remove();
+                }
+            }
+        });
+    }
 
     function addAccount() {
         // Validate required fields
@@ -427,7 +799,7 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
         
         required.forEach(function(field) {
             var input = $('[name="' + field + '"]');
-            if (!input.val()) {
+            if (!input.val() || (input.is('select') && input.val().length === 0)) {
                 input.addClass('is-invalid');
                 isValid = false;
             } else {
@@ -436,7 +808,7 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
         });
 
         if (!isValid) {
-            showErrorMessage('Please fill in all required fields');
+            toastManager.error('Please fill in all required fields');
             return;
         }
 
@@ -447,262 +819,124 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
             dataType: 'json',
             success: function(response) {
                 if(response.status === 'success') {
-                    showSuccessMessage('Account added successfully!');
+                    toastManager.success('Account added successfully!');
                     $('#addAccountModal').modal('hide');
-                    location.reload();
+                    setTimeout(() => location.reload(), 1500);
                 } else {
-                    showErrorMessage(response.message || 'Error adding account. Please try again.');
+                    toastManager.error(response.message || 'Error adding account. Please try again.');
                 }
             },
             error: function(xhr, status, error) {
-                showErrorMessage('Error adding account. Please try again.');
-                console.error(xhr.responseText);
+                console.error('Add account error:', xhr.responseText);
+                toastManager.error('Error adding account. Please try again.');
             }
         });
     }
-
-function showSuccessMessage(message) {
-    showMessage(message, 'success');
-}
-
-function showErrorMessage(message) {
-    showMessage(message, 'error');
-}
-
-function showMessage(message, type) {
-    var messageDiv = $('<div>')
-        .addClass('alert')
-        .addClass(type === 'success' ? 'alert-success' : 'alert-danger')
-        .text(message)
-        .css({
-            'position': 'fixed',
-            'top': '20px',
-            'right': '20px',
-            'z-index': 9999,
-            'padding': '15px',
-            'border-radius': '5px',
-            'box-shadow': '0 0 10px rgba(0,0,0,0.2)'
-        });
-
-    $('body').append(messageDiv);
-
-    setTimeout(function() {
-        messageDiv.fadeOut('slow', function() {
-            $(this).remove();
-        });
-    }, 3000);
-}
-
-
 
     function viewAccount(accountId) {
         window.open('view_account.php?id=' + accountId, '_blank');
     }
 
-
-
-    
     // Function to load data and open modal
-function editAccount(accountId) {
-    $.ajax({
-        url: '../controllers/accountController.php?action=get',
-        method: 'POST',
-        data: { account_id: accountId },
-        dataType: 'json',
-        success: function(response) {
-            if(response.status === 'success') {
-                var account = response.data;
-                
-                // Populate the form fields
-                $('#account_id').val(account.account_id);
-                $('#update_first_name').val(account.first_name);
-                $('#update_last_name').val(account.last_name);
-                $('#update_shareholder_no').val(account.shareholder_no);
-                $('#update_national_id').val(account.national_id);
-                $('#update_phone_number').val(account.phone_number);
-                $('#update_email').val(account.email);
-                $('#update_location').val(account.location);
-                $('#update_division').val(account.division);
-                $('#update_village').val(account.village);
-                
-                // Handle account types
-                var accountTypes = account.account_type.split(',').map(function(item) {
-                    return item.trim();
+    function editAccount(accountId) {
+        $.ajax({
+            url: '../controllers/accountController.php?action=get',
+            method: 'POST',
+            data: { account_id: accountId },
+            dataType: 'json',
+            success: function(response) {
+                if(response.status === 'success') {
+                    var account = response.data;
+                    
+                    // Populate the form fields
+                    $('#account_id').val(account.account_id);
+                    $('#update_first_name').val(account.first_name);
+                    $('#update_last_name').val(account.last_name);
+                    $('#update_shareholder_no').val(account.shareholder_no);
+                    $('#update_national_id').val(account.national_id);
+                    $('#update_phone_number').val(account.phone_number);
+                    $('#update_email').val(account.email);
+                    $('#update_location').val(account.location);
+                    $('#update_division').val(account.division);
+                    $('#update_village').val(account.village);
+                    
+                    // Handle account types
+                    var accountTypes = account.account_type.split(',').map(function(item) {
+                        return item.trim();
+                    });
+                    $('#update_account_type').val(accountTypes).trigger('change');
+                    
+                    // Open the modal
+                    $('#updateAccountModal').modal('show');
+                } else {
+                    toastManager.error(response.message || 'Error fetching account details.');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Edit account error:', xhr.responseText);
+                toastManager.error('Error fetching account details. Please try again.');
+            }
+        });
+    }
+
+    // Function to save the updated data
+    function updateAccount() {
+        // Validate all fields are filled
+        var isValid = true;
+        var requiredFields = [
+            'account_id', 'first_name', 'last_name', 'shareholder_no',
+            'national_id', 'phone_number', 'division', 'village'
+        ];
+
+        // Check each required field
+        requiredFields.forEach(function(field) {
+            var input = $('[name="' + field + '"]');
+            if (!input.val()) {
+                isValid = false;
+                input.addClass('is-invalid');
+            } else {
+                input.removeClass('is-invalid');
+            }
+        });
+
+        // Check account types
+        if ($('#update_account_type').val().length === 0) {
+            isValid = false;
+            $('#update_account_type').next('.select2-container').addClass('is-invalid');
+        } else {
+            $('#update_account_type').next('.select2-container').removeClass('is-invalid');
+        }
+
+        if (!isValid) {
+            toastManager.error('Please fill in all required fields');
+            return;
+        }
+
+        $.ajax({
+            url: '../controllers/accountController.php?action=update',
+            method: 'POST',
+            data: $('#updateAccountForm').serialize(),
+            dataType: 'json',
+            success: function(response) {
+                console.log('Server response:', response);
+                if(response.status === 'success') {
+                    toastManager.success('Account updated successfully!');
+                    $('#updateAccountModal').modal('hide');
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    toastManager.error(response.message || 'Error updating account. Please try again.');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Update error:', {
+                    status: status,
+                    error: error,
+                    response: xhr.responseText
                 });
-                $('#update_account_type').val(accountTypes).trigger('change');
-                
-                // Open the modal
-                $('#updateAccountModal').modal('show');
-            } else {
-                showErrorMessage(response.message || 'Error fetching account details.');
+                toastManager.error('Error updating account. Please try again.');
             }
-        },
-        error: function() {
-            showErrorMessage('Error fetching account details. Please try again.');
-        }
-    });
-}
-
-
-
-
-// Function to save the updated data
-function updateAccount() {
-    // Get all form values first
-    var formData = {
-        account_id: $('#account_id').val(),
-        first_name: $('#update_first_name').val(),
-        last_name: $('#update_last_name').val(),
-        shareholder_no: $('#update_shareholder_no').val(),
-        national_id: $('#update_national_id').val(),
-        phone_number: $('#update_phone_number').val(),
-        division: $('#update_division').val(),
-        village: $('#update_village').val(),
-        account_type: $('#update_account_type').val()
-    };
-
-    // Debug log to see what values we're getting
-    console.log('Form Data:', formData);
-
-    // Validate all fields are filled
-    var isValid = true;
-    var emptyFields = [];
-
-    // Check each field
-    Object.entries(formData).forEach(([field, value]) => {
-        if (!value || (Array.isArray(value) && value.length === 0)) {
-            isValid = false;
-            emptyFields.push(field);
-            $(`[name="${field}"]`).addClass('is-invalid');
-        } else {
-            $(`[name="${field}"]`).removeClass('is-invalid');
-        }
-    });
-
-    // If validation fails, show which fields are empty
-    if (!isValid) {
-        console.log('Empty fields:', emptyFields);
-        showErrorMessage('Please fill in all required fields: ' + emptyFields.join(', '));
-        return;
+        });
     }
-
-    // If we get here, form is valid - proceed with AJAX
-    $.ajax({
-        url: '../controllers/accountController.php?action=update',
-        method: 'POST',
-        data: $('#updateAccountForm').serialize(),
-        dataType: 'json',
-        success: function(response) {
-            console.log('Server response:', response); // Debug log
-            if(response.status === 'success') {
-                showSuccessMessage('Account updated successfully!');
-                $('#updateAccountModal').modal('hide');
-                location.reload();
-            } else {
-                showErrorMessage(response.message || 'Error updating account. Please try again.');
-            }
-        },
-        error: function(xhr, status, error) {
-            console.error('Update error:', {
-                status: status,
-                error: error,
-                response: xhr.responseText
-            });
-            showErrorMessage('Error updating account. Please try again.');
-        }
-    });
-}
-
-// Helper function for error messages with more visibility
-function showErrorMessage(message) {
-    console.log('Error message:', message); 
-    var messageDiv = $('<div>')
-        .addClass('alert alert-danger alert-dismissible fade show')
-        .css({
-            'position': 'fixed',
-            'top': '20px',
-            'right': '20px',
-            'z-index': '9999',
-            'max-width': '400px',
-            'box-shadow': '0 0 10px rgba(0,0,0,0.2)'
-        })
-        .html(`
-            <strong>Error:</strong><br>
-            ${message}
-            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-                <span aria-hidden="true">&times;</span>
-            </button>
-        `);
-
-    $('body').append(messageDiv);
-
-    setTimeout(function() {
-        messageDiv.alert('close');
-    }, 7000);
-}
-
-
-
-// Helper function to validate form
-function validateUpdateForm() {
-    var isValid = true;
-    var requiredFields = [
-        'account_id',
-        'first_name',
-        'last_name',
-        'shareholder_no',
-        'national_id',
-        'phone_number',
-        'division',
-        'village',
-        'account_type[]'
-    ];
-
-    requiredFields.forEach(function(field) {
-        var input = $('[name="' + field + '"]');
-        if (!input.val()) {
-            input.addClass('is-invalid');
-            isValid = false;
-        } else {
-            input.removeClass('is-invalid');
-        }
-    });
-
-    if (!isValid) {
-        showErrorMessage('Please fill in all required fields');
-    }
-
-    return isValid;
-}
-
-// Helper functions for showing messages
-function showSuccessMessage(message) {
-    showMessage(message, 'success');
-}
-
-
-function showMessage(message, type) {
-    var alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
-    var messageDiv = $('<div>')
-        .addClass('alert ' + alertClass + ' alert-dismissible fade show')
-        .css({
-            'position': 'fixed',
-            'top': '20px',
-            'right': '20px',
-            'z-index': '9999',
-            'max-width': '300px'
-        })
-        .html(message + '<button type="button" class="close" data-dismiss="alert">&times;</button>');
-
-    $('body').append(messageDiv);
-
-    setTimeout(function() {
-        messageDiv.alert('close');
-    }, 5000);
-}
-
-
-
 
     function deleteAccount(accountId) {
         $('#deleteConfirmModal').modal('show');
@@ -711,59 +945,95 @@ function showMessage(message, type) {
 
     $('#confirmDelete').on('click', function() {
         var accountId = $(this).data('id');
+        
         $.ajax({
             url: '../controllers/accountController.php?action=delete',
             method: 'POST',
             data: { account_id: accountId },
+            dataType: 'json',
             success: function(response) {
-                if(response === 'success') {
-                    alert('Account deleted successfully!');
-                    location.reload();
-                } else {
-                    alert('Error deleting account. Please try again.');
+                console.log('Delete response:', response);
+                
+                // Handle both JSON response and plain text response for backward compatibility
+                if (typeof response === 'object') {
+                    if (response.status === 'success') {
+                        toastManager.success('Account deleted successfully!');
+                        setTimeout(() => location.reload(), 1500);
+                    } else {
+                        toastManager.error(response.message || 'Error deleting account. Please try again.');
+                    }
+                } else if (typeof response === 'string') {
+                    // Handle plain text response
+                    if (response.toLowerCase().includes('success')) {
+                        toastManager.success('Account deleted successfully!');
+                        setTimeout(() => location.reload(), 1500);
+                    } else {
+                        toastManager.error('Error deleting account. Please try again.');
+                    }
                 }
             },
-            error: function() {
-                alert('Error deleting account. Please try again.');
+            error: function(xhr, status, error) {
+                console.error('Delete error:', {
+                    status: status,
+                    error: error,
+                    response: xhr.responseText
+                });
+                
+                // Try to parse the response text
+                try {
+                    var response = JSON.parse(xhr.responseText);
+                    if (response.status === 'success') {
+                        toastManager.success('Account deleted successfully!');
+                        setTimeout(() => location.reload(), 1500);
+                    } else {
+                        toastManager.error(response.message || 'Error deleting account. Please try again.');
+                    }
+                } catch (e) {
+                    // If response is not JSON, check for success indicators
+                    if (xhr.responseText && xhr.responseText.toLowerCase().includes('success')) {
+                        toastManager.success('Account deleted successfully!');
+                        setTimeout(() => location.reload(), 1500);
+                    } else {
+                        toastManager.error('Error deleting account. Please try again.');
+                    }
+                }
             }
         });
+        
         $('#deleteConfirmModal').modal('hide');
+    });
+
+    // Sidebar toggle functionality
+    $(document).ready(function() {
+        // Toggle the side navigation
+        $("#sidebarToggleTop").on('click', function(e) {
+            $("body").toggleClass("sidebar-toggled");
+            $(".sidebar").toggleClass("toggled");
+            if ($(".sidebar").hasClass("toggled")) {
+                $('.sidebar .collapse').collapse('hide');
+                $("#content-wrapper").css({"margin-left": "100px", "width": "calc(100% - 100px)"});
+                $(".topbar").css("left", "100px");
+            } else {
+                $("#content-wrapper").css({"margin-left": "225px", "width": "calc(100% - 225px)"});
+                $(".topbar").css("left", "225px");
+            }
+        });
+
+        // Close any open menu accordions when window is resized below 768px
+        $(window).resize(function() {
+            if ($(window).width() < 768) {
+                $('.sidebar .collapse').collapse('hide');
+            };
+            
+            // Toggle the side navigation when window is resized below 480px
+            if ($(window).width() < 480 && !$(".sidebar").hasClass("toggled")) {
+                $("body").addClass("sidebar-toggled");
+                $(".sidebar").addClass("toggled");
+                $('.sidebar .collapse').collapse('hide');
+            };
+        });
     });
     </script>
 
-
-<script>
-        $(document).ready(function() {
-            // Toggle the side navigation
-            $("#sidebarToggleTop").on('click', function(e) {
-                $("body").toggleClass("sidebar-toggled");
-                $(".sidebar").toggleClass("toggled");
-                if ($(".sidebar").hasClass("toggled")) {
-                    $('.sidebar .collapse').collapse('hide');
-                    $("#content-wrapper").css({"margin-left": "100px", "width": "calc(100% - 100px)"});
-                    $(".topbar").css("left", "100px");
-                } else {
-                    $("#content-wrapper").css({"margin-left": "225px", "width": "calc(100% - 225px)"});
-                    $(".topbar").css("left", "225px");
-                }
-            });
-
-            // Close any open menu accordions when window is resized below 768px
-            $(window).resize(function() {
-                if ($(window).width() < 768) {
-                    $('.sidebar .collapse').collapse('hide');
-                };
-                
-                // Toggle the side navigation when window is resized below 480px
-                if ($(window).width() < 480 && !$(".sidebar").hasClass("toggled")) {
-                    $("body").addClass("sidebar-toggled");
-                    $(".sidebar").addClass("toggled");
-                    $('.sidebar .collapse').collapse('hide');
-                };
-            });
-        });
-        </script>
-
 </body>
-
 </html>

@@ -19,67 +19,10 @@
     margin: 0;
 }
 
-/* Transaction Filters */
-.transaction-filters {
-    display: flex;
-    gap: 15px;
-    margin-bottom: 20px;
-    flex-wrap: wrap;
-    align-items: center;
-    background: #fff;
-    padding: 20px;
-    border-radius: 0.35rem;
-    box-shadow: rgba(50, 50, 93, 0.25) 0px 13px 27px -5px, rgba(0, 0, 0, 0.3) 0px 8px 16px -8px;
-    border: 0;
-}
-
-.transaction-filters .custom-select {
-    min-width: 200px;
-    max-width: 250px;
-    padding: 8px 30px 8px 12px;
-    border: 1px solid #d1d3e2;
-    border-radius: 0.35rem;
-    font-size: 0.875rem;
-    background-color: #fff;
-    color: #6c757d;
-    transition: border-color 0.3s ease, box-shadow 0.3s ease;
-    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
-    background-position: right 0.5rem center;
-    background-repeat: no-repeat;
-    background-size: 1.5em 1.5em;
-    appearance: none;
-}
-
-.transaction-filters .custom-select:focus {
-    outline: none;
-    border-color: #51087E;
-    box-shadow: 0 0 0 0.2rem rgba(81, 8, 126, 0.1);
-}
-
-.date-inputs {
+.transactions-section .action-buttons {
     display: flex;
     gap: 10px;
-    align-items: center;
-}
-
-.date-inputs input {
-    padding: 8px 12px;
-    border: 1px solid #d1d3e2;
-    border-radius: 0.35rem;
-    font-size: 0.875rem;
-    color: #6c757d;
-    transition: border-color 0.3s ease, box-shadow 0.3s ease;
-}
-
-.date-inputs input:focus {
-    outline: none;
-    border-color: #51087E;
-    box-shadow: 0 0 0 0.2rem rgba(81, 8, 126, 0.1);
-}
-
-.date-inputs span {
-    color: #6c757d;
-    font-size: 0.875rem;
+    flex-wrap: wrap;
 }
 
 .transactions-section .table-container {
@@ -140,45 +83,85 @@
     border: 1px solid #e3e6f0;
 }
 
-/* Badge Styles */
-.badge-modern {
-    padding: 0.25rem 0.5rem;
-    border-radius: 0.375rem;
-    font-size: 0.75rem;
+/* Transaction Filters */
+.transaction-filters {
+    background: rgba(81, 8, 126, 0.05);
+    border: 1px solid rgba(81, 8, 126, 0.1);
+    border-radius: 0.5rem;
+    padding: 20px;
+    margin-bottom: 25px;
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 200px;
+}
+
+.filter-group label {
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.025em;
-    display: inline-block;
+    color: #51087E;
+    font-size: 0.9rem;
+    margin: 0;
 }
 
-.badge-success { 
-    background-color: #1cc88a; 
-    color: #fff; 
+.filter-group select {
+    padding: 10px 12px;
+    border: 2px solid rgba(81, 8, 126, 0.2);
+    border-radius: 0.35rem;
+    background: #fff;
+    font-size: 0.9rem;
+    color: #333;
+    transition: all 0.3s ease;
+    width: 100%;
+    min-width: 200px;
 }
 
-.badge-warning { 
-    background-color: #f6c23e; 
-    color: #fff; 
+.filter-group select:focus {
+    outline: none;
+    border-color: #51087E;
+    box-shadow: 0 0 0 3px rgba(81, 8, 126, 0.1);
 }
 
-.badge-danger { 
-    background-color: #e74a3b; 
-    color: #fff; 
+.date-inputs {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    flex-wrap: wrap;
+    min-width: 400px;
 }
 
-.badge-info { 
-    background-color: #36b9cc; 
-    color: #fff; 
+.date-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
-.badge-secondary { 
-    background-color: #6c757d; 
-    color: #fff; 
+.date-input-group input {
+    padding: 10px 12px;
+    border: 2px solid rgba(81, 8, 126, 0.2);
+    border-radius: 0.35rem;
+    font-size: 0.9rem;
+    color: #333;
+    transition: all 0.3s ease;
+    min-width: 150px;
 }
 
-.badge-primary { 
-    background-color: #4e73df; 
-    color: #fff; 
+.date-input-group input:focus {
+    outline: none;
+    border-color: #51087E;
+    box-shadow: 0 0 0 3px rgba(81, 8, 126, 0.1);
+}
+
+.date-separator {
+    color: #51087E;
+    font-weight: 600;
+    margin: 20px 5px 0 5px;
 }
 
 /* Button Styles */
@@ -186,14 +169,16 @@
     background-color: #1cc88a;
     border-color: #1cc88a;
     color: #fff;
-    padding: 0.375rem 0.75rem;
-    font-size: 0.875rem;
-    font-weight: 400;
+    padding: 10px 20px;
+    font-size: 0.9rem;
+    font-weight: 500;
     line-height: 1.5;
     border-radius: 0.35rem;
     transition: all 0.15s ease-in-out;
     border: 1px solid transparent;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
     text-align: center;
     vertical-align: middle;
     cursor: pointer;
@@ -205,10 +190,43 @@
     border-color: #13855c;
     color: #fff;
     text-decoration: none;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(28, 200, 138, 0.3);
 }
 
-.btn-success-modern:focus {
-    box-shadow: 0 0 0 0.2rem rgba(28, 200, 138, 0.25);
+/* Transaction Type Badges */
+.transaction-type {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: inline-block;
+}
+
+.transaction-type.savings {
+    background-color: rgba(28, 200, 138, 0.1);
+    color: #1cc88a;
+    border: 1px solid rgba(28, 200, 138, 0.2);
+}
+
+.transaction-type.withdrawal {
+    background-color: rgba(246, 194, 62, 0.1);
+    color: #f6c23e;
+    border: 1px solid rgba(246, 194, 62, 0.2);
+}
+
+.transaction-type.loan {
+    background-color: rgba(231, 74, 59, 0.1);
+    color: #e74a3b;
+    border: 1px solid rgba(231, 74, 59, 0.2);
+}
+
+.transaction-type.repayment {
+    background-color: rgba(54, 185, 204, 0.1);
+    color: #36b9cc;
+    border: 1px solid rgba(54, 185, 204, 0.2);
 }
 
 /* Empty State */
@@ -234,6 +252,74 @@
     margin: 0;
 }
 
+/* Statistics Summary */
+.transaction-summary {
+    background: linear-gradient(135deg, #51087E 0%, #6B1FA0 100%);
+    border-radius: 0.5rem;
+    padding: 25px;
+    margin-bottom: 25px;
+    color: white;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 25px;
+}
+
+.summary-item {
+    text-align: center;
+}
+
+.summary-label {
+    font-size: 0.85rem;
+    opacity: 0.85;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 500;
+}
+
+.summary-value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+/* DataTable Customizations */
+.transactions-section .dataTables_wrapper .dataTables_length,
+.transactions-section .dataTables_wrapper .dataTables_filter,
+.transactions-section .dataTables_wrapper .dataTables_info,
+.transactions-section .dataTables_wrapper .dataTables_paginate {
+    margin-bottom: 0.5rem;
+}
+
+.transactions-section .dataTables_wrapper .dataTables_length select,
+.transactions-section .dataTables_wrapper .dataTables_filter input {
+    border: 1px solid #d1d3e2;
+    border-radius: 0.35rem;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+}
+
+.transactions-section .dataTables_wrapper .dataTables_paginate .paginate_button {
+    padding: 0.375rem 0.75rem;
+    margin-left: 0.125rem;
+    border: 1px solid #d1d3e2;
+    border-radius: 0.35rem;
+    background: #fff;
+    color: #6c757d;
+}
+
+.transactions-section .dataTables_wrapper .dataTables_paginate .paginate_button.current {
+    background: #51087E !important;
+    border-color: #51087E !important;
+    color: white !important;
+}
+
+.transactions-section .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+    background: #eaecf4;
+    border-color: #d1d3e2;
+    color: #6c757d;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .transactions-section .section-header {
@@ -241,20 +327,40 @@
         align-items: flex-start;
         gap: 1rem;
     }
-
+    
+    .transactions-section .action-buttons {
+        width: 100%;
+        justify-content: flex-start;
+    }
+    
     .transaction-filters {
         flex-direction: column;
         align-items: stretch;
-        gap: 10px;
+        gap: 20px;
     }
-
-    .transaction-filters .custom-select {
-        max-width: 100%;
+    
+    .filter-group {
+        min-width: 100%;
     }
-
+    
     .date-inputs {
-        justify-content: center;
-        flex-wrap: wrap;
+        flex-direction: column;
+        min-width: 100%;
+        gap: 15px;
+    }
+    
+    .date-input-group {
+        width: 100%;
+    }
+    
+    .date-input-group input {
+        min-width: 100%;
+    }
+    
+    .transaction-summary {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 20px;
+        padding: 20px;
     }
     
     .transactions-section .table {
@@ -270,6 +376,16 @@
 @media (max-width: 480px) {
     .transactions-section .section-title {
         font-size: 1.25rem;
+    }
+    
+    .transaction-summary {
+        grid-template-columns: 1fr;
+        gap: 15px;
+        padding: 15px;
+    }
+    
+    .summary-value {
+        font-size: 1.2rem;
     }
     
     .empty-state {
@@ -289,37 +405,72 @@
             <i class="fas fa-exchange-alt"></i>
             Transactions
         </h2>
+        <div class="action-buttons">
+            <button id="printStatement" class="btn btn-success-modern">
+                <i class="fas fa-print"></i> Print Statement
+            </button>
+        </div>
     </div>
     
+    <!-- Transaction Summary -->
+    <?php if (!empty($transactions)): ?>
+    <div class="transaction-summary">
+        <div class="summary-item">
+            <div class="summary-label">Total Transactions</div>
+            <div class="summary-value" id="totalTransactions"><?= count($transactions) ?></div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">Date Range</div>
+            <div class="summary-value" id="dateRange">All Time</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">Total Credits</div>
+            <div class="summary-value" id="totalCredits">KSh 0.00</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">Total Debits</div>
+            <div class="summary-value" id="totalDebits">KSh 0.00</div>
+        </div>
+    </div>
+    <?php endif; ?>
+    
+    <!-- Transaction Filters -->
     <div class="transaction-filters">
-        <select id="transactionFilter" class="custom-select">
-            <option value="all">All Transactions</option>
-            <option value="week">Last Week</option>
-            <option value="month">Last Month</option>
-            <option value="year">Last Year</option>
-            <option value="custom">Custom Date Range</option>
-        </select>
-        
-        <select id="transactionType" class="custom-select">
-            <option value="all">All Types</option>
-            <option value="Savings">Savings</option>
-            <option value="Withdrawal">Withdrawals</option>
-            <option value="Loan Repayment">Loan Repayments</option>
-            <option value="Group Savings">Group Savings</option>
-            <option value="Business Savings">Business Savings</option>
-            <option value="Interest">Interest</option>
-            <option value="Fees">Fees</option>
-        </select>
-        
-        <div class="date-inputs" id="customDateInputs" style="display:none;">
-            <input type="date" id="startDate" placeholder="Start Date">
-            <span>to</span>
-            <input type="date" id="endDate" placeholder="End Date">
+        <div class="filter-group">
+            <label for="transactionFilter">Filter by Period:</label>
+            <select id="transactionFilter">
+                <option value="all">All Transactions</option>
+                <option value="today">Today</option>
+                <option value="week">Last Week</option>
+                <option value="month">Last Month</option>
+                <option value="quarter">Last Quarter</option>
+                <option value="year">Last Year</option>
+                <option value="custom">Custom Date Range</option>
+            </select>
         </div>
         
-        <button id="printStatement" class="btn btn-success-modern">
-            <i class="fas fa-print"></i> Print Statement
-        </button>
+        <div class="filter-group">
+            <label for="transactionTypeFilter">Filter by Type:</label>
+            <select id="transactionTypeFilter">
+                <option value="all">All Types</option>
+                <option value="Savings">Savings</option>
+                <option value="Withdrawal">Withdrawals</option>
+                <option value="Loan Disbursement">Loan Disbursements</option>
+                <option value="Loan Repayment">Loan Repayments</option>
+            </select>
+        </div>
+        
+        <div class="date-inputs" id="customDateInputs" style="display:none;">
+            <div class="date-input-group">
+                <label for="startDate">Start Date:</label>
+                <input type="date" id="startDate">
+            </div>
+            <span class="date-separator">to</span>
+            <div class="date-input-group">
+                <label for="endDate">End Date:</label>
+                <input type="date" id="endDate">
+            </div>
+        </div>
     </div>
     
     <?php if (!empty($transactions)): ?>
@@ -333,19 +484,49 @@
                                 <th>Type</th>
                                 <th>Amount</th>
                                 <th>Description</th>
+                                <th>Reference</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php foreach ($transactions as $transaction): ?>
                                 <tr>
-                                    <td><?= date("Y-m-d", strtotime($transaction['date'])) ?></td>
-                                    <td data-type="<?= htmlspecialchars($transaction['type']) ?>">
-                                        <span class="badge badge-pill <?= getTransactionBadgeClass($transaction['type']) ?>">
+                                    <td data-order="<?= strtotime($transaction['date']) ?>"><?= date("Y-m-d H:i:s", strtotime($transaction['date'])) ?></td>
+                                    <td>
+                                        <?php
+                                        $typeClass = '';
+                                        switch(strtolower($transaction['type'])) {
+                                            case 'savings':
+                                                $typeClass = 'savings';
+                                                break;
+                                            case 'withdrawal':
+                                                $typeClass = 'withdrawal';
+                                                break;
+                                            case 'loan disbursement':
+                                                $typeClass = 'loan';
+                                                break;
+                                            case 'loan repayment':
+                                                $typeClass = 'repayment';
+                                                break;
+                                            default:
+                                                $typeClass = 'savings';
+                                        }
+                                        ?>
+                                        <span class="transaction-type <?= $typeClass ?>">
                                             <?= htmlspecialchars($transaction['type']) ?>
                                         </span>
                                     </td>
-                                    <td>KSh <?= number_format($transaction['amount'], 2) ?></td>
-                                    <td><?= htmlspecialchars($transaction['description']) ?></td>
+                                    <td data-order="<?= $transaction['amount'] ?>">
+                                        <?php
+                                        $isCredit = in_array(strtolower($transaction['type']), ['savings', 'loan disbursement']);
+                                        $amountClass = $isCredit ? 'text-success' : 'text-danger';
+                                        $amountPrefix = $isCredit ? '+' : '-';
+                                        ?>
+                                        <span class="<?= $amountClass ?>" style="font-weight: 600;">
+                                            <?= $amountPrefix ?>KSh <?= number_format($transaction['amount'], 2) ?>
+                                        </span>
+                                    </td>
+                                    <td><?= htmlspecialchars($transaction['description'] ?? 'N/A') ?></td>
+                                    <td><?= htmlspecialchars($transaction['reference'] ?? 'N/A') ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -361,39 +542,20 @@
     <?php endif; ?>
 </div>
 
-<?php
-// Helper function for transaction badge colors
-function getTransactionBadgeClass($type) {
-    switch(strtolower($type)) {
-        case 'savings':
-        case 'group savings':
-        case 'business savings':
-            return 'badge-success';
-        case 'withdrawal':
-            return 'badge-warning';
-        case 'loan repayment':
-            return 'badge-info';
-        case 'interest':
-            return 'badge-primary';
-        case 'fees':
-            return 'badge-danger';
-        default:
-            return 'badge-secondary';
-    }
-}
-?>
-
 <script>
 $(document).ready(function() {
+    const ACCOUNT_ID = <?= $accountId ?>;
+    let transactionTable;
+    
     // Initialize DataTable for transactions when section becomes active
     $(document).on('sectionChanged', function(event, section) {
         if (section === 'transactions') {
             setTimeout(() => {
                 if (!$.fn.DataTable.isDataTable('#transactionTable')) {
-                    $('#transactionTable').DataTable({
+                    transactionTable = $('#transactionTable').DataTable({
                         responsive: true,
                         pageLength: 10,
-                        order: [[0, 'desc']],
+                        order: [[0, 'desc']], // Order by date (newest first)
                         scrollX: true,
                         autoWidth: false,
                         language: {
@@ -402,106 +564,189 @@ $(document).ready(function() {
                             info: "Showing _START_ to _END_ of _TOTAL_ entries"
                         },
                         columnDefs: [
-                            { targets: '_all', className: 'text-nowrap' }
-                        ]
+                            { targets: [0, 2], className: 'text-nowrap' }, // Date and Amount columns
+                            { targets: '_all', className: 'text-left' }
+                        ],
+                        drawCallback: function(settings) {
+                            // Update summary statistics after table is drawn
+                            updateTransactionSummary();
+                        }
                     });
+                    
+                    // Initial summary calculation
+                    updateTransactionSummary();
                 }
             }, 100);
         }
     });
 
-    // Transaction filter handling
+    // =====================================
+    // TRANSACTION FILTERING
+    // =====================================
+    
     $('#transactionFilter').change(function() {
         const filter = $(this).val();
         if (filter === 'custom') {
             $('#customDateInputs').show();
+            // Set default dates
+            const today = new Date();
+            const oneMonthAgo = new Date();
+            oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+            
+            $('#endDate').val(today.toISOString().split('T')[0]);
+            $('#startDate').val(oneMonthAgo.toISOString().split('T')[0]);
         } else {
             $('#customDateInputs').hide();
-            filterTransactions();
+            filterTransactions(filter);
         }
     });
 
-    // Transaction type filter handling
-    $('#transactionType').change(function() {
-        filterTransactions();
+    $('#transactionTypeFilter').change(function() {
+        filterTransactionsByType($(this).val());
     });
 
     $('#startDate, #endDate').change(function() {
         if ($('#startDate').val() && $('#endDate').val()) {
-            filterTransactions();
+            filterTransactions('custom');
         }
     });
 
-    function filterTransactions() {
-        if (!$.fn.DataTable.isDataTable('#transactionTable')) {
-            return;
+    function filterTransactions(filter) {
+        if (!transactionTable) return;
+
+        let startDate, endDate;
+        const now = new Date();
+
+        switch(filter) {
+            case 'today':
+                startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+                break;
+            case 'week':
+                startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                endDate = now;
+                break;
+            case 'month':
+                startDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+                endDate = now;
+                break;
+            case 'quarter':
+                startDate = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
+                endDate = now;
+                break;
+            case 'year':
+                startDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+                endDate = now;
+                break;
+            case 'custom':
+                startDate = new Date($('#startDate').val());
+                endDate = new Date($('#endDate').val());
+                endDate.setHours(23, 59, 59, 999); // End of selected day
+                break;
+            default:
+                // Show all transactions
+                $.fn.dataTable.ext.search.pop();
+                transactionTable.draw();
+                updateDateRangeDisplay('All Time');
+                updateTransactionSummary();
+                return;
         }
 
-        const table = $('#transactionTable').DataTable();
-        const dateFilter = $('#transactionFilter').val();
-        const typeFilter = $('#transactionType').val();
-
-        // Clear existing search
-        $.fn.dataTable.ext.search = [];
-
-        // Add date filter
-        if (dateFilter !== 'all') {
-            let startDate, endDate;
-            const now = new Date();
-
-            switch(dateFilter) {
-                case 'week':
-                    startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-                    endDate = now;
-                    break;
-                case 'month':
-                    startDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
-                    endDate = now;
-                    break;
-                case 'year':
-                    startDate = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
-                    endDate = now;
-                    break;
-                case 'custom':
-                    startDate = new Date($('#startDate').val());
-                    endDate = new Date($('#endDate').val());
-                    break;
+        // Apply date filter
+        $.fn.dataTable.ext.search.push(
+            function(settings, data, dataIndex) {
+                if (settings.nTable.id !== 'transactionTable') return true;
+                
+                const dateStr = data[0]; // Date column
+                const rowDate = new Date(dateStr);
+                return (rowDate >= startDate && rowDate <= endDate);
             }
+        );
 
-            if (startDate && endDate) {
-                $.fn.dataTable.ext.search.push(
-                    function(settings, data, dataIndex) {
-                        const dateStr = data[0];
-                        const rowDate = new Date(dateStr);
-                        return (rowDate >= startDate && rowDate <= endDate);
-                    }
-                );
-            }
-        }
-
-        // Add type filter
-        if (typeFilter !== 'all') {
-            $.fn.dataTable.ext.search.push(
-                function(settings, data, dataIndex) {
-                    // Get the actual row element to extract the data-type attribute
-                    const row = $('#transactionTable').DataTable().row(dataIndex).node();
-                    const typeCell = $(row).find('td[data-type]');
-                    const typeText = typeCell.length > 0 ? typeCell.attr('data-type') : '';
-                    return typeText === typeFilter;
-                }
-            );
-        }
-
-        table.draw();
+        transactionTable.draw();
+        
+        // Update date range display
+        updateDateRangeDisplay(formatDateRange(startDate, endDate));
+        
+        // Remove the filter after use
+        $.fn.dataTable.ext.search.pop();
     }
 
-    // Print Statement
+    function filterTransactionsByType(type) {
+        if (!transactionTable) return;
+
+        if (type === 'all') {
+            transactionTable.column(1).search('').draw();
+        } else {
+            transactionTable.column(1).search(type).draw();
+        }
+        
+        updateTransactionSummary();
+    }
+
+    function updateDateRangeDisplay(range) {
+        $('#dateRange').text(range);
+    }
+
+    function formatDateRange(startDate, endDate) {
+        const options = { month: 'short', day: 'numeric', year: 'numeric' };
+        return startDate.toLocaleDateString('en-US', options) + ' - ' + 
+               endDate.toLocaleDateString('en-US', options);
+    }
+
+    // =====================================
+    // TRANSACTION SUMMARY CALCULATION
+    // =====================================
+    
+    function updateTransactionSummary() {
+        if (!transactionTable) return;
+
+        let totalCredits = 0;
+        let totalDebits = 0;
+        let visibleRows = 0;
+
+        // Get visible rows after filtering
+        transactionTable.rows({ search: 'applied' }).every(function() {
+            const data = this.data();
+            const type = data[1].toLowerCase();
+            const amountText = data[2];
+            
+            // Extract amount from formatted text (remove HTML tags and currency symbols)
+            const amountMatch = amountText.match(/[\d,]+\.?\d*/);
+            const amount = amountMatch ? parseFloat(amountMatch[0].replace(/,/g, '')) : 0;
+            
+            visibleRows++;
+
+            // Classify as credit or debit based on type
+            if (type.includes('savings') || type.includes('loan disbursement')) {
+                totalCredits += amount;
+            } else {
+                totalDebits += amount;
+            }
+        });
+
+        // Update summary display
+        $('#totalTransactions').text(visibleRows);
+        $('#totalCredits').text('KSh ' + formatCurrency(totalCredits));
+        $('#totalDebits').text('KSh ' + formatCurrency(totalDebits));
+    }
+
+    // =====================================
+    // PRINT STATEMENT
+    // =====================================
+    
     $('#printStatement').click(function() {
         const filter = $('#transactionFilter').val();
-        const typeFilter = $('#transactionType').val();
+        const typeFilter = $('#transactionTypeFilter').val();
         let startDate, endDate;
         
+        // Determine date range for statement
         switch(filter) {
+            case 'today':
+                const today = new Date();
+                startDate = today.toISOString().split('T')[0];
+                endDate = startDate;
+                break;
             case 'week':
                 const weekAgo = new Date();
                 weekAgo.setDate(weekAgo.getDate() - 7);
@@ -512,6 +757,12 @@ $(document).ready(function() {
                 const monthAgo = new Date();
                 monthAgo.setMonth(monthAgo.getMonth() - 1);
                 startDate = monthAgo.toISOString().split('T')[0];
+                endDate = new Date().toISOString().split('T')[0];
+                break;
+            case 'quarter':
+                const quarterAgo = new Date();
+                quarterAgo.setMonth(quarterAgo.getMonth() - 3);
+                startDate = quarterAgo.toISOString().split('T')[0];
                 endDate = new Date().toISOString().split('T')[0];
                 break;
             case 'year':
@@ -543,87 +794,251 @@ $(document).ready(function() {
     function printStatement(startDate, endDate, typeFilter) {
         // Get current visible transactions from table
         let transactions = [];
-        let totalAmount = 0;
+        let totalCredits = 0;
+        let totalDebits = 0;
         
-        if ($.fn.DataTable.isDataTable('#transactionTable')) {
-            const table = $('#transactionTable').DataTable();
-            table.rows({ search: 'applied' }).every(function() {
+        if (transactionTable) {
+            transactionTable.rows({ search: 'applied' }).every(function() {
                 const rowData = this.data();
-                const row = this.node();
                 transactions.push(rowData);
                 
-                // Get the actual transaction type from the data-type attribute
-                const typeCell = $(row).find('td[data-type]');
-                const transactionType = typeCell.length > 0 ? typeCell.attr('data-type') : '';
+                // Calculate totals for summary
+                const type = rowData[1].toLowerCase();
+                const amountText = rowData[2];
+                const amountMatch = amountText.match(/[\d,]+\.?\d*/);
+                const amount = amountMatch ? parseFloat(amountMatch[0].replace(/,/g, '')) : 0;
                 
-                // Extract amount from "KSh X,XXX.XX" format
-                const amountText = rowData[2].replace(/[^\d.-]/g, '');
-                const amount = parseFloat(amountText) || 0;
-                totalAmount += amount;
-            });
-        } else {
-            // Fallback: get all table rows
-            $('#transactionTable tbody tr:visible').each(function() {
-                const row = [];
-                $(this).find('td').each(function() {
-                    row.push($(this).text());
-                });
-                if (row.length > 0) {
-                    transactions.push(row);
-                    const amountText = row[2].replace(/[^\d.-]/g, '');
-                    const amount = parseFloat(amountText) || 0;
-                    totalAmount += amount;
+                if (type.includes('savings') || type.includes('loan disbursement')) {
+                    totalCredits += amount;
+                } else {
+                    totalDebits += amount;
                 }
             });
         }
 
-        const typeFilterText = typeFilter === 'all' ? 'All Types' : typeFilter;
         const statementWindow = window.open('', '_blank', 'width=800,height=600');
         const content = `
             <!DOCTYPE html>
             <html>
             <head>
-                <title>Account Statement</title>
+                <title>Transaction Statement</title>
                 <style>
-                    body { font-family: Arial, sans-serif; margin: 20px; }
-                    .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
-                    table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-                    th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
-                    th { background-color: #51087E; color: white; }
-                    .total-row { background-color: #f8f9fa; font-weight: bold; border-top: 2px solid #51087E; }
-                    .total-amount { color: #51087E; font-size: 1.1em; }
-                    .footer { text-align: center; margin-top: 20px; border-top: 2px solid #333; padding-top: 10px; }
+                    body { 
+                        font-family: Arial, sans-serif; 
+                        margin: 20px; 
+                        line-height: 1.4;
+                        color: #333;
+                    }
+                    .header { 
+                        text-align: center; 
+                        margin-bottom: 30px; 
+                        border-bottom: 3px solid #51087E; 
+                        padding-bottom: 20px; 
+                    }
+                    .company-name {
+                        font-size: 2rem;
+                        font-weight: bold;
+                        color: #51087E;
+                        margin-bottom: 5px;
+                    }
+                    .statement-title {
+                        font-size: 1.5rem;
+                        color: #666;
+                        margin-bottom: 20px;
+                    }
+                    .account-info {
+                        background: #f8f9fc;
+                        padding: 15px;
+                        border-radius: 5px;
+                        margin-bottom: 20px;
+                        border-left: 4px solid #51087E;
+                    }
+                    .info-row {
+                        display: flex;
+                        justify-content: space-between;
+                        margin-bottom: 8px;
+                    }
+                    .info-label {
+                        font-weight: 600;
+                        color: #51087E;
+                    }
+                    .summary-section {
+                        background: #e3f2fd;
+                        padding: 15px;
+                        border-radius: 5px;
+                        margin-bottom: 20px;
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                        gap: 15px;
+                    }
+                    .summary-item {
+                        text-align: center;
+                    }
+                    .summary-label {
+                        font-size: 0.9rem;
+                        color: #666;
+                        margin-bottom: 5px;
+                    }
+                    .summary-value {
+                        font-size: 1.2rem;
+                        font-weight: bold;
+                        color: #51087E;
+                    }
+                    table { 
+                        width: 100%; 
+                        border-collapse: collapse; 
+                        margin: 20px 0; 
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                    }
+                    th, td { 
+                        padding: 12px 8px; 
+                        border: 1px solid #ddd; 
+                        text-align: left; 
+                        font-size: 0.9rem;
+                    }
+                    th { 
+                        background-color: #51087E; 
+                        color: white; 
+                        font-weight: 600;
+                        text-transform: uppercase;
+                        font-size: 0.8rem;
+                        letter-spacing: 0.5px;
+                    }
+                    tbody tr:nth-child(even) {
+                        background-color: #f8f9fc;
+                    }
+                    tbody tr:hover {
+                        background-color: #e8f0fe;
+                    }
+                    .amount-credit {
+                        color: #1cc88a;
+                        font-weight: 600;
+                    }
+                    .amount-debit {
+                        color: #e74a3b;
+                        font-weight: 600;
+                    }
+                    .transaction-type {
+                        padding: 2px 6px;
+                        border-radius: 10px;
+                        font-size: 0.7rem;
+                        font-weight: 600;
+                        text-transform: uppercase;
+                    }
+                    .type-savings { background: #d4edda; color: #155724; }
+                    .type-withdrawal { background: #fff3cd; color: #856404; }
+                    .type-loan { background: #f8d7da; color: #721c24; }
+                    .type-repayment { background: #d1ecf1; color: #0c5460; }
+                    .footer { 
+                        text-align: center; 
+                        margin-top: 30px; 
+                        border-top: 2px solid #51087E; 
+                        padding-top: 15px;
+                        color: #666;
+                    }
+                    .no-transactions {
+                        text-align: center;
+                        padding: 40px;
+                        color: #666;
+                        font-style: italic;
+                    }
+                    @media print {
+                        body { margin: 0; }
+                        .header { page-break-after: avoid; }
+                    }
                 </style>
             </head>
             <body>
                 <div class="header">
-                    <h2>Lato Sacco LTD</h2>
-                    <h3>Account Statement</h3>
-                    <p><strong>Account:</strong> <?= htmlspecialchars($accountDetails['first_name'] . ' ' . $accountDetails['last_name']) ?></p>
-                    <p><strong>Period:</strong> ${startDate || 'Beginning'} to ${endDate || 'Present'}</p>
-                    <p><strong>Transaction Type:</strong> ${typeFilterText}</p>
-                    <p><strong>Total Transactions:</strong> ${transactions.length}</p>
+                    <div class="company-name">Lato Sacco LTD</div>
+                    <div class="statement-title">Transaction Statement</div>
                 </div>
+                
+                <div class="account-info">
+                    <div class="info-row">
+                        <span class="info-label">Account Holder:</span>
+                        <span><?= htmlspecialchars($accountDetails['first_name'] . ' ' . $accountDetails['last_name']) ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Shareholder No:</span>
+                        <span><?= htmlspecialchars($accountDetails['shareholder_no'] ?? 'N/A') ?></span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Statement Period:</span>
+                        <span>${startDate && endDate ? startDate + ' to ' + endDate : 'All transactions'}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Transaction Type Filter:</span>
+                        <span>${typeFilter !== 'all' ? typeFilter : 'All types'}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">Generated On:</span>
+                        <span>${new Date().toLocaleString('en-KE')}</span>
+                    </div>
+                </div>
+
+                <div class="summary-section">
+                    <div class="summary-item">
+                        <div class="summary-label">Total Transactions</div>
+                        <div class="summary-value">${transactions.length}</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-label">Total Credits</div>
+                        <div class="summary-value amount-credit">KSh ${formatCurrency(totalCredits)}</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-label">Total Debits</div>
+                        <div class="summary-value amount-debit">KSh ${formatCurrency(totalDebits)}</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-label">Net Amount</div>
+                        <div class="summary-value">${totalCredits - totalDebits >= 0 ? '+' : ''}KSh ${formatCurrency(totalCredits - totalDebits)}</div>
+                    </div>
+                </div>
+                
+                ${transactions.length > 0 ? `
                 <table>
                     <thead>
-                        <tr><th>Date</th><th>Type</th><th>Amount</th><th>Description</th></tr>
+                        <tr>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Amount</th>
+                            <th>Description</th>
+                            <th>Reference</th>
+                        </tr>
                     </thead>
                     <tbody>
                         ${transactions.map(trans => {
-                            // Extract plain text from badge if it exists
-                            const typeText = $(trans[1]).text() || trans[1];
-                            return `<tr><td>${trans[0]}</td><td>${typeText}</td><td>${trans[2]}</td><td>${trans[3]}</td></tr>`;
+                            const type = trans[1].toLowerCase();
+                            let typeClass = 'type-savings';
+                            if (type.includes('withdrawal')) typeClass = 'type-withdrawal';
+                            else if (type.includes('loan disbursement')) typeClass = 'type-loan';
+                            else if (type.includes('repayment')) typeClass = 'type-repayment';
+                            
+                            const isCredit = type.includes('savings') || type.includes('loan disbursement');
+                            const amountClass = isCredit ? 'amount-credit' : 'amount-debit';
+                            
+                            return `
+                            <tr>
+                                <td>${trans[0]}</td>
+                                <td><span class="transaction-type ${typeClass}">${trans[1].replace(/<[^>]*>/g, '')}</span></td>
+                                <td class="${amountClass}">${trans[2].replace(/<[^>]*>/g, '')}</td>
+                                <td>${trans[3] || 'N/A'}</td>
+                                <td>${trans[4] || 'N/A'}</td>
+                            </tr>
+                            `;
                         }).join('')}
-                        <tr class="total-row">
-                            <td colspan="2" style="text-align: right;"><strong>Total Amount:</strong></td>
-                            <td class="total-amount"><strong>KSh ${totalAmount.toLocaleString('en-KE', {minimumFractionDigits: 2})}</strong></td>
-                            <td></td>
-                        </tr>
                     </tbody>
                 </table>
+                ` : `
+                <div class="no-transactions">
+                    <p>No transactions found for the selected criteria.</p>
+                </div>
+                `}
+                
                 <div class="footer">
-                    <p>Statement generated on: ${new Date().toLocaleString('en-KE')}</p>
-                    <p>This statement shows ${transactions.length} transactions with a total value of KSh ${totalAmount.toLocaleString('en-KE', {minimumFractionDigits: 2})}</p>
+                    <p><strong>This is a computer-generated statement and does not require a signature.</strong></p>
+                    <p>Generated on: ${new Date().toLocaleString('en-KE')} | Lato Sacco LTD Management System</p>
                 </div>
             </body>
             </html>
@@ -631,7 +1046,94 @@ $(document).ready(function() {
         
         statementWindow.document.write(content);
         statementWindow.document.close();
-        setTimeout(() => statementWindow.print(), 500);
+        setTimeout(() => {
+            statementWindow.print();
+        }, 500);
     }
+
+    // =====================================
+    // UTILITY FUNCTIONS
+    // =====================================
+    
+    function formatCurrency(amount) {
+        return parseFloat(amount || 0).toLocaleString('en-KE', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    }
+
+    // =====================================
+    // REAL-TIME UPDATES
+    // =====================================
+    
+    // Listen for transaction updates
+    $(document).on('savingsProcessed withdrawalProcessed loanRepaymentProcessed', function() {
+        // Refresh the page to get updated transactions
+        setTimeout(() => {
+            location.reload();
+        }, 2000);
+    });
+
+    // =====================================
+    // KEYBOARD SHORTCUTS
+    // =====================================
+    
+    $(document).keydown(function(e) {
+        // Only work when transactions section is active
+        if (!$('#transactions-section').hasClass('active')) return;
+        
+        // Ctrl + P for print
+        if (e.ctrlKey && e.keyCode === 80) {
+            e.preventDefault();
+            $('#printStatement').click();
+        }
+        
+        // Ctrl + F for filter focus
+        if (e.ctrlKey && e.keyCode === 70) {
+            e.preventDefault();
+            $('#transactionFilter').focus();
+        }
+    });
+
+    // =====================================
+    // INITIALIZATION
+    // =====================================
+    
+    // Set max date for date inputs to today
+    const today = new Date().toISOString().split('T')[0];
+    $('#startDate, #endDate').attr('max', today);
+    
+    // Set default end date to today
+    $('#endDate').val(today);
+    
+    // Initialize with current month by default
+    setTimeout(() => {
+        if ($('#transactions-section').hasClass('active')) {
+            $('#transactionFilter').val('month').trigger('change');
+        }
+    }, 500);
+
+    // =====================================
+    // ERROR PREVENTION
+    // =====================================
+    
+    // Prevent any JavaScript errors that might cause browser dialogs
+    window.addEventListener('error', function(event) {
+        console.error('JavaScript Error in Transactions:', {
+            message: event.message,
+            filename: event.filename,
+            lineno: event.lineno,
+            colno: event.colno,
+            error: event.error
+        });
+        event.preventDefault();
+        return true;
+    });
+
+    // Handle promise rejections
+    window.addEventListener('unhandledrejection', function(event) {
+        console.error('Unhandled Promise Rejection in Transactions:', event.reason);
+        event.preventDefault();
+    });
 });
 </script>

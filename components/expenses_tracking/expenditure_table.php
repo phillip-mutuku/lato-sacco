@@ -38,11 +38,11 @@ class ExpenditureTable {
                     e.date as transaction_date,
                     CAST(COALESCE(e.payment_method, 'Cash') AS CHAR(50)) COLLATE utf8mb4_general_ci as payment_mode,
                     CAST(COALESCE(e.receipt_no, 'N/A') AS CHAR(50)) COLLATE utf8mb4_general_ci as receipt_no,
-                    CAST(CONCAT(u.firstname, ' ', u.lastname) AS CHAR(255)) COLLATE utf8mb4_general_ci as created_by,
+                    CAST(CONCAT(COALESCE(u.firstname, 'Unknown'), ' ', COALESCE(u.lastname, '')) AS CHAR(255)) COLLATE utf8mb4_general_ci as created_by,
                     CAST(e.status AS CHAR(20)) COLLATE utf8mb4_general_ci as status,
                     CAST(COALESCE(e.remarks, 'Business expense') AS CHAR(500)) COLLATE utf8mb4_general_ci as remarks
                 FROM expenses e
-                JOIN user u ON e.created_by = u.user_id
+                LEFT JOIN user u ON e.created_by = u.user_id
                 WHERE DATE(e.date) BETWEEN ? AND ?
                 AND e.status = 'completed'
             ";
@@ -58,7 +58,7 @@ class ExpenditureTable {
                     CAST('Financial Operations' AS CHAR(100)) COLLATE utf8mb4_general_ci as expense_category,
                     CAST(COALESCE(
                         t.description, 
-                        CONCAT('Loan disbursement to ', ca.first_name, ' ', ca.last_name),
+                        CONCAT('Loan disbursement to ', COALESCE(ca.first_name, ''), ' ', COALESCE(ca.last_name, '')),
                         'Loan disbursement'
                     ) AS CHAR(500)) COLLATE utf8mb4_general_ci as expense_description,
                     CAST(COALESCE(t.receipt_no, t.receipt_number, 'N/A') AS CHAR(50)) COLLATE utf8mb4_general_ci as reference_no,
@@ -84,19 +84,19 @@ class ExpenditureTable {
                 SELECT 
                     CAST('Group Withdrawals' AS CHAR(50)) COLLATE utf8mb4_general_ci as expense_type,
                     CAST('Client Services' AS CHAR(100)) COLLATE utf8mb4_general_ci as expense_category,
-                    CAST(CONCAT('Group withdrawal for ', lg.group_name, ' - ', ca.first_name, ' ', ca.last_name) AS CHAR(500)) COLLATE utf8mb4_general_ci as expense_description,
-                    CAST(lg.group_reference AS CHAR(50)) COLLATE utf8mb4_general_ci as reference_no,
+                    CAST(CONCAT('Group withdrawal for ', COALESCE(lg.group_name, 'Unknown Group'), ' - ', COALESCE(ca.first_name, ''), ' ', COALESCE(ca.last_name, '')) AS CHAR(500)) COLLATE utf8mb4_general_ci as expense_description,
+                    CAST(COALESCE(lg.group_reference, 'N/A') AS CHAR(50)) COLLATE utf8mb4_general_ci as reference_no,
                     gw.amount,
                     gw.date_withdrawn as transaction_date,
                     CAST(COALESCE(gw.payment_mode, 'Cash') AS CHAR(50)) COLLATE utf8mb4_general_ci as payment_mode,
                     CAST(COALESCE(gw.receipt_no, 'N/A') AS CHAR(50)) COLLATE utf8mb4_general_ci as receipt_no,
-                    CAST(CONCAT(u.firstname, ' ', u.lastname) AS CHAR(255)) COLLATE utf8mb4_general_ci as created_by,
+                    CAST(CONCAT(COALESCE(u.firstname, 'Unknown'), ' ', COALESCE(u.lastname, '')) AS CHAR(255)) COLLATE utf8mb4_general_ci as created_by,
                     CAST('Completed' AS CHAR(20)) COLLATE utf8mb4_general_ci as status,
                     CAST('Group member withdrawal' AS CHAR(500)) COLLATE utf8mb4_general_ci as remarks
                 FROM group_withdrawals gw
-                JOIN lato_groups lg ON gw.group_id = lg.group_id
-                JOIN client_accounts ca ON gw.account_id = ca.account_id
-                JOIN user u ON gw.served_by = u.user_id
+                LEFT JOIN lato_groups lg ON gw.group_id = lg.group_id
+                LEFT JOIN client_accounts ca ON gw.account_id = ca.account_id
+                LEFT JOIN user u ON gw.served_by = u.user_id
                 WHERE DATE(gw.date_withdrawn) BETWEEN ? AND ?
             ";
             $params = array_merge($params, [$this->start_date, $this->end_date]);
@@ -109,17 +109,17 @@ class ExpenditureTable {
                 SELECT 
                     CAST('Individual Withdrawals' AS CHAR(50)) COLLATE utf8mb4_general_ci as expense_type,
                     CAST('Client Services' AS CHAR(100)) COLLATE utf8mb4_general_ci as expense_category,
-                    CAST(CONCAT('Individual withdrawal for ', ca.first_name, ' ', ca.last_name) AS CHAR(500)) COLLATE utf8mb4_general_ci as expense_description,
-                    CAST(ca.shareholder_no AS CHAR(50)) COLLATE utf8mb4_general_ci as reference_no,
+                    CAST(CONCAT('Individual withdrawal for ', COALESCE(ca.first_name, ''), ' ', COALESCE(ca.last_name, '')) AS CHAR(500)) COLLATE utf8mb4_general_ci as expense_description,
+                    CAST(COALESCE(ca.shareholder_no, 'N/A') AS CHAR(50)) COLLATE utf8mb4_general_ci as reference_no,
                     s.amount,
                     s.date as transaction_date,
                     CAST(COALESCE(s.payment_mode, 'Cash') AS CHAR(50)) COLLATE utf8mb4_general_ci as payment_mode,
                     CAST(COALESCE(s.receipt_number, 'N/A') AS CHAR(50)) COLLATE utf8mb4_general_ci as receipt_no,
-                    CAST(COALESCE(s.served_by, 'Unknown') AS CHAR(255)) COLLATE utf8mb4_general_ci as created_by,
+                    CAST(COALESCE(s.served_by, 'System') AS CHAR(255)) COLLATE utf8mb4_general_ci as created_by,
                     CAST('Completed' AS CHAR(20)) COLLATE utf8mb4_general_ci as status,
                     CAST('Individual client withdrawal' AS CHAR(500)) COLLATE utf8mb4_general_ci as remarks
                 FROM savings s
-                JOIN client_accounts ca ON s.account_id = ca.account_id
+                LEFT JOIN client_accounts ca ON s.account_id = ca.account_id
                 WHERE DATE(s.date) BETWEEN ? AND ?
                 AND s.type = 'Withdrawal'
             ";
@@ -133,18 +133,18 @@ class ExpenditureTable {
                 SELECT 
                     CAST('Business Group Withdrawals' AS CHAR(50)) COLLATE utf8mb4_general_ci as expense_type,
                     CAST('Business Operations' AS CHAR(100)) COLLATE utf8mb4_general_ci as expense_category,
-                    CAST(CONCAT('Business withdrawal for ', bg.group_name) AS CHAR(500)) COLLATE utf8mb4_general_ci as expense_description,
+                    CAST(CONCAT('Business withdrawal for ', COALESCE(bg.group_name, 'Unknown Group')) AS CHAR(500)) COLLATE utf8mb4_general_ci as expense_description,
                     CAST(COALESCE(bg.reference_name, CAST(bg.account_id AS CHAR)) AS CHAR(50)) COLLATE utf8mb4_general_ci as reference_no,
                     bgt.amount,
                     bgt.date as transaction_date,
                     CAST(COALESCE(bgt.payment_mode, 'Cash') AS CHAR(50)) COLLATE utf8mb4_general_ci as payment_mode,
                     CAST(COALESCE(bgt.receipt_no, 'N/A') AS CHAR(50)) COLLATE utf8mb4_general_ci as receipt_no,
-                    CAST(CONCAT(u.firstname, ' ', u.lastname) AS CHAR(255)) COLLATE utf8mb4_general_ci as created_by,
+                    CAST(CONCAT(COALESCE(u.firstname, 'Unknown'), ' ', COALESCE(u.lastname, '')) AS CHAR(255)) COLLATE utf8mb4_general_ci as created_by,
                     CAST('Completed' AS CHAR(20)) COLLATE utf8mb4_general_ci as status,
                     CAST(COALESCE(bgt.description, 'Business group withdrawal') AS CHAR(500)) COLLATE utf8mb4_general_ci as remarks
                 FROM business_group_transactions bgt
-                JOIN business_groups bg ON bgt.group_id = bg.group_id
-                JOIN user u ON bgt.served_by = u.user_id
+                LEFT JOIN business_groups bg ON bgt.group_id = bg.group_id
+                LEFT JOIN user u ON bgt.served_by = u.user_id
                 WHERE DATE(bgt.date) BETWEEN ? AND ?
                 AND bgt.type = 'Withdrawal'
             ";
@@ -152,32 +152,7 @@ class ExpenditureTable {
             $types .= 'ss';
         }
         
-        // Float Management
-        if ($this->category === 'all' || $this->category === 'float_management') {
-            $query_parts[] = "
-                SELECT 
-                    CAST('Float Management' AS CHAR(50)) COLLATE utf8mb4_general_ci as expense_type,
-                    CAST('System Operations' AS CHAR(100)) COLLATE utf8mb4_general_ci as expense_category,
-                    CAST(CASE 
-                        WHEN fm.type = 'offload' THEN 'Cash float offload'
-                        ELSE 'Cash float addition'
-                    END AS CHAR(500)) COLLATE utf8mb4_general_ci as expense_description,
-                    CAST(fm.receipt_no AS CHAR(50)) COLLATE utf8mb4_general_ci as reference_no,
-                    fm.amount,
-                    fm.date_created as transaction_date,
-                    CAST('Cash' AS CHAR(50)) COLLATE utf8mb4_general_ci as payment_mode,
-                    CAST(fm.receipt_no AS CHAR(50)) COLLATE utf8mb4_general_ci as receipt_no,
-                    CAST(CONCAT(u.firstname, ' ', u.lastname) AS CHAR(255)) COLLATE utf8mb4_general_ci as created_by,
-                    CAST('Completed' AS CHAR(20)) COLLATE utf8mb4_general_ci as status,
-                    CAST('Float management operation' AS CHAR(500)) COLLATE utf8mb4_general_ci as remarks
-                FROM float_management fm
-                JOIN user u ON fm.user_id = u.user_id
-                WHERE DATE(fm.date_created) BETWEEN ? AND ?
-                AND fm.type = 'offload'
-            ";
-            $params = array_merge($params, [$this->start_date, $this->end_date]);
-            $types .= 'ss';
-        }
+
         
         // If no query parts, return empty
         if (empty($query_parts)) {
@@ -378,11 +353,14 @@ class ExpenditureTable {
             var totalRows = expenditureFilteredData.length;
             var totalPages = Math.ceil(totalRows / expenditureRowsPerPage);
             var pagination = document.getElementById('expenditureTablePagination');
+            
+            if (!pagination) return;
+            
             pagination.innerHTML = '';
             
             if (totalPages <= 1) {
                 var infoDiv = document.getElementById('expenditureTableInfo');
-                if (totalRows > 0) {
+                if (infoDiv && totalRows > 0) {
                     infoDiv.innerHTML = 'Showing all ' + totalRows + ' entries';
                 }
                 return;
@@ -391,7 +369,18 @@ class ExpenditureTable {
             // Previous button
             var prevLi = document.createElement('li');
             prevLi.className = 'page-item' + (expenditureCurrentPage === 1 ? ' disabled' : '');
-            prevLi.innerHTML = '<a class=\"page-link\" href=\"#\" onclick=\"event.preventDefault(); if(' + expenditureCurrentPage + ' > 1) displayExpenditureTablePage(' + (expenditureCurrentPage - 1) + ')\">&laquo;</a>';
+            var prevA = document.createElement('a');
+            prevA.className = 'page-link';
+            prevA.href = '#';
+            prevA.innerHTML = '&laquo;';
+            prevA.style.cursor = 'pointer';
+            prevA.onclick = function(e) {
+                e.preventDefault();
+                if (expenditureCurrentPage > 1) {
+                    displayExpenditureTablePage(expenditureCurrentPage - 1);
+                }
+            };
+            prevLi.appendChild(prevA);
             pagination.appendChild(prevLi);
             
             // Page numbers
@@ -401,21 +390,45 @@ class ExpenditureTable {
             for (var i = startPage; i <= endPage; i++) {
                 var li = document.createElement('li');
                 li.className = 'page-item' + (i === expenditureCurrentPage ? ' active' : '');
-                li.innerHTML = '<a class=\"page-link\" href=\"#\" onclick=\"event.preventDefault(); displayExpenditureTablePage(' + i + ')\">' + i + '</a>';
+                var a = document.createElement('a');
+                a.className = 'page-link';
+                a.href = '#';
+                a.innerHTML = i;
+                a.style.cursor = 'pointer';
+                a.onclick = (function(pageNum) {
+                    return function(e) {
+                        e.preventDefault();
+                        displayExpenditureTablePage(pageNum);
+                    };
+                })(i);
+                li.appendChild(a);
                 pagination.appendChild(li);
             }
             
             // Next button
             var nextLi = document.createElement('li');
             nextLi.className = 'page-item' + (expenditureCurrentPage === totalPages ? ' disabled' : '');
-            nextLi.innerHTML = '<a class=\"page-link\" href=\"#\" onclick=\"event.preventDefault(); if(' + expenditureCurrentPage + ' < ' + totalPages + ') displayExpenditureTablePage(' + (expenditureCurrentPage + 1) + ')\">&raquo;</a>';
+            var nextA = document.createElement('a');
+            nextA.className = 'page-link';
+            nextA.href = '#';
+            nextA.innerHTML = '&raquo;';
+            nextA.style.cursor = 'pointer';
+            nextA.onclick = function(e) {
+                e.preventDefault();
+                if (expenditureCurrentPage < totalPages) {
+                    displayExpenditureTablePage(expenditureCurrentPage + 1);
+                }
+            };
+            nextLi.appendChild(nextA);
             pagination.appendChild(nextLi);
             
             // Update info display
             var startRow = totalRows > 0 ? ((expenditureCurrentPage - 1) * expenditureRowsPerPage) + 1 : 0;
             var endRow = Math.min(expenditureCurrentPage * expenditureRowsPerPage, totalRows);
             var infoDiv = document.getElementById('expenditureTableInfo');
-            infoDiv.innerHTML = 'Showing ' + startRow + ' to ' + endRow + ' of ' + totalRows + ' entries';
+            if (infoDiv) {
+                infoDiv.innerHTML = 'Showing ' + startRow + ' to ' + endRow + ' of ' + totalRows + ' entries';
+            }
         }
         
         // Initialize when DOM is ready

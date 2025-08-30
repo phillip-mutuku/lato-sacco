@@ -4,13 +4,12 @@
     require_once '../config/class.php';
     $db = new db_class();
 
- // Check if user is logged in and is either an admin or manager
-if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'manager')) {
-    $_SESSION['error_msg'] = "Unauthorized access";
-    header('Location: index.php');
-    exit();
-}
-
+    // Check if user is logged in and is either an admin or manager
+    if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'manager')) {
+        $_SESSION['error_msg'] = "Unauthorized access";
+        header('Location: index.php');
+        exit();
+    }
 
     // Get filter parameters
     $transaction_type = isset($_GET['transaction_type']) ? $_GET['transaction_type'] : 'all';
@@ -118,8 +117,6 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
     <link href="../public/fontawesome-free/css/all.min.css" rel="stylesheet" type="text/css">
     <link href="../public/css/sb-admin-2.css" rel="stylesheet">
     <link href="../public/css/dataTables.bootstrap4.css" rel="stylesheet">
-    <link href="../public/css/select2.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css" rel="stylesheet">
     <style>
         .modal-lg { max-width: 80% !important; }
         .form-group label { font-weight: bold; }
@@ -138,42 +135,23 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
             border: 0;
         }
 
-        .select2-container--default .select2-selection--single {
-        height: calc(1.5em + .75rem + 2px);
-        padding: .375rem .75rem;
-        border: 1px solid #d1d3e2;
-        border-radius: .35rem;
-    }
+        .modal-body .form-group label {
+            font-weight: 600;
+            color: #4e73df;
+        }
 
-    .select2-container--default .select2-selection--single .select2-selection__rendered {
-        line-height: 1.5;
-        padding-left: 0;
-        color: #6e707e;
-    }
-
-    .select2-container--default .select2-selection--single .select2-selection__arrow {
-        height: calc(1.5em + .75rem + 2px);
-    }
-
-    .is-invalid + .select2-container .select2-selection--single {
-        border-color: #e74a3b;
-    }
-
-    .modal-body .form-group label {
-        font-weight: 600;
-        color: #4e73df;
-    }
-
-    .text-danger {
-        color: #e74a3b !important;
-    }
-    .filter-section {
+        .text-danger {
+            color: #e74a3b !important;
+        }
+        
+        .filter-section {
             background-color: #f8f9fc;
             padding: 20px;
             border-radius: 5px;
             margin-bottom: 20px;
             box-shadow: 0 0 10px rgba(0,0,0,0.1);
         }
+        
         .summary-card {
             background-color: #fff;
             padding: 15px;
@@ -181,544 +159,101 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
             margin-bottom: 15px;
             box-shadow: rgb(204, 219, 232) 3px 3px 6px 0px inset, rgba(255, 255, 255, 0.5) -3px -3px 6px 1px inset;
         }
+        
         .date-range-picker {
             display: none;
         }
+        
         .date-range-picker.active {
             display: block;
         }
 
-
         @media print {
-        .statement-print-area {
-            display: block;
+            .statement-print-area {
+                display: block;
+                width: 100%;
+                padding: 20px;
+            }
+            .summary-table, .category-table, .transaction-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 20px;
+            }
+            .summary-table td, .category-table td, 
+            .transaction-table th, .transaction-table td {
+                padding: 8px;
+                border: 1px solid #ddd;
+            }
+            .transaction-table th {
+                background-color: #f8f9fc !important;
+                -webkit-print-color-adjust: exact;
+            }
+            .text-success { color: #28a745 !important; }
+            .text-danger { color: #dc3545 !important; }
+            .no-print { display: none !important; }
+        }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
             width: 100%;
-            padding: 20px;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
         }
-        .summary-table, .category-table, .transaction-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 20px;
-        }
-        .summary-table td, .category-table td, 
-        .transaction-table th, .transaction-table td {
-            padding: 8px;
-            border: 1px solid #ddd;
-        }
-        .transaction-table th {
-            background-color: #f8f9fc !important;
-            -webkit-print-color-adjust: exact;
-        }
-        .text-success { color: #28a745 !important; }
-        .text-danger { color: #dc3545 !important; }
-        .no-print { display: none !important; }
-    }
 
-    .loading-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(255, 255, 255, 0.8);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 9999;
-}
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #51087E;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
 
-.spinner {
-    width: 50px;
-    height: 50px;
-    border: 5px solid #f3f3f3;
-    border-top: 5px solid #51087E;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 
 <body id="page-top">
     <div id="wrapper">
- <!-- Import Sidebar -->
-            <?php require_once '../components/includes/sidebar.php'; ?>
+        <!-- Import Sidebar -->
+        <?php require_once '../components/includes/sidebar.php'; ?>
 
-                <div class="container-fluid pt-4">
-
-                <!--Filtering-->
-                <div class="filter-section">
-                        <form id="filterForm" method="GET" class="row">
-                            <div class="col-md-3 mb-3">
-                                <label class="font-weight-bold">Transaction Type</label>
-                                <select name="transaction_type" class="form-control">
-                                    <option value="all" <?php echo $transaction_type === 'all' ? 'selected' : ''; ?>>All Transactions</option>
-                                    <option value="expenses" <?php echo $transaction_type === 'expenses' ? 'selected' : ''; ?>>Expenses Only</option>
-                                    <option value="received" <?php echo $transaction_type === 'received' ? 'selected' : ''; ?>>Money Received Only</option>
-                                </select>
-                            </div>
-                            <div class="col-md-3 mb-3">
-                                <label class="font-weight-bold">Date Range</label>
-                                <select name="date_range" class="form-control" id="dateRangeSelect">
-                                    <option value="all" <?php echo $date_range === 'all' ? 'selected' : ''; ?>>All Time</option>
-                                    <option value="today" <?php echo $date_range === 'today' ? 'selected' : ''; ?>>Today</option>
-                                    <option value="week" <?php echo $date_range === 'week' ? 'selected' : ''; ?>>This Week</option>
-                                    <option value="month" <?php echo $date_range === 'month' ? 'selected' : ''; ?>>This Month</option>
-                                    <option value="year" <?php echo $date_range === 'year' ? 'selected' : ''; ?>>This Year</option>
-                                    <option value="custom" <?php echo $date_range === 'custom' ? 'selected' : ''; ?>>Custom Range</option>
-                                </select>
-                            </div>
-                            <div class="col-md-4 date-range-picker <?php echo $date_range === 'custom' ? 'active' : ''; ?>">
-                                <div class="row">
-                                    <div class="col-6">
-                                        <label class="font-weight-bold">Start Date</label>
-                                        <input type="date" name="start_date" class="form-control" value="<?php echo $start_date; ?>">
-                                    </div>
-                                    <div class="col-6">
-                                        <label class="font-weight-bold">End Date</label>
-                                        <input type="date" name="end_date" class="form-control" value="<?php echo $end_date; ?>">
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-4 mt-4">
-                                <div class="d-flex">
-                                    <button type="submit" class="btn btn-warning mr-2">Apply Filter</button>
-                                    <button type="button" class="btn btn-success" onclick="generateReport()">
-                                        <i class="fas fa-download"></i> Generate Report
-                                    </button>
-                                </div>
-                            </div>
-                        </form>
-                    </div>
-
-        <!-- Summary Cards -->
-        <div class="row mb-4">
-            <div class="col-md-4">
-                <div class="summary-card">
-                    <h6 class="font-weight-bold text-primary">Total Expenses</h6>
-                    <h4 class="text-danger">KSh <?php echo number_format($total_expenses, 2); ?></h4>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="summary-card">
-                    <h6 class="font-weight-bold text-primary">Total Received</h6>
-                    <h4 class="text-success">KSh <?php echo number_format($total_received, 2); ?></h4>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="summary-card">
-                    <h6 class="font-weight-bold text-primary">Net Balance</h6>
-                    <h4 class="<?php echo ($total_received - $total_expenses) >= 0 ? 'text-success' : 'text-danger'; ?>">
-                        KSh <?php echo number_format($total_received - $total_expenses, 2); ?>
-                    </h4>
-                </div>
-            </div>
-        </div>
-
-
-    <!--Manage expenses and income begins-->
-                    <div class="d-sm-flex align-items-center justify-content-between mb-4">
-                        <h1 class="h3 mb-0 text-gray-800">Manage Expenses & Income</h1>
-                    </div>
-                    
-                    <div class="mb-2 d-flex justify-content-between">
-                        <button class="btn btn-lg btn-warning" href="#" data-toggle="modal" data-target="#addExpenseModal">
-                            <span class="fa fa-minus-circle"></span> Add New Expense
-                        </button>
-                        <button class="btn btn-lg btn-success" href="#" data-toggle="modal" data-target="#addReceivedModal">
-                            <span class="fa fa-plus-circle"></span> Add Money Received
-                        </button>
-                    </div>
-
-                    <div class="card mb-4">
-                            <div class="card-header py-3">
-                                <h6 style="color: #51087E;" class="m-0 font-weight-bold">Recent Transactions</h6>
-                            </div>
-                            <div class="card-body">
-                                <div class="table-responsive">
-                                    <table class="table table-bordered" id="transactionTable" width="100%" cellspacing="0">
-                                        <thead>
-                                            <tr>
-                                                <th>Date</th>
-                                                <th>Receipt No</th>
-                                                <th>Category</th>
-                                                <th>Description</th>
-                                                <th>Amount</th>
-                                                <th>Payment Method</th>
-                                                <th>Status</th>
-                                                <th>Remarks</th>
-                                                <th>Created By</th>
-                                                <th>Action</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <?php 
-                                            if ($transactions && $transactions->num_rows > 0):
-                                                while($transaction = $transactions->fetch_assoc()): 
-                                            ?>
-                                                <tr>
-                                                    <td><?php echo date('Y-m-d H:i', strtotime($transaction['date'])); ?></td>
-                                                    <td><?php echo $transaction['receipt_no']; ?></td>
-                                                    <td><?php echo $transaction['main_category']; ?></td>
-                                                    <td><?php echo htmlspecialchars($transaction['description']); ?></td>
-                                                    <td class="<?php echo $transaction['status'] === 'received' ? 'text-success' : 'text-danger'; ?>">
-                                                        KSh <?php echo number_format($transaction['signed_amount'], 2); ?>
-                                                    </td>
-                                                    <td><?php echo $transaction['payment_method']; ?></td>
-                                                    <td>
-                                                        <span class="badge badge-<?php 
-                                                            if ($transaction['status'] == 'received') {
-                                                                echo 'success';
-                                                            } elseif ($transaction['status'] == 'completed') {
-                                                                echo 'danger';
-                                                            } else {
-                                                                echo 'warning';
-                                                            }
-                                                        ?>">
-                                                            <?php 
-                                                            if ($transaction['status'] == 'received') {
-                                                                echo 'Received';
-                                                            } elseif ($transaction['status'] == 'completed') {
-                                                                echo 'Expense';
-                                                            } else {
-                                                                echo ucfirst($transaction['status']);
-                                                            }
-                                                            ?>
-                                                        </span>
-                                                    </td>
-                                                    <td><?php echo htmlspecialchars($transaction['remarks']); ?></td>
-                                                    <td><?php echo $transaction['created_by_name']; ?></td>
-                                                    <td>
-                                                        <button class="btn btn-sm btn-warning print-receipt mr-2" 
-                                                                data-transaction='<?php echo json_encode($transaction); ?>'>
-                                                            <i class="fas fa-print"></i> Print
-                                                        </button>
-                                                        <button class="btn btn-sm btn-danger delete-transaction" 
-                                                                data-receipt-no="<?php echo htmlspecialchars($transaction['receipt_no']); ?>"
-                                                                data-id="<?php echo htmlspecialchars($transaction['id']); ?>">
-                                                            <i class="fas fa-trash"></i> Delete
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            <?php 
-                                                endwhile;
-                                            else:
-                                            ?>
-                                                <tr>
-                                                    <td colspan="10" class="text-center">No transactions found</td>
-                                                </tr>
-                                            <?php endif; ?>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                </div>
-            </div>
-
-
-
-              <!-- Footer -->
-              <footer class="sticky-footer bg-white">
-                    <div class="container my-auto">
-                        <div class="copyright text-center my-auto">
-                            <span>Copyright &copy; Lato Management System <?php echo date("Y")?></span>
-                        </div>
-                    </div>
-                </footer>
-                <!-- End of Footer -->
-
-
-        </div>
-    </div>
-
-<!-- Add Expense Modal -->
-<div class="modal fade" id="addExpenseModal" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <form method="POST" action="../controllers/save_expense.php" id="expenseForm">
-            <div class="modal-content">
-                <div style="background-color: #51087E;" class="modal-header">
-                    <h5 class="modal-title text-white">Add New Expense</h5>
-                    <button class="close" type="button" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">×</span>
-                    </button>
-                </div>
-                <div class="modal-body">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label>Category <span class="text-danger">*</span></label>
-                                <select name="main_category" class="form-control select2" required>
-                                    <option value="">Select Category</option>
-                                    <?php 
-                                    $categories_query = "SELECT DISTINCT category FROM expenses_categories ORDER BY category";
-                                    $categories_result = $db->conn->query($categories_query);
-                                    while($cat = $categories_result->fetch_assoc()): 
-                                    ?>
-                                        <option value="<?php echo htmlspecialchars($cat['category']); ?>">
-                                            <?php echo htmlspecialchars($cat['category']); ?>
-                                        </option>
-                                    <?php endwhile; ?>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label>Expense Name <span class="text-danger">*</span></label>
-                                <select name="category" class="form-control select2" required>
-                                    <option value="">Select Expense Name</option>
-                                    <?php 
-                                    $names_query = "SELECT DISTINCT name FROM expenses_categories ORDER BY name";
-                                    $names_result = $db->conn->query($names_query);
-                                    while($name = $names_result->fetch_assoc()): 
-                                    ?>
-                                        <option value="<?php echo htmlspecialchars($name['name']); ?>">
-                                            <?php echo htmlspecialchars($name['name']); ?>
-                                        </option>
-                                    <?php endwhile; ?>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label>Amount (KSh) <span class="text-danger">*</span></label>
-                                <input type="number" name="amount" class="form-control" required step="0.01" min="0">
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label>Payment Method <span class="text-danger">*</span></label>
-                                <select name="payment_method" class="form-control select2" required>
-                                    <option value="">Select Payment Method</option>
-                                    <option value="Cash">Cash</option>
-                                    <option value="Bank Transfer">Bank Transfer</option>
-                                    <option value="Mobile Money">Mobile Money</option>
-                                    <option value="Cheque">Cheque</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label>Date <span class="text-danger">*</span></label>
-                                <input type="date" name="date" class="form-control" required>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label>Status</label>
-                                <input type="text" name="status" value="completed" class="form-control" readonly>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Receipt No. <span class="text-danger">*</span></label>
-                        <input type="text" name="receipt_no" class="form-control" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Description</label>
-                        <textarea name="description" class="form-control" rows="2" placeholder="Enter expense description"></textarea>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Remarks</label>
-                        <textarea name="remarks" class="form-control" rows="2" placeholder="Enter additional remarks if any"></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                    <button type="submit" name="save_expense" class="btn btn-warning">Save Expense</button>
-                </div>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- Add Money Received Modal -->
-<div class="modal fade" id="addReceivedModal" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <form method="POST" action="../controllers/save_expense.php" id="receivedForm">
-            <div class="modal-content">
-                <div style="background-color: #28a745;" class="modal-header">
-                    <h5 class="modal-title text-white">Add Money Received</h5>
-                    <button class="close" type="button" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">×</span>
-                    </button>
-                </div>
-                <div class="modal-body">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label>Category <span class="text-danger">*</span></label>
-                                <select name="main_category" class="form-control select2" required>
-                                    <option value="">Select Category</option>
-                                    <?php 
-                                    $categories_result->data_seek(0); // Reset pointer
-                                    while($cat = $categories_result->fetch_assoc()): 
-                                    ?>
-                                        <option value="<?php echo htmlspecialchars($cat['category']); ?>">
-                                            <?php echo htmlspecialchars($cat['category']); ?>
-                                        </option>
-                                    <?php endwhile; ?>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label>Income Source <span class="text-danger">*</span></label>
-                                <select name="category" class="form-control select2" required>
-                                    <option value="">Select Income Source</option>
-                                    <?php 
-                                    $names_result->data_seek(0); // Reset pointer
-                                    while($name = $names_result->fetch_assoc()): 
-                                    ?>
-                                        <option value="<?php echo htmlspecialchars($name['name']); ?>">
-                                            <?php echo htmlspecialchars($name['name']); ?>
-                                        </option>
-                                    <?php endwhile; ?>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label>Amount (KSh) <span class="text-danger">*</span></label>
-                                <input type="number" name="amount" class="form-control" required step="0.01" min="0">
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label>Payment Method <span class="text-danger">*</span></label>
-                                <select name="payment_method" class="form-control select2" required>
-                                    <option value="">Select Payment Method</option>
-                                    <option value="Cash">Cash</option>
-                                    <option value="Bank Transfer">Bank Transfer</option>
-                                    <option value="Mobile Money">Mobile Money</option>
-                                    <option value="Cheque">Cheque</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label>Date <span class="text-danger">*</span></label>
-                                <input type="date" name="date" class="form-control" required>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label>Status</label>
-                                <input type="text" name="status" value="received" class="form-control" readonly>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Receipt No. <span class="text-danger">*</span></label>
-                        <input type="text" name="receipt_no" class="form-control" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Description</label>
-                        <textarea name="description" class="form-control" rows="2" placeholder="Enter description"></textarea>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Remarks</label>
-                        <textarea name="remarks" class="form-control" rows="2" placeholder="Enter additional remarks if any"></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                    <button type="submit" name="save_expense" class="btn btn-success">Save Transaction</button>
-                </div>
-            </div>
-        </form>
-    </div>
-</div>
-
-
-
-    <!-- Receipt Modal -->
-    <div class="modal fade" id="receiptModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Expense Receipt</h5>
-                    <button type="button" class="close" data-dismiss="modal">
-                        <span>&times;</span>
-                    </button>
-                </div>
-                <div class="modal-body">
-                    <div id="receiptContent" class="receipt"></div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                    <button type="button" class="btn btn-warning" onclick="printReceipt()">Print</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-
-        <!-- Statement Print Template (hidden) -->
-        <div id="statementTemplate" style="display: none;">
-        <div class="statement-header">
-            <h2>LATO SACCO LTD</h2>
-            <h3>Transaction Statement</h3>
-            <p>Period: <span id="statementPeriod"></span></p>
-        </div>
-        <div class="statement-summary">
-            <h4>Summary</h4>
-            <table class="summary-table">
-                <tr>
-                    <td>Total Expenses:</td>
-                    <td>KSh <?php echo number_format($total_expenses, 2); ?></td>
-                </tr>
-                <tr>
-                    <td>Total Received:</td>
-                    <td>KSh <?php echo number_format($total_received, 2); ?></td>
-                </tr>
-                <tr>
-                    <td>Net Balance:</td>
-                    <td>KSh <?php echo number_format($total_received - $total_expenses, 2); ?></td>
-                </tr>
-            </table>
+        <div class="container-fluid pt-4">
             
-            <h4>Category Breakdown</h4>
-            <table class="category-table">
-                <?php foreach ($category_totals as $category => $total): ?>
-                <tr>
-                    <td><?php echo htmlspecialchars($category); ?>:</td>
-                    <td>KSh <?php echo number_format($total, 2); ?></td>
-                </tr>
-                <?php endforeach; ?>
-            </table>
+            <!-- Stats Section Component -->
+            <?php require_once '../components/manage_expenses/stats_section.php'; ?>
+
+            <!-- Transactions Table Component -->
+            <?php require_once '../components/manage_expenses/transactions_table.php'; ?>
+
         </div>
-        <div class="statement-details">
-            <h4>Transaction Details</h4>
-            <table class="transaction-table">
-                <!-- Transaction details will be populated via JavaScript -->
-            </table>
-        </div>
+        
+        <!-- Footer -->
+        <footer class="sticky-footer bg-white">
+            <div class="container my-auto">
+                <div class="copyright text-center my-auto">
+                    <span>Copyright &copy; Lato Management System <?php echo date("Y")?></span>
+                </div>
+            </div>
+        </footer>
+        <!-- End of Footer -->
+
     </div>
 
+    <!-- Modals Section Component -->
+    <?php require_once '../components/manage_expenses/modals_section.php'; ?>
 
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
 
     <!-- Scripts -->
     <script src="../public/js/jquery.js"></script>
@@ -727,11 +262,167 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
     <script src="../public/js/sb-admin-2.js"></script>
     <script src="../public/js/jquery.dataTables.js"></script>
     <script src="../public/js/dataTables.bootstrap4.js"></script>
-    <script src="../public/js/select2.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 
     <script>
 $(document).ready(function() {
+    
+    // Toast Notification System
+    window.showToast = function(message, type = 'success') {
+        const toastContainer = document.getElementById('toastContainer');
+        const toastId = 'toast_' + Date.now();
+        
+        const toastHtml = `
+            <div class="toast ${type}" id="${toastId}">
+                <div class="toast-header">
+                    <strong class="me-auto">${type === 'success' ? 'Success' : 'Error'}</strong>
+                    <button type="button" class="toast-close" onclick="hideToast('${toastId}')">&times;</button>
+                </div>
+                <div class="toast-body">${message}</div>
+            </div>
+        `;
+        
+        toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+        
+        // Show toast
+        setTimeout(() => {
+            document.getElementById(toastId).classList.add('show');
+        }, 100);
+        
+        // Auto hide after 5 seconds
+        setTimeout(() => {
+            hideToast(toastId);
+        }, 5000);
+    };
+
+    window.hideToast = function(toastId) {
+        const toast = document.getElementById(toastId);
+        if (toast) {
+            toast.classList.remove('show');
+            setTimeout(() => {
+                toast.remove();
+            }, 300);
+        }
+    };
+
+    // Enhanced Select Component
+    class EnhancedSelect {
+        constructor(container) {
+            this.container = container;
+            this.select = container.querySelector('select');
+            this.dropdown = container.querySelector('.dropdown-container');
+            this.searchInput = container.querySelector('.search-input');
+            this.optionsContainer = container.querySelector('.options-container');
+            this.isOpen = false;
+            this.options = Array.from(this.select.options).filter(opt => opt.value !== '');
+            
+            this.init();
+        }
+        
+        init() {
+            this.buildOptions();
+            this.bindEvents();
+        }
+        
+        buildOptions() {
+            this.optionsContainer.innerHTML = '';
+            this.options.forEach(option => {
+                const optionDiv = document.createElement('div');
+                optionDiv.className = 'option-item';
+                optionDiv.textContent = option.text;
+                optionDiv.dataset.value = option.value;
+                optionDiv.addEventListener('click', () => this.selectOption(option.value, option.text));
+                this.optionsContainer.appendChild(optionDiv);
+            });
+        }
+        
+        bindEvents() {
+            // Click on select to toggle dropdown
+            this.select.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.toggle();
+            });
+            
+            // Search functionality
+            this.searchInput.addEventListener('input', (e) => {
+                this.filterOptions(e.target.value);
+            });
+            
+            // Close on outside click
+            document.addEventListener('click', (e) => {
+                if (!this.container.contains(e.target)) {
+                    this.close();
+                }
+            });
+            
+            // Prevent dropdown from closing when clicking inside
+            this.dropdown.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+        }
+        
+        toggle() {
+            if (this.isOpen) {
+                this.close();
+            } else {
+                this.open();
+            }
+        }
+        
+        open() {
+            // Close other open dropdowns
+            document.querySelectorAll('.enhanced-select .dropdown-container.show').forEach(dropdown => {
+                if (dropdown !== this.dropdown) {
+                    dropdown.classList.remove('show');
+                }
+            });
+            
+            this.isOpen = true;
+            this.dropdown.classList.add('show');
+            this.searchInput.value = '';
+            this.searchInput.focus();
+            this.filterOptions('');
+        }
+        
+        close() {
+            this.isOpen = false;
+            this.dropdown.classList.remove('show');
+        }
+        
+        selectOption(value, text) {
+            this.select.value = value;
+            this.select.dispatchEvent(new Event('change', { bubbles: true }));
+            this.close();
+            
+            // Remove validation error if present
+            this.select.classList.remove('is-invalid');
+        }
+        
+        filterOptions(searchTerm) {
+            const term = searchTerm.toLowerCase();
+            this.optionsContainer.querySelectorAll('.option-item').forEach(option => {
+                const text = option.textContent.toLowerCase();
+                option.style.display = text.includes(term) ? 'block' : 'none';
+            });
+        }
+        
+        reset() {
+            this.select.selectedIndex = 0;
+            this.close();
+        }
+    }
+    
+    // Initialize enhanced selects
+    function initializeEnhancedSelects() {
+        document.querySelectorAll('.enhanced-select').forEach(container => {
+            if (!container.enhancedSelect) {
+                container.enhancedSelect = new EnhancedSelect(container);
+            }
+        });
+    }
+    
+    // Initialize on page load
+    initializeEnhancedSelects();
+
     // Initialize DataTable
     $('#transactionTable').DataTable({
         pageLength: 10,
@@ -748,20 +439,6 @@ $(document).ready(function() {
         }
     });
 
-    // Initialize Select2 for all select elements
-    $('.select2').select2({
-        width: '100%',
-        dropdownParent: function() {
-            return $(this).closest('.modal');
-        }
-    });
-
-    // Initialize Flatpickr date picker
-    $('input[type="date"]').flatpickr({
-        dateFormat: "Y-m-d",
-        maxDate: "today"
-    });
-
     // Handle date range picker visibility
     $('#dateRangeSelect').change(function() {
         if ($(this).val() === 'custom') {
@@ -771,15 +448,14 @@ $(document).ready(function() {
         }
     });
 
-    // Form validation and submission
+    // Form validation and submission - Simplified
     $('#expenseForm, #receivedForm').on('submit', function(e) {
-        e.preventDefault();
         const form = $(this);
-        
-        // Validate form
         let isValid = true;
+        
+        // Simple validation - check required fields
         form.find('[required]').each(function() {
-            if (!$(this).val()) {
+            if (!$(this).val() || $(this).val() === '') {
                 isValid = false;
                 $(this).addClass('is-invalid');
             } else {
@@ -789,15 +465,16 @@ $(document).ready(function() {
 
         if (!isValid) {
             alert('Please fill in all required fields');
+            e.preventDefault();
             return false;
         }
-
-        // Submit form normally
-        form[0].submit();
+        
+        // If validation passes, let the form submit normally
+        // Don't preventDefault here - let it go to the server
     });
 
     // Clear validation on input change
-    $('.form-control, .select2').on('change keyup', function() {
+    $('.form-control').on('change keyup', function() {
         $(this).removeClass('is-invalid');
     });
 
@@ -805,8 +482,8 @@ $(document).ready(function() {
     $('.print-receipt').on('click', function() {
         const transaction = $(this).data('transaction');
         const isReceived = transaction.status === 'received';
-        const amount = parseFloat(transaction.signed_amount);
-        const formattedAmount = (amount >= 0 ? '+' : '') + amount.toLocaleString(undefined, {minimumFractionDigits: 2});
+        const amount = parseFloat(transaction.amount);
+        const formattedAmount = amount.toLocaleString(undefined, {minimumFractionDigits: 2});
         
         const receiptHtml = `
             <div class="receipt-header text-center">
@@ -818,10 +495,11 @@ $(document).ready(function() {
                 <p><strong>Receipt No:</strong> ${transaction.receipt_no}</p>
                 <p><strong>Date:</strong> ${new Date(transaction.date).toLocaleString()}</p>
                 <p><strong>Category:</strong> ${transaction.main_category}</p>
+                <p><strong>Expense Name:</strong> ${transaction.expense_name || transaction.category}</p>
                 <p><strong>Description:</strong> ${transaction.description || 'N/A'}</p>
                 <p><strong>Amount:</strong> KSh ${formattedAmount}</p>
                 <p><strong>Payment Method:</strong> ${transaction.payment_method}</p>
-                <p><strong>Status:</strong> ${transaction.status}</p>
+                <p><strong>Status:</strong> ${isReceived ? 'Received' : 'Expense'}</p>
                 <p><strong>Remarks:</strong> ${transaction.remarks || 'N/A'}</p>
                 <p><strong>Created By:</strong> ${transaction.created_by_name}</p>
             </div>
@@ -835,34 +513,45 @@ $(document).ready(function() {
         $('#receiptModal').modal('show');
     });
 
-    // Delete transaction handler
+    // Delete transaction handler - Updated to use modal
+    let deleteTransactionId = null;
     $('.delete-transaction').on('click', function(e) {
         e.preventDefault();
-        const transactionId = $(this).data('id');
+        deleteTransactionId = $(this).data('id');
         const receiptNo = $(this).data('receipt-no');
         
-        if (confirm(`Are you sure you want to delete transaction with receipt no: ${receiptNo}? This action cannot be undone.`)) {
+        $('#deleteReceiptNo').text(receiptNo);
+        $('#deleteConfirmModal').modal('show');
+    });
+
+    // Handle actual deletion when confirmed
+    $('#confirmDeleteBtn').on('click', function() {
+        if (deleteTransactionId) {
+            $('#deleteConfirmModal').modal('hide');
             $('body').append('<div class="loading-overlay"><div class="spinner"></div></div>');
             
             $.ajax({
                 url: '../controllers/delete_transaction.php',
                 method: 'POST',
-                data: { transaction_id: transactionId },
+                data: { transaction_id: deleteTransactionId },
                 dataType: 'json',
                 success: function(response) {
                     if (response.success) {
-                        alert('Transaction deleted successfully');
-                        location.reload();
+                        showToast('Transaction deleted successfully', 'success');
+                        setTimeout(() => {
+                            location.reload();
+                        }, 1500);
                     } else {
-                        alert('Error: ' + (response.error || 'Failed to delete transaction'));
+                        showToast('Error: ' + (response.error || 'Failed to delete transaction'), 'error');
                     }
                 },
                 error: function(xhr, status, error) {
                     console.error('Delete Error:', xhr.responseText);
-                    alert('Error: Failed to delete transaction');
+                    showToast('Error: Failed to delete transaction', 'error');
                 },
                 complete: function() {
                     $('.loading-overlay').remove();
+                    deleteTransactionId = null;
                 }
             });
         }
@@ -910,7 +599,7 @@ $(document).ready(function() {
 
         if (date_range === 'custom' && (!start_date || !end_date)) {
             $('.loading-overlay').remove();
-            alert('Please select both start and end dates for custom range');
+            showToast('Please select both start and end dates for custom range', 'error');
             return;
         }
         
@@ -928,89 +617,34 @@ $(document).ready(function() {
         }, 2000);
     };
 
-    // Initialize modals
+    // Initialize modals - Enhanced
     $('#addExpenseModal, #addReceivedModal').on('show.bs.modal', function() {
         $(this).find('form')[0].reset();
-        $(this).find('select').val('').trigger('change');
+        $(this).find('.is-invalid').removeClass('is-invalid');
+        
+        // Re-initialize enhanced selects
+        setTimeout(() => {
+            initializeEnhancedSelects();
+        }, 100);
     });
+
+    // Show PHP session messages as toasts
+    <?php if (isset($_SESSION['success_msg'])): ?>
+    setTimeout(() => {
+        showToast('<?php echo addslashes($_SESSION['success_msg']); ?>', 'success');
+    }, 500);
+    <?php unset($_SESSION['success_msg']); ?>
+    <?php endif; ?>
+
+    <?php if (isset($_SESSION['error_msg'])): ?>
+    setTimeout(() => {
+        showToast('<?php echo addslashes($_SESSION['error_msg']); ?>', 'error');
+    }, 500);
+    <?php unset($_SESSION['error_msg']); ?>
+    <?php endif; ?>
+
 });
-</script>
+    </script>
 
-
-
-   <!-- Logout Modal -->
-<div class="modal fade" id="logoutModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header bg-danger">
-                <h5 class="modal-title text-white">Ready to Leave?</h5>
-                <button class="close" type="button" data-dismiss="modal" aria-label="Close">
-                    <span aria-hidden="true">×</span>
-                </button>
-            </div>
-            <div class="modal-body">Select "Logout" below if you are ready to end your current session.</div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" type="button" data-dismiss="modal">Cancel</button>
-                <a class="btn btn-danger" href="../views/logout.php">Logout</a>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Success Message Modal -->
-<?php if (isset($_SESSION['success_msg'])): ?>
-<div class="modal fade" id="successModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header bg-success">
-                <h5 class="modal-title text-white">Success</h5>
-                <button class="close" type="button" data-dismiss="modal">
-                    <span aria-hidden="true">×</span>
-                </button>
-            </div>
-            <div class="modal-body">
-                <?php 
-                    echo $_SESSION['success_msg'];
-                    unset($_SESSION['success_msg']);
-                ?>
-            </div>
-        </div>
-    </div>
-</div>
-<script>
-    $(document).ready(function() {
-        $('#successModal').modal('show');
-    });
-</script>
-<?php endif; ?>
-
-<!-- Error Message Modal -->
-<?php if (isset($_SESSION['error_msg'])): ?>
-<div class="modal fade" id="errorModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header bg-danger">
-                <h5 class="modal-title text-white">Error</h5>
-                <button class="close" type="button" data-dismiss="modal">
-                    <span aria-hidden="true">×</span>
-                </button>
-            </div>
-            <div class="modal-body">
-                <?php 
-                    echo $_SESSION['error_msg'];
-                    unset($_SESSION['error_msg']);
-                ?>
-            </div>
-        </div>
-    </div>
-</div>
-<script>
-    $(document).ready(function() {
-        $('#errorModal').modal('show');
-    });
-</script>
-<?php endif; ?>
-
- 
 </body>
 </html>

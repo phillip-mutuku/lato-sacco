@@ -384,7 +384,7 @@ body.sidebar-toggled .topbar {
 <ul class="navbar-nav sidebar sidebar-dark accordion" id="accordionSidebar">
     <!-- Back Button Section -->
     <div class="back-section">
-        <a href="../views/business_groups.php" class="back-btn">
+        <a href="../models/business_groups.php" class="back-btn">
             <i class="fas fa-arrow-left"></i>
             <span class="back-text">Back to Business Groups</span>
         </a>

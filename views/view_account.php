@@ -212,7 +212,7 @@ function safeJsonEncode($data) {
         .custom-select {
             width: 100%;
             max-width: 400px;
-            padding: 15px 20px;
+            padding: 1px 15px;
             border: 2px solid rgba(255,255,255,0.3);
             border-radius: 8px;
             background: rgba(255,255,255,0.95);
@@ -594,11 +594,12 @@ function safeJsonEncode($data) {
                 </div>
 
                 <!-- Include Component Sections -->
+                <?php include '../components/account/savings.php'; ?>
+                <?php include '../components/account/transactions.php'; ?>
                 <?php include '../components/account/client-info.php'; ?>
                 <?php include '../components/account/loans.php'; ?>
                 <?php include '../components/account/repayments.php'; ?>
-                <?php include '../components/account/savings.php'; ?>
-                <?php include '../components/account/transactions.php'; ?>
+             
             <?php endif; ?>
         </div>
     </div>

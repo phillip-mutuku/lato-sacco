@@ -654,6 +654,46 @@ public function getAllAccountStats($accountId, $accountType = 'all') {
     }
 }
 
+/**
+     * Handle getting next shareholder number
+     */
+    private function handleGetNextShareholderNo() {
+        try {
+            $result = $this->model->getNextShareholderNumber();
+            echo json_encode($result);
+        } catch (Exception $e) {
+            echo json_encode([
+                'status' => 'error',
+                'message' => $e->getMessage()
+            ]);
+        }
+    }
+
+    /**
+     * Handle checking if shareholder number exists
+     */
+    private function handleCheckShareholderNo() {
+        try {
+            $shareholder_no = $_POST['shareholder_no'] ?? '';
+            
+            if (empty($shareholder_no)) {
+                echo json_encode([
+                    'status' => 'error',
+                    'message' => 'Shareholder number is required'
+                ]);
+                return;
+            }
+            
+            $result = $this->model->checkShareholderNumberExists($shareholder_no);
+            echo json_encode($result);
+        } catch (Exception $e) {
+            echo json_encode([
+                'status' => 'error',
+                'message' => $e->getMessage()
+            ]);
+        }
+    }
+
     /**
      * Handle various account actions based on GET parameters
      */
@@ -743,6 +783,12 @@ public function getAllAccountStats($accountId, $accountType = 'all') {
                             break;
             case 'getTransactionReceipt':
                             $this->handleGetTransactionReceipt();
+                            break;
+            case 'getNextShareholderNo':
+                            $this->handleGetNextShareholderNo();
+                            break;
+            case 'checkShareholderNo':
+                            $this->handleCheckShareholderNo();
                             break;
             default:
                 echo json_encode(['status' => 'error', 'message' => 'Invalid action']);

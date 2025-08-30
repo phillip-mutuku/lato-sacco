@@ -434,25 +434,27 @@ public function getActiveLoansCount($accountId, $accountType = 'all') {
     }
 }
 
-    // Get account savings
-    public function getAccountSavings($accountId, $accountType = 'all') {
-        $query = "SELECT * FROM savings WHERE account_id = ?";
-        $params = [$accountId];
-        $types = "i";
-        
-        if ($accountType !== 'all') {
-            $query .= " AND account_type = ?";
-            $params[] = $accountType;
-            $types .= "s";
-        }
-        
-        $query .= " ORDER BY date DESC";
-        
-        $stmt = $this->conn->prepare($query);
-        $stmt->bind_param($types, ...$params);
-        $stmt->execute();
-        return $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+// Get account savings with served_by user names
+public function getAccountSavings($accountId, $accountType = 'all') {
+    $query = "SELECT s.*, u.username as served_by FROM savings s 
+              LEFT JOIN user u ON s.served_by = u.user_id 
+              WHERE s.account_id = ?";
+    $params = [$accountId];
+    $types = "i";
+             
+    if ($accountType !== 'all') {
+        $query .= " AND s.account_type = ?";
+        $params[] = $accountType;
+        $types .= "s";
     }
+             
+    $query .= " ORDER BY s.date DESC";
+             
+    $stmt = $this->conn->prepare($query);
+    $stmt->bind_param($types, ...$params);
+    $stmt->execute();
+    return $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+}
 
     // Get total savings for an account
     public function getTotalSavings($accountId, $accountType = 'all') {
@@ -2247,6 +2249,77 @@ public function getTotalWithdrawals($accountId, $accountType = 'all') {
         $result = $stmt->get_result();
         $row = $result->fetch_assoc();
         return $row['outstanding_balance'] ?? 0;
+    }
+
+    /**
+     * Get the next available shareholder number
+     * @return array Result with status and next number
+     */
+    public function getNextShareholderNumber() {
+        try {
+            $query = "SELECT MAX(CAST(shareholder_no AS UNSIGNED)) AS max_no FROM client_accounts";
+            $result = $this->conn->query($query);
+            
+            if ($result) {
+                $row = $result->fetch_assoc();
+                $next_number = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
+                
+                return [
+                    'status' => 'success',
+                    'next_number' => $next_number,
+                    'message' => 'Next shareholder number generated successfully'
+                ];
+            } else {
+                throw new Exception('Error fetching shareholder numbers: ' . $this->conn->error);
+            }
+        } catch (Exception $e) {
+            error_log("Error in getNextShareholderNumber: " . $e->getMessage());
+            return [
+                'status' => 'error',
+                'message' => 'Server error: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Check if a shareholder number already exists
+     * @param string $shareholder_no The shareholder number to check
+     * @return array Result with status and exists flag
+     */
+    public function checkShareholderNumberExists($shareholder_no) {
+        try {
+            $shareholder_no = trim($shareholder_no);
+            
+            if (empty($shareholder_no)) {
+                return [
+                    'status' => 'error',
+                    'message' => 'Shareholder number is required'
+                ];
+            }
+            
+            $stmt = $this->conn->prepare("SELECT COUNT(*) as count FROM client_accounts WHERE shareholder_no = ?");
+            $stmt->bind_param("s", $shareholder_no);
+            
+            if ($stmt->execute()) {
+                $result = $stmt->get_result();
+                $row = $result->fetch_assoc();
+                
+                return [
+                    'status' => 'success',
+                    'exists' => $row['count'] > 0,
+                    'message' => $row['count'] > 0 ? 'Shareholder number already exists' : 'Shareholder number is available'
+                ];
+            } else {
+                throw new Exception('Error checking shareholder number: ' . $stmt->error);
+            }
+            
+        } catch (Exception $e) {
+            error_log("Error in checkShareholderNumberExists: " . $e->getMessage());
+            return [
+                'status' => 'error',
+                'message' => 'Server error: ' . $e->getMessage()
+            ];
+        }
     }
 
     // Add a transaction

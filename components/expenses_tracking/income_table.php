@@ -31,15 +31,15 @@ class IncomeTable {
             $query_parts[] = "
                 SELECT 
                     CAST('Individual Savings' AS CHAR(50)) COLLATE utf8mb4_general_ci as source_type,
-                    CAST(CONCAT(ca.first_name, ' ', ca.last_name) AS CHAR(255)) COLLATE utf8mb4_general_ci as source_name,
-                    CAST(ca.shareholder_no AS CHAR(50)) COLLATE utf8mb4_general_ci as reference_no,
+                    CAST(CONCAT(COALESCE(ca.first_name, ''), ' ', COALESCE(ca.last_name, '')) AS CHAR(255)) COLLATE utf8mb4_general_ci as source_name,
+                    CAST(COALESCE(ca.shareholder_no, 'N/A') AS CHAR(50)) COLLATE utf8mb4_general_ci as reference_no,
                     s.amount,
                     s.date as transaction_date,
                     CAST(COALESCE(s.payment_mode, 'Cash') AS CHAR(50)) COLLATE utf8mb4_general_ci as payment_mode,
                     CAST(COALESCE(s.receipt_number, 'N/A') AS CHAR(50)) COLLATE utf8mb4_general_ci as receipt_number,
-                    CAST(COALESCE(s.served_by, 'Unknown') AS CHAR(255)) COLLATE utf8mb4_general_ci as served_by
+                    CAST(COALESCE(s.served_by, 'System') AS CHAR(255)) COLLATE utf8mb4_general_ci as served_by
                 FROM savings s
-                JOIN client_accounts ca ON s.account_id = ca.account_id
+                LEFT JOIN client_accounts ca ON s.account_id = ca.account_id
                 WHERE DATE(s.date) BETWEEN ? AND ?
                 AND s.type = 'Savings'
             ";
@@ -52,16 +52,16 @@ class IncomeTable {
             $query_parts[] = "
                 SELECT 
                     CAST('Loan Repayments' AS CHAR(50)) COLLATE utf8mb4_general_ci as source_type,
-                    CAST(CONCAT(ca.first_name, ' ', ca.last_name) AS CHAR(255)) COLLATE utf8mb4_general_ci as source_name,
-                    CAST(l.ref_no AS CHAR(50)) COLLATE utf8mb4_general_ci as reference_no,
+                    CAST(CONCAT(COALESCE(ca.first_name, ''), ' ', COALESCE(ca.last_name, '')) AS CHAR(255)) COLLATE utf8mb4_general_ci as source_name,
+                    CAST(COALESCE(l.ref_no, 'N/A') AS CHAR(50)) COLLATE utf8mb4_general_ci as reference_no,
                     lr.amount_repaid as amount,
                     lr.date_paid as transaction_date,
                     CAST(COALESCE(lr.payment_mode, 'Cash') AS CHAR(50)) COLLATE utf8mb4_general_ci as payment_mode,
                     CAST(COALESCE(lr.receipt_number, 'N/A') AS CHAR(50)) COLLATE utf8mb4_general_ci as receipt_number,
-                    CAST(COALESCE(lr.served_by, 'Unknown') AS CHAR(255)) COLLATE utf8mb4_general_ci as served_by
+                    CAST(COALESCE(lr.served_by, 'System') AS CHAR(255)) COLLATE utf8mb4_general_ci as served_by
                 FROM loan_repayments lr
-                JOIN loan l ON lr.loan_id = l.loan_id
-                JOIN client_accounts ca ON l.account_id = ca.account_id
+                LEFT JOIN loan l ON lr.loan_id = l.loan_id
+                LEFT JOIN client_accounts ca ON l.account_id = ca.account_id
                 WHERE DATE(lr.date_paid) BETWEEN ? AND ?
             ";
             $params = array_merge($params, [$this->start_date, $this->end_date]);
@@ -73,16 +73,16 @@ class IncomeTable {
             $query_parts[] = "
                 SELECT 
                     CAST('Group Savings' AS CHAR(50)) COLLATE utf8mb4_general_ci as source_type,
-                    CAST(lg.group_name AS CHAR(255)) COLLATE utf8mb4_general_ci as source_name,
-                    CAST(lg.group_reference AS CHAR(50)) COLLATE utf8mb4_general_ci as reference_no,
+                    CAST(COALESCE(lg.group_name, 'Unknown Group') AS CHAR(255)) COLLATE utf8mb4_general_ci as source_name,
+                    CAST(COALESCE(lg.group_reference, 'N/A') AS CHAR(50)) COLLATE utf8mb4_general_ci as reference_no,
                     gs.amount,
                     gs.date_saved as transaction_date,
                     CAST(COALESCE(gs.payment_mode, 'Cash') AS CHAR(50)) COLLATE utf8mb4_general_ci as payment_mode,
                     CAST(COALESCE(gs.receipt_no, 'N/A') AS CHAR(50)) COLLATE utf8mb4_general_ci as receipt_number,
-                    CAST(CONCAT(u.firstname, ' ', u.lastname) AS CHAR(255)) COLLATE utf8mb4_general_ci as served_by
+                    CAST(CONCAT(COALESCE(u.firstname, 'Unknown'), ' ', COALESCE(u.lastname, '')) AS CHAR(255)) COLLATE utf8mb4_general_ci as served_by
                 FROM group_savings gs
-                JOIN lato_groups lg ON gs.group_id = lg.group_id
-                JOIN user u ON gs.served_by = u.user_id
+                LEFT JOIN lato_groups lg ON gs.group_id = lg.group_id
+                LEFT JOIN user u ON gs.served_by = u.user_id
                 WHERE DATE(gs.date_saved) BETWEEN ? AND ?
             ";
             $params = array_merge($params, [$this->start_date, $this->end_date]);
@@ -94,16 +94,16 @@ class IncomeTable {
             $query_parts[] = "
                 SELECT 
                     CAST('Business Group Savings' AS CHAR(50)) COLLATE utf8mb4_general_ci as source_type,
-                    CAST(bg.group_name AS CHAR(255)) COLLATE utf8mb4_general_ci as source_name,
+                    CAST(COALESCE(bg.group_name, 'Unknown Group') AS CHAR(255)) COLLATE utf8mb4_general_ci as source_name,
                     CAST(COALESCE(bg.reference_name, CAST(bg.account_id AS CHAR)) AS CHAR(50)) COLLATE utf8mb4_general_ci as reference_no,
                     bgt.amount,
                     bgt.date as transaction_date,
                     CAST(COALESCE(bgt.payment_mode, 'Cash') AS CHAR(50)) COLLATE utf8mb4_general_ci as payment_mode,
                     CAST(COALESCE(bgt.receipt_no, 'N/A') AS CHAR(50)) COLLATE utf8mb4_general_ci as receipt_number,
-                    CAST(CONCAT(u.firstname, ' ', u.lastname) AS CHAR(255)) COLLATE utf8mb4_general_ci as served_by
+                    CAST(CONCAT(COALESCE(u.firstname, 'Unknown'), ' ', COALESCE(u.lastname, '')) AS CHAR(255)) COLLATE utf8mb4_general_ci as served_by
                 FROM business_group_transactions bgt
-                JOIN business_groups bg ON bgt.group_id = bg.group_id
-                JOIN user u ON bgt.served_by = u.user_id
+                LEFT JOIN business_groups bg ON bgt.group_id = bg.group_id
+                LEFT JOIN user u ON bgt.served_by = u.user_id
                 WHERE DATE(bgt.date) BETWEEN ? AND ?
                 AND bgt.type = 'Savings'
             ";
@@ -117,15 +117,15 @@ class IncomeTable {
             $query_parts[] = "
                 SELECT 
                     CAST('Withdrawal Fees (Individual)' AS CHAR(50)) COLLATE utf8mb4_general_ci as source_type,
-                    CAST(CONCAT(ca.first_name, ' ', ca.last_name) AS CHAR(255)) COLLATE utf8mb4_general_ci as source_name,
-                    CAST(ca.shareholder_no AS CHAR(50)) COLLATE utf8mb4_general_ci as reference_no,
+                    CAST(CONCAT(COALESCE(ca.first_name, ''), ' ', COALESCE(ca.last_name, '')) AS CHAR(255)) COLLATE utf8mb4_general_ci as source_name,
+                    CAST(COALESCE(ca.shareholder_no, 'N/A') AS CHAR(50)) COLLATE utf8mb4_general_ci as reference_no,
                     s.withdrawal_fee as amount,
                     s.date as transaction_date,
                     CAST(COALESCE(s.payment_mode, 'Cash') AS CHAR(50)) COLLATE utf8mb4_general_ci as payment_mode,
                     CAST(COALESCE(s.receipt_number, 'N/A') AS CHAR(50)) COLLATE utf8mb4_general_ci as receipt_number,
-                    CAST(COALESCE(s.served_by, 'Unknown') AS CHAR(255)) COLLATE utf8mb4_general_ci as served_by
+                    CAST(COALESCE(s.served_by, 'System') AS CHAR(255)) COLLATE utf8mb4_general_ci as served_by
                 FROM savings s
-                JOIN client_accounts ca ON s.account_id = ca.account_id
+                LEFT JOIN client_accounts ca ON s.account_id = ca.account_id
                 WHERE DATE(s.date) BETWEEN ? AND ?
                 AND s.type = 'Withdrawal'
                 AND s.withdrawal_fee > 0
@@ -137,16 +137,16 @@ class IncomeTable {
             $query_parts[] = "
                 SELECT 
                     CAST('Withdrawal Fees (Payment)' AS CHAR(50)) COLLATE utf8mb4_general_ci as source_type,
-                    CAST(CONCAT(ca.first_name, ' ', ca.last_name) AS CHAR(255)) COLLATE utf8mb4_general_ci as source_name,
-                    CAST(l.ref_no AS CHAR(50)) COLLATE utf8mb4_general_ci as reference_no,
+                    CAST(CONCAT(COALESCE(ca.first_name, ''), ' ', COALESCE(ca.last_name, '')) AS CHAR(255)) COLLATE utf8mb4_general_ci as source_name,
+                    CAST(COALESCE(l.ref_no, 'N/A') AS CHAR(50)) COLLATE utf8mb4_general_ci as reference_no,
                     p.withdrawal_fee as amount,
                     p.date_created as transaction_date,
                     CAST('Cash' AS CHAR(50)) COLLATE utf8mb4_general_ci as payment_mode,
                     CAST(COALESCE(p.receipt_no, 'N/A') AS CHAR(50)) COLLATE utf8mb4_general_ci as receipt_number,
-                    CAST(COALESCE(CONCAT(u.firstname, ' ', u.lastname), 'System') AS CHAR(255)) COLLATE utf8mb4_general_ci as served_by
+                    CAST(COALESCE(u.username, 'System') AS CHAR(255)) COLLATE utf8mb4_general_ci as served_by
                 FROM payment p
-                JOIN loan l ON p.loan_id = l.loan_id
-                JOIN client_accounts ca ON l.account_id = ca.account_id
+                LEFT JOIN loan l ON p.loan_id = l.loan_id
+                LEFT JOIN client_accounts ca ON l.account_id = ca.account_id
                 LEFT JOIN user u ON p.user_id = u.user_id
                 WHERE DATE(p.date_created) BETWEEN ? AND ?
                 AND p.withdrawal_fee > 0
@@ -158,16 +158,16 @@ class IncomeTable {
             $query_parts[] = "
                 SELECT 
                     CAST('Business Group Fees' AS CHAR(50)) COLLATE utf8mb4_general_ci as source_type,
-                    CAST(bg.group_name AS CHAR(255)) COLLATE utf8mb4_general_ci as source_name,
+                    CAST(COALESCE(bg.group_name, 'Unknown Group') AS CHAR(255)) COLLATE utf8mb4_general_ci as source_name,
                     CAST(COALESCE(bg.reference_name, CAST(bg.account_id AS CHAR)) AS CHAR(50)) COLLATE utf8mb4_general_ci as reference_no,
                     bgt.amount,
                     bgt.date as transaction_date,
                     CAST(COALESCE(bgt.payment_mode, 'Cash') AS CHAR(50)) COLLATE utf8mb4_general_ci as payment_mode,
                     CAST(COALESCE(bgt.receipt_no, 'N/A') AS CHAR(50)) COLLATE utf8mb4_general_ci as receipt_number,
-                    CAST(CONCAT(u.firstname, ' ', u.lastname) AS CHAR(255)) COLLATE utf8mb4_general_ci as served_by
+                    CAST(CONCAT(COALESCE(u.firstname, 'Unknown'), ' ', COALESCE(u.lastname, '')) AS CHAR(255)) COLLATE utf8mb4_general_ci as served_by
                 FROM business_group_transactions bgt
-                JOIN business_groups bg ON bgt.group_id = bg.group_id
-                JOIN user u ON bgt.served_by = u.user_id
+                LEFT JOIN business_groups bg ON bgt.group_id = bg.group_id
+                LEFT JOIN user u ON bgt.served_by = u.user_id
                 WHERE DATE(bgt.date) BETWEEN ? AND ?
                 AND bgt.type = 'Withdrawal Fee'
             ";
@@ -180,15 +180,15 @@ class IncomeTable {
             $query_parts[] = "
                 SELECT 
                     CAST('Income/Receipts' AS CHAR(50)) COLLATE utf8mb4_general_ci as source_type,
-                    CAST(e.category AS CHAR(255)) COLLATE utf8mb4_general_ci as source_name,
+                    CAST(COALESCE(e.category, 'Other Income') AS CHAR(255)) COLLATE utf8mb4_general_ci as source_name,
                     CAST(COALESCE(e.receipt_no, 'N/A') AS CHAR(50)) COLLATE utf8mb4_general_ci as reference_no,
                     e.amount,
                     e.date as transaction_date,
                     CAST(COALESCE(e.payment_method, 'Cash') AS CHAR(50)) COLLATE utf8mb4_general_ci as payment_mode,
                     CAST(COALESCE(e.receipt_no, 'N/A') AS CHAR(50)) COLLATE utf8mb4_general_ci as receipt_number,
-                    CAST(CONCAT(u.firstname, ' ', u.lastname) AS CHAR(255)) COLLATE utf8mb4_general_ci as served_by
+                    CAST(CONCAT(COALESCE(u.firstname, 'Unknown'), ' ', COALESCE(u.lastname, '')) AS CHAR(255)) COLLATE utf8mb4_general_ci as served_by
                 FROM expenses e
-                JOIN user u ON e.created_by = u.user_id
+                LEFT JOIN user u ON e.created_by = u.user_id
                 WHERE DATE(e.date) BETWEEN ? AND ?
                 AND e.status = 'received'
             ";
@@ -383,11 +383,14 @@ class IncomeTable {
             var totalRows = incomeFilteredData.length;
             var totalPages = Math.ceil(totalRows / incomeRowsPerPage);
             var pagination = document.getElementById('incomeTablePagination');
+            
+            if (!pagination) return;
+            
             pagination.innerHTML = '';
             
             if (totalPages <= 1) {
                 var infoDiv = document.getElementById('incomeTableInfo');
-                if (totalRows > 0) {
+                if (infoDiv && totalRows > 0) {
                     infoDiv.innerHTML = 'Showing all ' + totalRows + ' entries';
                 }
                 return;
@@ -396,7 +399,18 @@ class IncomeTable {
             // Previous button
             var prevLi = document.createElement('li');
             prevLi.className = 'page-item' + (incomeCurrentPage === 1 ? ' disabled' : '');
-            prevLi.innerHTML = '<a class=\"page-link\" href=\"#\" onclick=\"event.preventDefault(); if(' + incomeCurrentPage + ' > 1) displayIncomeTablePage(' + (incomeCurrentPage - 1) + ')\">&laquo;</a>';
+            var prevA = document.createElement('a');
+            prevA.className = 'page-link';
+            prevA.href = '#';
+            prevA.innerHTML = '&laquo;';
+            prevA.style.cursor = 'pointer';
+            prevA.onclick = function(e) {
+                e.preventDefault();
+                if (incomeCurrentPage > 1) {
+                    displayIncomeTablePage(incomeCurrentPage - 1);
+                }
+            };
+            prevLi.appendChild(prevA);
             pagination.appendChild(prevLi);
             
             // Page numbers
@@ -406,21 +420,45 @@ class IncomeTable {
             for (var i = startPage; i <= endPage; i++) {
                 var li = document.createElement('li');
                 li.className = 'page-item' + (i === incomeCurrentPage ? ' active' : '');
-                li.innerHTML = '<a class=\"page-link\" href=\"#\" onclick=\"event.preventDefault(); displayIncomeTablePage(' + i + ')\">' + i + '</a>';
+                var a = document.createElement('a');
+                a.className = 'page-link';
+                a.href = '#';
+                a.innerHTML = i;
+                a.style.cursor = 'pointer';
+                a.onclick = (function(pageNum) {
+                    return function(e) {
+                        e.preventDefault();
+                        displayIncomeTablePage(pageNum);
+                    };
+                })(i);
+                li.appendChild(a);
                 pagination.appendChild(li);
             }
             
             // Next button
             var nextLi = document.createElement('li');
             nextLi.className = 'page-item' + (incomeCurrentPage === totalPages ? ' disabled' : '');
-            nextLi.innerHTML = '<a class=\"page-link\" href=\"#\" onclick=\"event.preventDefault(); if(' + incomeCurrentPage + ' < ' + totalPages + ') displayIncomeTablePage(' + (incomeCurrentPage + 1) + ')\">&raquo;</a>';
+            var nextA = document.createElement('a');
+            nextA.className = 'page-link';
+            nextA.href = '#';
+            nextA.innerHTML = '&raquo;';
+            nextA.style.cursor = 'pointer';
+            nextA.onclick = function(e) {
+                e.preventDefault();
+                if (incomeCurrentPage < totalPages) {
+                    displayIncomeTablePage(incomeCurrentPage + 1);
+                }
+            };
+            nextLi.appendChild(nextA);
             pagination.appendChild(nextLi);
             
             // Update info display
             var startRow = totalRows > 0 ? ((incomeCurrentPage - 1) * incomeRowsPerPage) + 1 : 0;
             var endRow = Math.min(incomeCurrentPage * incomeRowsPerPage, totalRows);
             var infoDiv = document.getElementById('incomeTableInfo');
-            infoDiv.innerHTML = 'Showing ' + startRow + ' to ' + endRow + ' of ' + totalRows + ' entries';
+            if (infoDiv) {
+                infoDiv.innerHTML = 'Showing ' + startRow + ' to ' + endRow + ' of ' + totalRows + ' entries';
+            }
         }
         
         // Initialize when DOM is ready

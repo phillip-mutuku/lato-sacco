@@ -503,7 +503,7 @@ body.sidebar-toggled .topbar {
         </a>
         <div id="collapseFinance" class="collapse" aria-labelledby="headingFinance" data-parent="#accordionSidebar">
             <div class="bg-white py-2 collapse-inner rounded">
-                <a class="collapse-item" href="daily-reconciliation.php">Daily Reconciliation</a>
+                <a class="collapse-item" href="../views/daily-reconciliation.php">Daily Reconciliation</a>
                 <a class="collapse-item" href="../views/expenses_tracking.php">Expenses Tracking</a>
                 <a class="collapse-item" href="../views/manage_expenses.php">Manage Expenses</a>
                 <a class="collapse-item" href="../views/receipts.php">Receipts</a>

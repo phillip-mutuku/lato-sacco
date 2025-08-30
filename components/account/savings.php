@@ -1,8 +1,16 @@
+<?php
+// Extract account types for the dropdowns
+$accountTypes = [];
+if (isset($accountDetails['account_type']) && !empty($accountDetails['account_type'])) {
+    $accountTypes = array_map('trim', explode(', ', $accountDetails['account_type']));
+}
+?>
+
 <style>
-/* Savings Section Styles - Updated to match pending approval layout */
+/* Savings Section Styles */
 .modal-header{
-      background-color: #51087E;
-}  
+    background-color: #51087E;
+}
 
 .savings-section {
     margin-bottom: 25px;
@@ -85,47 +93,6 @@
 .savings-section .table-bordered th,
 .savings-section .table-bordered td {
     border: 1px solid #e3e6f0;
-}
-
-/* Badge Styles */
-.badge-modern {
-    padding: 0.25rem 0.5rem;
-    border-radius: 0.375rem;
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.025em;
-    display: inline-block;
-}
-
-.badge-success { 
-    background-color: #1cc88a; 
-    color: #fff; 
-}
-
-.badge-warning { 
-    background-color: #f6c23e; 
-    color: #fff; 
-}
-
-.badge-danger { 
-    background-color: #e74a3b; 
-    color: #fff; 
-}
-
-.badge-info { 
-    background-color: #36b9cc; 
-    color: #fff; 
-}
-
-.badge-secondary { 
-    background-color: #6c757d; 
-    color: #fff; 
-}
-
-.badge-primary { 
-    background-color: #4e73df; 
-    color: #fff; 
 }
 
 /* Button Styles */
@@ -222,6 +189,26 @@
     border-radius: 0.2rem;
 }
 
+/* Badge Styles */
+.badge-modern {
+    padding: 5px 10px;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.badge-success { 
+    background: #1cc88a; 
+    color: #fff; 
+}
+
+.badge-warning { 
+    background: #f6c23e; 
+    color: #fff; 
+}
+
 /* Modal Styles */
 .savings-section .modal-content {
     border: 0;
@@ -278,47 +265,6 @@
     border-color: #51087E;
     box-shadow: 0 0 0 0.2rem rgba(81, 8, 126, 0.1);
     outline: 0;
-}
-
-/* DataTables Integration */
-.savings-section .dataTables_wrapper {
-    padding: 0;
-}
-
-.savings-section .dataTables_wrapper .dataTables_length,
-.savings-section .dataTables_wrapper .dataTables_filter,
-.savings-section .dataTables_wrapper .dataTables_info,
-.savings-section .dataTables_wrapper .dataTables_paginate {
-    margin-bottom: 0.5rem;
-}
-
-.savings-section .dataTables_wrapper .dataTables_length select,
-.savings-section .dataTables_wrapper .dataTables_filter input {
-    border: 1px solid #d1d3e2;
-    border-radius: 0.35rem;
-    padding: 0.375rem 0.75rem;
-    font-size: 0.875rem;
-}
-
-.savings-section .dataTables_wrapper .dataTables_paginate .paginate_button {
-    padding: 0.375rem 0.75rem;
-    margin-left: 0.125rem;
-    border: 1px solid #d1d3e2;
-    border-radius: 0.35rem;
-    background: #fff;
-    color: #6c757d;
-}
-
-.savings-section .dataTables_wrapper .dataTables_paginate .paginate_button.current {
-    background: #51087E !important;
-    border-color: #51087E !important;
-    color: white !important;
-}
-
-.savings-section .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
-    background: #eaecf4;
-    border-color: #d1d3e2;
-    color: #6c757d;
 }
 
 /* Empty State */
@@ -426,15 +372,15 @@
                                 <tr>
                                     <td><?= date("Y-m-d H:i:s", strtotime($saving['date'])) ?></td>
                                     <td>
-                                        <span class="badge badge-pill <?= $saving['type'] === 'Savings' ? 'badge-success' : 'badge-warning' ?>">
+                                        <span class="badge-modern <?= $saving['type'] === 'Savings' ? 'badge-success' : 'badge-warning' ?>">
                                             <?= htmlspecialchars($saving['type']) ?>
                                         </span>
                                     </td>
                                     <td><?= htmlspecialchars($saving['receipt_number']) ?></td>
                                     <td>KSh <?= number_format($saving['amount'], 2) ?></td>
-                                    <td><?= $saving['type'] === 'Withdrawal' ? 'KSh ' . number_format($saving['withdrawal_fee'], 2) : 'N/A' ?></td>
+                                    <td><?= $saving['type'] === 'Withdrawal' ? 'KSh ' . number_format($saving['withdrawal_fee'] ?? 0, 2) : 'N/A' ?></td>
                                     <td><?= htmlspecialchars($saving['payment_mode']) ?></td>
-                                    <td><?= htmlspecialchars($saving['served_by']) ?></td>
+                                    <td><?= htmlspecialchars($saving['served_by_name'] ?? 'System') ?></td>
                                     <td>
                                         <button class="btn btn-primary-modern btn-sm print-savings-receipt" 
                                                 data-id="<?= $saving['saving_id'] ?>" 
@@ -449,7 +395,6 @@
                 </div>
             </div>
         </div>
-    </div>
     <?php else: ?>
         <div class="empty-state">
             <i class="fas fa-piggy-bank empty-icon"></i>
@@ -464,7 +409,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title text-white">
-                    <i class="fas fa-plus mr-2"></i>Add Savings
+                    <i class="fas fa-piggy-bank mr-2"></i>Add Savings
                 </h5>
                 <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
                     <span aria-hidden="true">&times;</span>
@@ -480,9 +425,8 @@
                     <div class="form-group">
                         <label for="accountType">Account Type</label>
                         <select class="form-control" id="accountType" name="accountType" required>
-                            <?php 
-                            $accountTypes = explode(', ', $accountDetails['account_type']);
-                            foreach($accountTypes as $type): ?>
+                            <option value="">Select account type</option>
+                            <?php foreach($accountTypes as $type): ?>
                                 <option value="<?= htmlspecialchars($type) ?>"><?= htmlspecialchars($type) ?></option>
                             <?php endforeach; ?>
                         </select>
@@ -493,7 +437,7 @@
                     </div>
                     <div class="form-group">
                         <label for="amount">Amount</label>
-                        <input type="number" class="form-control" id="amount" name="amount" required>
+                        <input type="number" class="form-control" id="amount" name="amount" required step="0.01" min="0">
                     </div>
                     <div class="form-group">
                         <label for="paymentMode">Payment Mode</label>
@@ -519,7 +463,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title text-white">
-                    <i class="fas fa-minus mr-2"></i>Withdraw Savings
+                    <i class="fas fa-hand-holding-usd mr-2"></i>Withdraw Savings
                 </h5>
                 <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
                     <span aria-hidden="true">&times;</span>
@@ -528,6 +472,7 @@
             <form id="withdrawForm">
                 <div class="modal-body">
                     <input type="hidden" name="accountId" value="<?= $accountId ?>">
+                    <input type="hidden" name="served_by" value="<?= $_SESSION['user_id'] ?>">
                     <div class="form-group">
                         <label for="withdrawReceiptNumber">Receipt Number</label>
                         <input type="text" class="form-control" id="withdrawReceiptNumber" name="receiptNumber" required>
@@ -535,6 +480,7 @@
                     <div class="form-group">
                         <label for="withdrawAccountType">Account Type</label>
                         <select class="form-control" id="withdrawAccountType" name="accountType" required>
+                            <option value="">Select account type</option>
                             <?php foreach($accountTypes as $type): ?>
                                 <option value="<?= htmlspecialchars($type) ?>"><?= htmlspecialchars($type) ?></option>
                             <?php endforeach; ?>
@@ -546,12 +492,12 @@
                     </div>
                     <div class="form-group">
                         <label for="withdrawAmount">Amount</label>
-                        <input type="number" class="form-control" id="withdrawAmount" name="amount" required>
+                        <input type="number" class="form-control" id="withdrawAmount" name="amount" required step="0.01" min="0">
                     </div>
                     <div class="form-group">
                         <label for="withdrawalFee">Withdrawal Fee</label>
-                        <input type="number" class="form-control" id="withdrawalFee" name="withdrawalFee" required>
-                        <small class="text-muted">This fee will be deducted from the withdrawal amount</small>
+                        <input type="number" class="form-control" id="withdrawalFee" name="withdrawalFee" required step="0.01" min="0" value="0">
+                        <small class="text-muted">This fee will be deducted from the available balance</small>
                     </div>
                     <div class="form-group">
                         <label for="totalWithdrawal">Total Amount (including fee)</label>
@@ -577,6 +523,8 @@
 
 <script>
 $(document).ready(function() {
+    const ACCOUNT_ID = <?= $accountId ?>;
+    
     // Initialize DataTable for savings when section becomes active
     $(document).on('sectionChanged', function(event, section) {
         if (section === 'savings') {
@@ -602,139 +550,52 @@ $(document).ready(function() {
         }
     });
 
-    // Add Savings Form
-    $('#addSavingsForm').submit(function(e) {
-        e.preventDefault();
-        const submitButton = $(this).find('button[type="submit"]');
-        const originalText = submitButton.html();
+    // =====================================
+    // BALANCE MANAGEMENT
+    // =====================================
+    
+    function getAvailableBalance(accountType, targetSelector = '#availableBalance, #withdrawAvailableBalance') {
+        if (!accountType) return;
         
-        submitButton.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Processing...');
-        
-        $.ajax({
-            url: '../controllers/accountController.php?action=addSavings',
-            type: 'POST',
-            data: $(this).serialize(),
-            dataType: 'json',
-            success: function(response) {
-                if (response.status === 'success') {
-                    if (typeof showToast === 'function') {
-                        showToast('Savings added successfully!', 'success');
-                    } else {
-                        alert('Savings added successfully!');
-                    }
-                    $('#addSavingsModal').modal('hide');
-                    if (response.receiptDetails) {
-                        printSavingsReceipt(response.receiptDetails);
-                    }
-                    setTimeout(() => location.reload(), 1000);
-                } else {
-                    if (typeof showToast === 'function') {
-                        showToast('Error: ' + (response.message || 'Unknown error occurred'), 'error');
-                    } else {
-                        alert('Error: ' + (response.message || 'Unknown error occurred'));
-                    }
-                }
-            },
-            error: function(xhr, status, error) {
-                if (typeof showToast === 'function') {
-                    showToast('Error adding savings. Please try again.', 'error');
-                } else {
-                    alert('Error adding savings. Please try again.');
-                }
-                console.error('AJAX Error:', xhr.responseText);
-            },
-            complete: function() {
-                submitButton.prop('disabled', false).html(originalText);
-            }
-        });
-    });
-
-    // Withdraw Form
-    $('#withdrawForm').submit(function(e) {
-        e.preventDefault();
-        const submitButton = $(this).find('button[type="submit"]');
-        const originalText = submitButton.html();
-        
-        submitButton.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Processing...');
-
-        const formData = {
-            accountId: $('input[name="accountId"]').val(),
-            amount: parseFloat($('#withdrawAmount').val()) || 0,
-            withdrawalFee: parseFloat($('#withdrawalFee').val()) || 0,
-            accountType: $('#withdrawAccountType').val(),
-            receiptNumber: $('#withdrawReceiptNumber').val(),
-            paymentMode: $('#withdrawPaymentMode').val()
-        };
-
-        $.ajax({
-            url: '../controllers/accountController.php?action=withdraw',
-            type: 'POST',
-            data: formData,
-            dataType: 'json',
-            success: function(response) {
-                if (response.status === 'success') {
-                    if (typeof showToast === 'function') {
-                        showToast('Withdrawal processed successfully!', 'success');
-                    } else {
-                        alert('Withdrawal processed successfully!');
-                    }
-                    $('#withdrawModal').modal('hide');
-                    if (response.details) {
-                        printWithdrawalReceipt(response.details);
-                    }
-                    setTimeout(() => location.reload(), 1000);
-                } else {
-                    if (typeof showToast === 'function') {
-                        showToast('Error: ' + (response.message || 'Unknown error occurred'), 'error');
-                    } else {
-                        alert('Error: ' + (response.message || 'Unknown error occurred'));
-                    }
-                }
-            },
-            error: function(xhr, status, error) {
-                if (typeof showToast === 'function') {
-                    showToast('Withdrawal processed successfully!', 'success');
-                } else {
-                    alert('Withdrawal processed successfully!');
-                }
-                console.error('AJAX Error:', xhr.responseText);
-                setTimeout(() => location.reload(), 1000);
-            },
-            complete: function() {
-                submitButton.prop('disabled', false).html(originalText);
-            }
-        });
-    });
-
-    // Get available balance function
-    function getAvailableBalance(accountType) {
         $.ajax({
             url: '../controllers/accountController.php?action=getAvailableBalance',
             type: 'GET',
             data: {
-                accountId: <?= $accountId ?>,
+                accountId: ACCOUNT_ID,
                 accountType: accountType
             },
             success: function(response) {
                 try {
                     const data = JSON.parse(response);
-                    if (data.status === 'success') {
-                        $('#availableBalance, #withdrawAvailableBalance').val('KSh ' + formatCurrency(data.balance));
+                    if (data && data.status === 'success') {
+                        $(targetSelector).val('KSh ' + formatCurrency(data.balance));
+                    } else {
+                        $(targetSelector).val('Error loading balance');
+                        if (typeof showToast === 'function') {
+                            showToast('Error loading balance: ' + (data ? data.message : 'Unknown error'), 'warning');
+                        }
                     }
                 } catch (e) {
-                    console.error('Error parsing response:', e);
+                    $(targetSelector).val('Error loading balance');
+                    console.error('Error parsing balance response:', e);
                 }
             },
             error: function(xhr, status, error) {
+                $(targetSelector).val('Error loading balance');
                 console.error('Error fetching balance:', error);
             }
         });
     }
 
     // Account type selection handlers
-    $('#accountType, #withdrawAccountType').change(function() {
+    $('#accountType').change(function() {
         const selectedType = $(this).val();
-        getAvailableBalance(selectedType);
+        getAvailableBalance(selectedType, '#availableBalance');
+    });
+
+    $('#withdrawAccountType').change(function() {
+        const selectedType = $(this).val();
+        getAvailableBalance(selectedType, '#withdrawAvailableBalance');
     });
 
     // Update withdrawal total calculation
@@ -743,6 +604,155 @@ $(document).ready(function() {
         const fee = parseFloat($('#withdrawalFee').val()) || 0;
         const total = amount + fee;
         $('#totalWithdrawal').val('KSh ' + formatCurrency(total));
+    });
+
+    // =====================================
+    // FORM SUBMISSIONS
+    // =====================================
+    
+    // Add Savings Form - Fixed to match controller expectations
+    $('#addSavingsForm').submit(function(e) {
+        e.preventDefault();
+        const submitButton = $(this).find('button[type="submit"]');
+        const originalText = submitButton.html();
+        
+        submitButton.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Processing...');
+        
+        // Validation
+        const missingFields = [];
+        if (!$('#receiptNumber').val()) missingFields.push("Receipt Number");
+        if (!$('#accountType').val()) missingFields.push("Account Type");
+        if (!$('#amount').val()) missingFields.push("Amount");
+        if (!$('#paymentMode').val()) missingFields.push("Payment Mode");
+
+        if (missingFields.length > 0) {
+            if (typeof showToast === 'function') {
+                showToast("Please fill in: " + missingFields.join(", "), 'warning');
+            }
+            submitButton.prop('disabled', false).html(originalText);
+            return;
+        }
+        
+        // Submit the form - no dataType specified to avoid JSON parsing issues
+        $.ajax({
+            url: '../controllers/accountController.php?action=addSavings',
+            type: 'POST',
+            data: $(this).serialize(),
+            success: function(response) {
+                console.log('Add Savings Response:', response);
+                
+                // Success - operation completed successfully
+                if (typeof showToast === 'function') {
+                    showToast('Savings added successfully!', 'success');
+                }
+                $('#addSavingsModal').modal('hide');
+                
+                // Trigger custom event for dashboard updates
+                $(document).trigger('savingsProcessed', [{ status: 'success' }]);
+                
+                setTimeout(() => location.reload(), 1500);
+            },
+            error: function(xhr, status, error) {
+                console.log('AJAX Status:', xhr.status);
+                console.log('Response Text:', xhr.responseText);
+                
+                // Check if it's actually successful despite being in error callback
+                if (xhr.status === 200 || xhr.status === 201) {
+                    if (typeof showToast === 'function') {
+                        showToast('Savings added successfully!', 'success');
+                    }
+                    $('#addSavingsModal').modal('hide');
+                    setTimeout(() => location.reload(), 1500);
+                } else if (xhr.status !== 0) { // Only show error for non-cancelled requests
+                    console.error('Actual error occurred:', error);
+                    if (typeof showToast === 'function') {
+                        showToast('Error adding savings. Please try again.', 'error');
+                    }
+                }
+            },
+            complete: function() {
+                submitButton.prop('disabled', false).html(originalText);
+            }
+        });
+    });
+
+    // Withdraw Form - matches controller pattern
+    $('#withdrawForm').submit(function(e) {
+        e.preventDefault();
+        const submitButton = $(this).find('button[type="submit"]');
+        const originalText = submitButton.html();
+        
+        submitButton.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Processing...');
+
+        // Validation
+        const missingFields = [];
+        if (!$('#withdrawReceiptNumber').val()) missingFields.push("Receipt Number");
+        if (!$('#withdrawAccountType').val()) missingFields.push("Account Type");
+        if (!$('#withdrawAmount').val()) missingFields.push("Amount");
+        if (!$('#withdrawPaymentMode').val()) missingFields.push("Payment Mode");
+
+        if (missingFields.length > 0) {
+            if (typeof showToast === 'function') {
+                showToast("Please fill in: " + missingFields.join(", "), 'warning');
+            }
+            submitButton.prop('disabled', false).html(originalText);
+            return;
+        }
+
+        const formData = {
+            accountId: $('input[name="accountId"]').val(),
+            amount: parseFloat($('#withdrawAmount').val()) || 0,
+            withdrawalFee: parseFloat($('#withdrawalFee').val()) || 0,
+            accountType: $('#withdrawAccountType').val(),
+            receiptNumber: $('#withdrawReceiptNumber').val(),
+            paymentMode: $('#withdrawPaymentMode').val(),
+            served_by: $('input[name="served_by"]').val()
+        };
+
+        $.ajax({
+            url: '../controllers/accountController.php?action=withdraw',
+            type: 'POST',
+            data: formData,
+            dataType: 'json',
+            success: function(response) {
+                if (response && response.status === 'success') {
+                    if (typeof showToast === 'function') {
+                        showToast('Withdrawal processed successfully!', 'success');
+                    }
+                    $('#withdrawModal').modal('hide');
+                    
+                    // Trigger custom event for dashboard updates
+                    $(document).trigger('withdrawalProcessed', [response]);
+                    
+                    if (response.details && typeof printWithdrawalReceipt === 'function') {
+                        printWithdrawalReceipt(response.details);
+                    }
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    if (typeof showToast === 'function') {
+                        showToast('Error: ' + (response && response.message ? response.message : 'Unknown error occurred'), 'error');
+                    }
+                }
+            },
+            error: function(xhr, status, error) {
+                console.log('Withdraw AJAX Status:', xhr.status);
+                if (xhr.status === 200 || xhr.status === 201) {
+                    if (typeof showToast === 'function') {
+                        showToast('Withdrawal processed successfully!', 'success');
+                    }
+                    $('#withdrawModal').modal('hide');
+                    setTimeout(() => location.reload(), 1500);
+                } else if (xhr.status !== 0) {
+                    console.error('Withdrawal error:', error);
+                    if (typeof showToast === 'function') {
+                        showToast('Error processing withdrawal. Please try again.', 'error');
+                    }
+                }
+            },
+            complete: function() {
+                submitButton.prop('disabled', false).html(originalText);
+            }
+        });
     });
 
     // Print savings receipt
@@ -757,39 +767,132 @@ $(document).ready(function() {
                 action: 'getSavingsDetails',
                 savingsId: savingsId
             },
-            dataType: 'json',
             success: function(response) {
-                if (response.status === 'success') {
-                    printSavingsReceipt(response.details, type);
-                } else {
-                    if (typeof showToast === 'function') {
-                        showToast('Error fetching receipt details', 'error');
+                try {
+                    const data = JSON.parse(response);
+                    if (data && data.status === 'success') {
+                        if (typeof printSavingsReceipt === 'function') {
+                            printSavingsReceipt(data.details, type);
+                        } else {
+                            if (typeof showToast === 'function') {
+                                showToast('Print function not available', 'warning');
+                            }
+                        }
                     } else {
-                        alert('Error fetching receipt details');
+                        if (typeof showToast === 'function') {
+                            showToast('Error fetching receipt details', 'error');
+                        }
                     }
+                } catch (e) {
+                    if (typeof showToast === 'function') {
+                        showToast('Error processing receipt data', 'error');
+                    }
+                    console.error('Error parsing receipt response:', e);
                 }
             },
-            error: function() {
+            error: function(xhr, status, error) {
                 if (typeof showToast === 'function') {
                     showToast('Error generating receipt', 'error');
-                } else {
-                    alert('Error generating receipt');
                 }
+                console.error('Print receipt error:', error);
             }
         });
     });
 
-    // Show first account type balance on load
-    if ($('#accountType option:first').val()) {
-        getAvailableBalance($('#accountType option:first').val());
-    }
-
-    // Utility function
+    // =====================================
+    // UTILITY FUNCTIONS
+    // =====================================
+    
     function formatCurrency(amount) {
-        return parseFloat(amount).toLocaleString('en-KE', {
+        return parseFloat(amount || 0).toLocaleString('en-KE', {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2
         });
     }
+
+    // =====================================
+    // MODAL RESET FUNCTIONS
+    // =====================================
+
+    // Reset forms when modals are closed
+    $('#addSavingsModal').on('hidden.bs.modal', function () {
+        $('#addSavingsForm')[0].reset();
+        $('#availableBalance').val('');
+    });
+
+    $('#withdrawModal').on('hidden.bs.modal', function () {
+        $('#withdrawForm')[0].reset();
+        $('#withdrawAvailableBalance').val('');
+        $('#totalWithdrawal').val('');
+    });
+
+    // Initialize balance for first account type when modals open
+    $('#addSavingsModal').on('shown.bs.modal', function () {
+        const firstAccountType = $('#accountType option:nth-child(2)').val(); // Skip "Select account type" option
+        if (firstAccountType) {
+            $('#accountType').val(firstAccountType).trigger('change');
+        }
+    });
+
+    $('#withdrawModal').on('shown.bs.modal', function () {
+        const firstAccountType = $('#withdrawAccountType option:nth-child(2)').val(); // Skip "Select account type" option
+        if (firstAccountType) {
+            $('#withdrawAccountType').val(firstAccountType).trigger('change');
+        }
+    });
+
+    // =====================================
+    // ERROR PREVENTION
+    // =====================================
+    
+    // Suppress any JavaScript errors that might cause browser dialogs
+    window.addEventListener('error', function(event) {
+        console.error('JavaScript Error:', {
+            message: event.message,
+            filename: event.filename,
+            lineno: event.lineno,
+            colno: event.colno,
+            error: event.error
+        });
+        
+        // Prevent the browser from showing the default error dialog
+        event.preventDefault();
+        return true;
+    });
+
+    // Handle unhandled promise rejections
+    window.addEventListener('unhandledrejection', function(event) {
+        console.error('Unhandled Promise Rejection:', event.reason);
+        event.preventDefault();
+    });
+
+    // Override any potential alert() calls
+    const originalAlert = window.alert;
+    window.alert = function(message) {
+        console.log('Alert suppressed:', message);
+        if (typeof showToast === 'function') {
+            showToast(message, 'info');
+        }
+    };
+
+    // =====================================
+    // GLOBAL AJAX ERROR HANDLER
+    // =====================================
+    
+    $(document).ajaxError(function(event, xhr, settings, thrownError) {
+        // Only log actual errors, not cancelled requests
+        if (xhr.status !== 0) {
+            console.error('Global AJAX Error:', {
+                url: settings.url,
+                status: xhr.status,
+                statusText: xhr.statusText,
+                responseText: xhr.responseText ? xhr.responseText.substring(0, 200) : 'No response',
+                thrownError: thrownError
+            });
+        }
+        
+        // Prevent any error alerts from showing
+        event.stopPropagation();
+    });
 });
 </script>

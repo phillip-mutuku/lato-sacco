@@ -7,391 +7,337 @@ require_once '../helpers/session.php';
 require_once '../config/class.php';
 $db = new db_class();
 
-        // Check if user is logged in and is an admin
-        if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-            $_SESSION['error_msg'] = "Unauthorized access";
-            header('Location: index.php');
-            exit();
-        }
-
-
-// Function to get notifications with filtering
-function getNotifications($db, $category, $filter = 'all') {
-    $activityTypes = "'loan', 'payment', 'account', 'user'";
-    $systemTypes = "'system', 'backup', 'update', 'settings'";
-    
-    $query = "SELECT * FROM notifications WHERE type IN (" . 
-             ($category === 'activity' ? $activityTypes : $systemTypes) . ")";
-    
-    switch ($filter) {
-        case 'unread':
-            $query .= " AND is_read = FALSE";
-            break;
-        case 'today':
-            $query .= " AND DATE(date) = CURDATE()";
-            break;
-        case 'this_month':
-            $query .= " AND YEAR(date) = YEAR(CURDATE()) AND MONTH(date) = MONTH(CURDATE())";
-            break;
-        // 'all' doesn't need additional filtering
-    }
-    
-    $query .= " ORDER BY date DESC LIMIT 50";
-    
-    $result = $db->conn->query($query);
-    return $result->fetch_all(MYSQLI_ASSOC);
+// Check if user is logged in and is an admin
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
+    $_SESSION['error_msg'] = "Unauthorized access";
+    header('Location: index.php');
+    exit();
 }
 
-// Function to mark notification as read
-function deleteNotification($db, $id) {
-    $stmt = $db->conn->prepare("DELETE FROM notifications WHERE id = ?");
-    $stmt->bind_param("i", $id);
-    return $stmt->execute();
-}
-
-// Function to add a new notification
-function addNotification($db, $message, $type, $relatedId = null) {
-    $stmt = $db->conn->prepare("INSERT INTO notifications (message, type, related_id, date) VALUES (?, ?, ?, NOW())");
-    $stmt->bind_param("ssi", $message, $type, $relatedId);
-    return $stmt->execute();
-}
-
-// Handle POST requests
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['action']) && $_POST['action'] === 'delete' && isset($_POST['id'])) {
-        $success = deleteNotification($db, $_POST['id']);
-        echo json_encode(['success' => $success]);
-        exit;
-    }
-}
-
-// Get filter from GET parameter, default to 'all'
-$filter = isset($_GET['filter']) ? $_GET['filter'] : 'all';
+// Pagination
+$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$limit = 10;
+$offset = ($page - 1) * $limit;
 
 // Get notifications
-$activityNotifications = getNotifications($db, 'activity', $filter);
-$systemNotifications = getNotifications($db, 'system', $filter);
+$query = "SELECT * FROM notifications ORDER BY date DESC LIMIT $limit OFFSET $offset";
+$result = $db->conn->query($query);
+$notifications = $result->fetch_all(MYSQLI_ASSOC);
 
-// Count unread notifications
-function countUnread($notifications) {
-    return array_reduce($notifications, function($carry, $item) {
-        return $carry + ($item['is_read'] ? 0 : 1);
-    }, 0);
+// Count total notifications
+$countQuery = "SELECT COUNT(*) as total FROM notifications";
+$countResult = $db->conn->query($countQuery);
+$total = $countResult->fetch_assoc()['total'];
+$totalPages = ceil($total / $limit);
+
+// Handle AJAX requests
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $id = $_POST['id'];
+    $action = $_POST['action'];
+    
+    if ($action === 'delete') {
+        $stmt = $db->conn->prepare("DELETE FROM notifications WHERE id = ?");
+        $stmt->bind_param("i", $id);
+        $success = $stmt->execute();
+    } elseif ($action === 'mark_read') {
+        $stmt = $db->conn->prepare("UPDATE notifications SET is_read = 1 WHERE id = ?");
+        $stmt->bind_param("i", $id);
+        $success = $stmt->execute();
+    }
+    
+    echo json_encode(['success' => $success]);
+    exit;
 }
-
-$unreadActivityCount = countUnread($activityNotifications);
-$unreadSystemCount = countUnread($systemNotifications);
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Notifications - Lato Management System</title>
-
-    <!-- Favicon -->
+    
     <link rel="icon" type="image/jpeg" href="../public/image/logo.jpg">
-    <!-- Font Awesome Icons -->
-    <link href="../public/fontawesome-free/css/all.min.css" rel="stylesheet" type="text/css">
-    <!-- Custom styles -->
+    <link href="../public/fontawesome-free/css/all.min.css" rel="stylesheet">
     <link href="../public/css/sb-admin-2.css" rel="stylesheet">
-    <!-- Custom CSS -->
+    
     <style>
-        .row .card{
-            box-shadow: rgba(50, 50, 93, 0.25) 0px 13px 27px -5px, rgba(0, 0, 0, 0.3) 0px 8px 16px -8px;
-            border: 0;
+        .container-fluid { margin-top: 70px; padding: 2rem; }
+        
+        .card {
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }
-        .notification-item {
-            transition: background-color 0.3s;
+        
+        .card-header {
+            background: linear-gradient(45deg, #4e73df, #224abe);
+            color: white;
+            border-radius: 10px 10px 0 0;
         }
-        .notification-item:hover {
-            background-color: #f8f9fc;
+        
+        .table th {
+            background: #f8f9fc;
+            border: none;
+            font-weight: 600;
+            color: #5a5c69;
         }
-        .notification-item.unread {
-            background-color: #e8f0fe;
+        
+        .table td {
+            border: none;
+            border-bottom: 1px solid #e3e6f0;
+            vertical-align: middle;
         }
-        .notification-item.unread:hover {
-            background-color: #d8e5fd;
+        
+        .table tr:hover { background: #f8f9fc; }
+        
+        .badge-unread { 
+            background: #e74a3b; 
+            color: white;
         }
-        .container-fluid {
-            margin-top: 70px;
-            padding-left: 1.5rem;
-            padding-right: 1.5rem;
+        .badge-read { 
+            background: #1cc88a; 
+            color: white;
         }
+        
+        .btn-sm {
+            padding: 0.4rem 0.8rem;
+            font-size: 0.8rem;
+            border-radius: 20px;
+        }
+        
+        .pagination .page-link {
+            border: none;
+            color: #4e73df;
+            margin: 0 2px;
+            border-radius: 5px;
+        }
+        
+        .pagination .page-item.active .page-link {
+            background: #4e73df;
+            border-color: #4e73df;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: #858796;
+        }
+        
+        @media (max-width: 768px) {
+            .container-fluid { padding: 1rem; }
+            .table-responsive { font-size: 0.85rem; }
         }
     </style>
 </head>
 
 <body id="page-top">
-
-    <!-- Page Wrapper -->
     <div id="wrapper">
-
-   <!-- Import Sidebar -->
-    <?php require_once '../components/includes/sidebar.php'; ?>
-
-                <!-- Begin Page Content -->
-                <div class="container-fluid pt-4">
-
-                    <!-- Page Heading -->
-                    <h1 class="h3 mb-4 text-gray-800">Notifications</h1>
-
-                    <!-- Filter Buttons -->
-                    <div class="mb-3">
-                        <a href="?filter=all" class="btn btn-warning <?php echo $filter === 'all' ? 'active' : ''; ?>">All</a>
-                        <a href="?filter=unread" class="btn btn-warning <?php echo $filter === 'unread' ? 'active' : ''; ?>">Unread</a>
-                        <a href="?filter=today" class="btn btn-warning <?php echo $filter === 'today' ? 'active' : ''; ?>">Today</a>
-                        <a href="?filter=this_month" class="btn btn-warning <?php echo $filter === 'this_month' ? 'active' : ''; ?>">This Month</a>
-                    </div>
-
-                    <div class="row">
-                        <!-- Activity Notifications -->
-                        <div class="col-lg-6">
-                            <div class="card mb-4">
-                                <div class="card-header py-3">
-                                    <h6 style="color: #030f57;" class="m-0 font-weight-bold">
-                                        Activities
-                                        <?php if ($unreadActivityCount > 0): ?>
-                                            <span class="badge badge-danger ml-2"><?php echo $unreadActivityCount; ?> unread</span>
-                                        <?php endif; ?>
-                                    </h6>
-                                </div>
-                                <div class="card-body">
-                                    <ul class="list-group" id="activityNotifications">
-                                        <?php foreach ($activityNotifications as $notification): ?>
-                                            <li class="list-group-item notification-item <?php echo $notification['is_read'] ? '' : 'unread'; ?>" data-id="<?php echo $notification['id']; ?>">
-                                                <div class="d-flex w-100 justify-content-between">
-                                                    <h5 class="mb-1"><?php echo htmlspecialchars($notification['message']); ?></h5>
-                                                    <small><?php echo $notification['date']; ?></small>
-                                                </div>
-                                                <p class="mb-1">Type: <?php echo ucfirst($notification['type']); ?></p>
-                                                <?php if ($notification['related_id']): ?>
-                                                    <small>Related ID: <?php echo $notification['related_id']; ?></small>
-                                                <?php endif; ?>
-                                                <?php if (!$notification['is_read']): ?>
-                                                    <button class="btn btn-sm btn-outline-danger mt-2 delete-notification">Mark as Read</button>
-                                                <?php endif; ?>
-                                            </li>
-                                        <?php endforeach; ?>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- System Notifications -->
-                        <div class="col-lg-6">
-                            <div class="card mb-4">
-                                <div class="card-header py-3">
-                                    <h6 style="color: #030f57;" class="m-0 font-weight-bold">
-                                        System
-                                        <?php if ($unreadSystemCount > 0): ?>
-                                            <span class="badge badge-danger ml-2"><?php echo $unreadSystemCount; ?> unread</span>
-                                        <?php endif; ?>
-                                    </h6>
-                                </div>
-                                <div class="card-body">
-                                    <ul class="list-group" id="systemNotifications">
-                                        <?php foreach ($systemNotifications as $notification): ?>
-                                            <li class="list-group-item notification-item <?php echo $notification['is_read'] ? '' : 'unread'; ?>" data-id="<?php echo $notification['id']; ?>">
-                                                <div class="d-flex w-100 justify-content-between">
-                                                    <h5 class="mb-1"><?php echo htmlspecialchars($notification['message']); ?></h5>
-                                                    <small><?php echo $notification['date']; ?></small>
-                                                </div>
-                                                <p class="mb-1">Type: <?php echo ucfirst($notification['type']); ?></p>
-                                                <?php if ($notification['related_id']): ?>
-                                                    <small>Related ID: <?php echo $notification['related_id']; ?></small>
-                                                <?php endif; ?>
-                                                <?php if (!$notification['is_read']): ?>
-                                                    <button class="btn btn-sm btn-outline-primary mt-2 mark-read">Mark as Read</button>
-                                                <?php endif; ?>
-                                            </li>
-                                        <?php endforeach; ?>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
+        <?php require_once '../components/includes/sidebar.php'; ?>
+        
+        <div class="container-fluid">
+            <h1 class="h3 mb-4 text-gray-800">
+                <i class="fas fa-bell mr-2"></i>Notifications
+            </h1>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="m-0 font-weight-bold">
+                        All Notifications (<?php echo $total; ?>)
+                    </h6>
                 </div>
-                <!-- /.container-fluid -->
-
+                
+                <div class="card-body p-0">
+                    <?php if (empty($notifications)): ?>
+                        <div class="empty-state">
+                            <i class="fas fa-bell-slash fa-3x mb-3"></i>
+                            <h5>No notifications found</h5>
+                            <p>You're all caught up!</p>
+                        </div>
+                    <?php else: ?>
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th width="5%">#</th>
+                                        <th width="50%">Message</th>
+                                        <th width="12%">Type</th>
+                                        <th width="10%">Status</th>
+                                        <th width="13%">Date</th>
+                                        <th width="10%">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($notifications as $index => $notification): ?>
+                                        <tr data-id="<?php echo $notification['id']; ?>">
+                                            <td><?php echo $offset + $index + 1; ?></td>
+                                            <td>
+                                                <strong><?php echo htmlspecialchars($notification['message']); ?></strong>
+                                                <?php if ($notification['related_id']): ?>
+                                                    <br><small class="text-muted">ID: <?php echo $notification['related_id']; ?></small>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td>
+                                                <span class="badge badge-primary">
+                                                    <?php echo ucfirst($notification['type']); ?>
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span class="badge <?php echo $notification['is_read'] ? 'badge-read' : 'badge-unread'; ?>">
+                                                    <?php echo $notification['is_read'] ? 'Read' : 'Unread'; ?>
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <small><?php echo date('M j, Y', strtotime($notification['date'])); ?></small>
+                                            </td>
+                                            <td>
+                                                <?php if (!$notification['is_read']): ?>
+                                                    <button class="btn btn-success btn-sm mark-read" data-id="<?php echo $notification['id']; ?>">
+                                                        <i class="fas fa-check"></i>
+                                                    </button>
+                                                <?php endif; ?>
+                                                <button class="btn btn-danger btn-sm delete-btn" data-id="<?php echo $notification['id']; ?>">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <?php if ($totalPages > 1): ?>
+                            <div class="card-footer bg-white">
+                                <nav>
+                                    <ul class="pagination justify-content-center mb-0">
+                                        <?php if ($page > 1): ?>
+                                            <li class="page-item">
+                                                <a class="page-link" href="?page=<?php echo $page - 1; ?>">Previous</a>
+                                            </li>
+                                        <?php endif; ?>
+                                        
+                                        <?php for ($i = 1; $i <= $totalPages; $i++): ?>
+                                            <li class="page-item <?php echo $i == $page ? 'active' : ''; ?>">
+                                                <a class="page-link" href="?page=<?php echo $i; ?>"><?php echo $i; ?></a>
+                                            </li>
+                                        <?php endfor; ?>
+                                        
+                                        <?php if ($page < $totalPages): ?>
+                                            <li class="page-item">
+                                                <a class="page-link" href="?page=<?php echo $page + 1; ?>">Next</a>
+                                            </li>
+                                        <?php endif; ?>
+                                    </ul>
+                                </nav>
+                                <div class="text-center mt-2 text-muted">
+                                    <small>Showing <?php echo $offset + 1; ?>-<?php echo min($offset + $limit, $total); ?> of <?php echo $total; ?></small>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                </div>
             </div>
-            <!-- End of Main Content -->
-
-            <!-- Footer -->
-            <footer class="sticky-footer bg-white">
-                <div class="container my-auto">
-                    <div class="copyright text-center my-auto">
-                        <span>© 2024 Lato Management System. All rights reserved.</span>
-                    </div>
-                </div>
-            </footer>
-            <!-- End of Footer -->
-
         </div>
-        <!-- End of Content Wrapper -->
-
     </div>
-    <!-- End of Page Wrapper -->
 
-    <!-- Scroll to Top Button-->
-    <a class="scroll-to-top rounded" href="#page-top">
-        <i class="fas fa-angle-up"></i>
-    </a>
-
-    <!-- Logout Modal-->
-    <div class="modal fade" id="logoutModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel"
-        aria-hidden="true">
-        <div class="modal-dialog" role="document">
+    <!-- Confirmation Dialog Modal -->
+    <div class="modal fade" id="confirmDialog" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered" role="document">
             <div class="modal-content">
                 <div class="modal-header">
-                <h5 class="modal-title" id="exampleModalLabel">Ready to Leave?</h5>
-                    <button class="close" type="button" data-dismiss="modal" aria-label="Close">
-                        <span aria-hidden="true">×</span>
+                    <h5 class="modal-title" id="confirmTitle">Confirm Action</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
                     </button>
                 </div>
-                <div class="modal-body">Select "Logout" below if you are ready to end your current session.</div>
+                <div class="modal-body" id="confirmMessage">
+                    Are you sure you want to proceed?
+                </div>
                 <div class="modal-footer">
-                    <button class="btn btn-secondary" type="button" data-dismiss="modal">Cancel</button>
-                    <a class="btn btn-primary" href="../views/logout.php">Logout</a>
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmYes">Yes, Delete</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Bootstrap core JavaScript-->
+    <!-- Scripts -->
     <script src="../public/js/jquery.js"></script>
     <script src="../public/js/bootstrap.bundle.js"></script>
-
-    <!-- Core plugin JavaScript-->
-    <script src="../public/js/jquery.easing.js"></script>
-
-    <!-- Custom scripts for all pages-->
     <script src="../public/js/sb-admin-2.js"></script>
-
+    
     <script>
-$(document).ready(function() {
-    // Rename 'mark-read' to 'delete-notification'
-    $('.delete-notification').on('click', function(e) {
-        e.preventDefault();
-        var $button = $(this);
-        var $item = $button.closest('.notification-item');
-        var notificationId = $item.data('id');
-
-        $.ajax({
-            url: 'notifications.php',
-            type: 'POST',
-            data: {
-                action: 'delete',
-                id: notificationId
-            },
-            dataType: 'json',
-            success: function(response) {
-                if (response.success) {
-                    $item.fadeOut(300, function() {
-                        $(this).remove();
-                        updateUnreadCount($item.closest('.card'));
-                    });
-                }
-            }
-        });
-    });
-
-
-        function updateUnreadCount($card) {
-            var unreadCount = $card.find('.notification-item.unread').length;
-            var $badge = $card.find('.badge-danger');
-            if (unreadCount > 0) {
-                if ($badge.length) {
-                    $badge.text(unreadCount + ' unread');
-                } else {
-                    $card.find('.card-header h6').append('<span class="badge badge-danger ml-2">' + unreadCount + ' unread</span>');
-                }
-            } else {
-                $badge.remove();
-            }
-        }
-
-        // Toggle the side navigation
-        $("#sidebarToggleTop").on('click', function(e) {
-            $("body").toggleClass("sidebar-toggled");
-            $(".sidebar").toggleClass("toggled");
-            if ($(".sidebar").hasClass("toggled")) {
-                $('.sidebar .collapse').collapse('hide');
-                $("#content-wrapper").css({"margin-left": "100px", "width": "calc(100% - 100px)"});
-                $(".topbar").css("left", "100px");
-            } else {
-                $("#content-wrapper").css({"margin-left": "225px", "width": "calc(100% - 225px)"});
-                $(".topbar").css("left", "225px");
-            }
-        });
-
-        // Close any open menu accordions when window is resized below 768px
-        $(window).resize(function() {
-            if ($(window).width() < 768) {
-                $('.sidebar .collapse').collapse('hide');
-            };
+    $(document).ready(function() {
+        // Mark as read
+        $('.mark-read').click(function() {
+            var id = $(this).data('id');
+            var row = $(this).closest('tr');
+            var button = $(this);
             
-            // Toggle the side navigation when window is resized below 480px
-            if ($(window).width() < 480 && !$(".sidebar").hasClass("toggled")) {
-                $("body").addClass("sidebar-toggled");
-                $(".sidebar").addClass("toggled");
-                $('.sidebar .collapse').collapse('hide');
-            };
-        });
-
-        // Prevent the content wrapper from scrolling when the fixed side navigation hovered over
-        $('body.fixed-nav .sidebar').on('mousewheel DOMMouseScroll wheel', function(e) {
-            if ($(window).width() > 768) {
-                var e0 = e.originalEvent,
-                    delta = e0.wheelDelta || -e0.detail;
-                this.scrollTop += (delta < 0 ? 1 : -1) * 30;
-                e.preventDefault();
-            }
-        });
-
-        // Scroll to top button appear
-        $(document).on('scroll', function() {
-            var scrollDistance = $(this).scrollTop();
-            if (scrollDistance > 100) {
-                $('.scroll-to-top').fadeIn();
-            } else {
-                $('.scroll-to-top').fadeOut();
-            }
-        });
-
-        // Smooth scrolling using jQuery easing
-        $(document).on('click', 'a.scroll-to-top', function(e) {
-            var $anchor = $(this);
-            $('html, body').stop().animate({
-                scrollTop: ($($anchor.attr('href')).offset().top)
-            }, 1000, 'easeInOutExpo');
-            e.preventDefault();
-        });
-
-        // Function to refresh notifications
-        function refreshNotifications() {
-            $.ajax({
-                url: 'notifications.php',
-                method: 'GET',
-                data: { filter: '<?php echo $filter; ?>' },
-                success: function(data) {
-                    $('#content').html($(data).find('#content').html());
-                },
-                error: function(xhr, status, error) {
-                    console.error("Error refreshing notifications:", error);
+            // Add loading state
+            button.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
+            
+            $.post('notifications.php', {action: 'mark_read', id: id}, function(response) {
+                if (response.success) {
+                    row.find('.badge-unread').removeClass('badge-unread').addClass('badge-read').text('Read');
+                    button.remove();
+                } else {
+                    button.prop('disabled', false).html('<i class="fas fa-check"></i>');
+                    alert('Failed to mark as read. Please try again.');
                 }
+            }, 'json').fail(function() {
+                button.prop('disabled', false).html('<i class="fas fa-check"></i>');
+                alert('An error occurred. Please try again.');
             });
-        }
-
-        // Refresh notifications every 5 minutes (300000 milliseconds)
-        setInterval(refreshNotifications, 300000);
+        });
+        
+        // Delete notification with confirmation dialog
+        var deleteId = null;
+        var deleteRow = null;
+        
+        $('.delete-btn').click(function() {
+            deleteId = $(this).data('id');
+            deleteRow = $(this).closest('tr');
+            
+            $('#confirmTitle').text('Delete Notification');
+            $('#confirmMessage').text('Are you sure you want to delete this notification? This action cannot be undone.');
+            $('#confirmYes').text('Yes, Delete').removeClass('btn-primary').addClass('btn-danger');
+            $('#confirmDialog').modal('show');
+        });
+        
+        // Handle confirmation
+        $('#confirmYes').click(function() {
+            $('#confirmDialog').modal('hide');
+            
+            if (deleteId && deleteRow) {
+                $.post('notifications.php', {action: 'delete', id: deleteId}, function(response) {
+                    if (response.success) {
+                        deleteRow.fadeOut(300, function() {
+                            $(this).remove();
+                            // Reload if no more notifications on current page
+                            if ($('tbody tr:visible').length === 0) {
+                                location.reload();
+                            }
+                        });
+                    } else {
+                        alert('Failed to delete notification. Please try again.');
+                    }
+                }, 'json').fail(function() {
+                    alert('An error occurred. Please try again.');
+                });
+                
+                // Reset variables
+                deleteId = null;
+                deleteRow = null;
+            }
+        });
+        
+        // Reset variables when modal is closed
+        $('#confirmDialog').on('hidden.bs.modal', function() {
+            deleteId = null;
+            deleteRow = null;
+        });
     });
     </script>
-
 </body>
-
 </html>
