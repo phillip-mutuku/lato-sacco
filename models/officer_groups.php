@@ -193,8 +193,10 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
 <body id="page-top">
     <!-- Page Wrapper -->
     <div id="wrapper">
-        <!-- Include Sidebar -->
-        <?php include '../components/includes/sidebar.php'; ?>
+        <!-- Include Sidebar and Header -->
+        <?php include '../components/includes/officer_sidebar.php'; ?>
+
+
                 <!-- Begin Page Content -->
                 <div class="container-fluid">
                     <!-- Include Groups Statistics -->
@@ -278,7 +280,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                                                         Action
                                                     </button>
                                                     <div class="dropdown-menu">
-                                                        <a class="dropdown-item" href="manage_group.php?id=<?php echo $row['group_id']; ?>">
+                                                        <a class="dropdown-item" href="officer_manage_group.php?id=<?php echo $row['group_id']; ?>">
                                                             <i class="fas fa-users fa-fw"></i> Manage Group
                                                         </a>
                                                         <button type="button" class="dropdown-item edit-group" data-id="<?php echo $row['group_id']; ?>">

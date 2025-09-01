@@ -372,7 +372,7 @@ while ($row = $result->fetch_assoc()) {
 <body id="page-top">
     <div id="wrapper">
         <!-- Include Sidebar and Header -->
-        <?php include '../components/includes/sidebar.php'; ?>
+        <?php include '../components/includes/cashier_sidebar.php'; ?>
 
         <!-- Begin Page Content -->
         <div class="container-fluid">

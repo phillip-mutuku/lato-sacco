@@ -44,8 +44,8 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
 
 <body id="page-top">
     <div id="wrapper">
-             <!-- Import Sidebar -->
-            <?php require_once '../components/includes/sidebar.php'; ?>
+       <!-- Include Sidebar and Header -->
+        <?php include '../components/includes/cashier_sidebar.php'; ?>
 
                 <!-- Begin Page Content -->
                 <div class="container-fluid pt-4">
@@ -104,7 +104,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                                                 </td>
                                                 <td>
                                                     <div class="btn-group">
-                                                        <a href="manage_business_group.php?id=<?php echo $row['group_id']; ?>" 
+                                                        <a href="cashier_manage_business_group.php?id=<?php echo $row['group_id']; ?>" 
                                                         class="btn btn-sm" style="background-color: #51087E; color: white;">
                                                             <i class="fas fa-users"></i> Manage
                                                         </a>

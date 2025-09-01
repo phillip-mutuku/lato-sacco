@@ -464,7 +464,7 @@ body.sidebar-toggled .topbar {
 
     <!-- Dashboard Nav Item -->
     <li class="nav-item active">
-        <a class="nav-link" href="../views/home.php">
+        <a class="nav-link" href="../views/cashier.php">
             <i class="fas fa-fw fa-home"></i>
             <span>Dashboard</span>
         </a>
@@ -487,10 +487,8 @@ body.sidebar-toggled .topbar {
         </a>
         <div id="collapseLoans" class="collapse" aria-labelledby="headingLoans" data-parent="#accordionSidebar">
             <div class="bg-white py-2 collapse-inner rounded">
-                <a class="collapse-item" href="../models/loan.php">New Loan</a>
-                <a class="collapse-item" href="../models/pending_approval.php">Pending Approval</a>
-                <a class="collapse-item" href="../models/disbursement.php">Disbursements</a>
-                <a class="collapse-item" href="../models/arrears.php">Arrears</a>
+                <a class="collapse-item" href="../models/cashier_disbursement.php">Disbursements</a>
+                <a class="collapse-item" href="../models/cashier_arrears.php">Arrears</a>
             </div>
         </div>
     </li>
@@ -504,10 +502,8 @@ body.sidebar-toggled .topbar {
         </a>
         <div id="collapseFinance" class="collapse" aria-labelledby="headingFinance" data-parent="#accordionSidebar">
             <div class="bg-white py-2 collapse-inner rounded">
-                <a class="collapse-item" href="../views/daily-reconciliation.php">Daily Reconciliation</a>
-                <a class="collapse-item" href="../views/expenses_tracking.php">Expenses Tracking</a>
-                <a class="collapse-item" href="../views/manage_expenses.php">Manage Expenses</a>
-                <a class="collapse-item" href="../views/receipts.php">Receipts</a>
+                <a class="collapse-item" href="../views/cashier-daily-reconciliation.php">Daily Reconciliation</a>
+                <a class="collapse-item" href="../views/cashier_manage_expenses.php">Manage Expenses</a>
             </div>
         </div>
     </li>
@@ -521,41 +517,9 @@ body.sidebar-toggled .topbar {
         </a>
         <div id="collapseClients" class="collapse" aria-labelledby="headingClients" data-parent="#accordionSidebar">
             <div class="bg-white py-2 collapse-inner rounded">
-                <a class="collapse-item" href="../views/account.php">Client Accounts</a>
-                <a class="collapse-item" href="../models/groups.php">Wekeza Groups</a>
-                <a class="collapse-item" href="../models/business_groups.php">Business Groups</a>
-            </div>
-        </div>
-    </li>
-
-    <!-- Products -->
-    <li class="nav-item">
-        <a class="nav-link" href="../models/loan_plan.php">
-            <i class="fas fa-fw fa-piggy-bank"></i>
-            <span>Loan Products</span>
-        </a>
-    </li>
-
-    <!-- Divider -->
-    <hr class="sidebar-divider">
-
-    <!-- System Heading -->
-    <div class="sidebar-heading">
-        System
-    </div>
-
-    <!-- System Management -->
-    <li class="nav-item">
-        <a class="nav-link collapsed" href="#" data-toggle="collapse" data-target="#collapseSystem"
-            aria-expanded="false" aria-controls="collapseSystem">
-            <i class="fas fa-fw fa-cog"></i>
-            <span>System</span>
-        </a>
-        <div id="collapseSystem" class="collapse" aria-labelledby="headingSystem" data-parent="#accordionSidebar">
-            <div class="bg-white py-2 collapse-inner rounded">
-                <a class="collapse-item" href="../models/user.php">Users</a>
-                <a class="collapse-item" href="../views/settings.php">Settings</a>
-                <a class="collapse-item" href="../views/backup.php">Backup</a>
+                <a class="collapse-item" href="../views/cashier-account.php">Client Accounts</a>
+                <a class="collapse-item" href="../models/cashier_groups.php">Wekeza Groups</a>
+                <a class="collapse-item" href="../models/cashier_business_groups.php">Business Groups</a>
             </div>
         </div>
     </li>
@@ -588,17 +552,10 @@ body.sidebar-toggled .topbar {
 
             <!-- Topbar Navbar -->
             <ul class="navbar-nav ml-auto">
-                <!-- Nav Item - Notifications -->
-                <li class="nav-item dropdown no-arrow mx-1">
-                    <a class="nav-link" href="../views/notifications.php" title="Notifications">
-                        <i class="fas fa-bell fa-fw"></i>
-                        <span class="notification-dot"></span>
-                    </a>
-                </li>
 
                 <!-- Nav Item - Announcements -->
                 <li class="nav-item dropdown no-arrow mx-1">
-                    <a class="nav-link" href="../views/announcements.php" title="Announcements">
+                    <a class="nav-link" href="../views/cashier_announcements.php" title="Announcements">
                         <i class="fas fa-bullhorn fa-fw"></i>
                         <span class="notification-dot"></span>
                     </a>

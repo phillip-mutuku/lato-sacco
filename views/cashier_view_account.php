@@ -479,7 +479,7 @@ function safeJsonEncode($data) {
 
     <div class="page-container">
         <!-- Include Sidebar -->
-        <?php include '../components/account/sidebar.php'; ?>
+        <?php include '../components/account/cashier_sidebar.php'; ?>
 
         <!-- Begin Page Content -->
         <div class="container-fluid">

@@ -508,8 +508,8 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
 <body id="page-top">
     <!-- Page Wrapper -->
     <div id="wrapper">
-         <!-- Import Sidebar -->
-            <?php require_once '../components/includes/sidebar.php'; ?>
+         <!-- Include Sidebar and Header -->
+        <?php include '../components/includes/officer_sidebar.php'; ?>
 
                 <!-- Toast Container -->
                 <div class="toast-container" id="toastContainer">
@@ -638,74 +638,6 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                             <p id="totalDisbursements">KSh <?= number_format($total_disbursements_today, 2) ?></p>
                         </div>
                     </div>
-                    </div>
-
-                    <!-- New Disbursement Button -->
-                    <div class="row">
-                        <button class="ml-3 mb-3 btn btn-lg btn-warning" href="#" data-toggle="modal" data-target="#addModal"><span class="fa fa-plus"></span> New Disbursement</button>
-                    </div>
-
-                    <!-- Loans Waiting for Disbursement -->
-                    <div class="card mb-4">
-                        <div class="card-header py-3">
-                            <h6 style="color: #51087E;" class="m-0 font-weight-bold">Loans Waiting for Disbursement</h6>
-                        </div>
-                        <div class="card-body">
-                            <div class="table-responsive">
-                                <table class="table table-bordered" id="pendingLoansTable" width="100%" cellspacing="0">
-                                    <thead>
-                                        <tr>
-                                            <th>Ref No</th>
-                                            <th>Borrower</th>
-                                            <th>Amount</th>
-                                            <th>Payment Terms</th>
-                                            <th>Date Approved</th>
-                                            <th>Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <?php 
-                                        $pending_total = 0;
-                                        while($loan = $pending_loans->fetch_assoc()): 
-                                            $pending_total += $loan['amount'];
-                                        ?>
-                                        <tr>
-                                            <td><?= $loan['ref_no'] ?></td>
-                                            <td><?= $loan['first_name'] . ' ' . $loan['last_name'] ?></td>
-                                            <td class="loan-amount">KSh <?= number_format($loan['amount'], 2) ?></td>
-                                            <td>
-                                                <div class="payment-terms">
-                                                    <div><span class="term-months"><?= $loan['loan_term'] ?> months</span></div>
-                                                    <div><span class="monthly-amount">KSh <?= number_format($loan['monthly_payment'], 2) ?>/month</span></div>
-                                                </div>
-                                            </td>
-                                            <td><?= $loan['approval_date'] ? date('M d, Y', strtotime($loan['approval_date'])) : 'Not set' ?></td>
-                                            <td>
-                                                <button class="btn btn-success btn-sm disburse-loan" 
-                                                        data-loan-id="<?= $loan['loan_id'] ?>" 
-                                                        data-ref-no="<?= $loan['ref_no'] ?>"
-                                                        data-borrower="<?= $loan['first_name'] . ' ' . $loan['last_name'] ?>"
-                                                        data-amount="<?= $loan['amount'] ?>">
-                                                    <i class="fas fa-money-bill-wave"></i> Disburse
-                                                </button>
-                                            </td>
-                                        </tr>
-                                        <?php endwhile; ?>
-                                    </tbody>
-                                    <tfoot>
-                                        <tr class="total-row">
-                                            <td colspan="2" class="text-right"><strong>Total Pending:</strong></td>
-                                            <td class="total-amount" id="pendingTotalAmount">KSh <?= number_format($pending_total, 2) ?></td>
-                                            <td colspan="3" class="text-center">
-                                                <span class="badge badge-warning" id="pendingCountBadge">
-                                                    <?= $pending_loans->num_rows ?> loan(s) waiting
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    </tfoot>
-                                </table>
-                            </div>
-                        </div>
                     </div>
 
                     <!-- Disbursed Loans List -->

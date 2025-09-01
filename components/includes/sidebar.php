@@ -2,6 +2,10 @@
 // Get the user's name for the header
 $user_name = $db->user_acc($_SESSION['user_id']);
 $first_name = explode(' ', $user_name)[0];
+
+// Get user role from session (more efficient than database query)
+$user_role = isset($_SESSION['role']) ? $_SESSION['role'] : 'user';
+$is_admin = ($user_role === 'admin');
 ?>
 
 <style>
@@ -82,6 +86,42 @@ $first_name = explode(' ', $user_name)[0];
     position: relative;
     font-size: 0.95rem;
     white-space: nowrap;
+}
+
+/* Disabled state styles */
+.nav-item.disabled .nav-link {
+    color: rgba(255, 255, 255, 0.4) !important;
+    cursor: not-allowed !important;
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.nav-item.disabled .nav-link i {
+    color: rgba(255, 255, 255, 0.3) !important;
+}
+
+.collapse-item.disabled {
+    color: #999 !important;
+    cursor: not-allowed !important;
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.collapse-item.disabled:hover {
+    background-color: transparent !important;
+    color: #999 !important;
+}
+
+/* Disabled topbar items */
+.nav-item.disabled-topbar .nav-link {
+    color: #ccc !important;
+    cursor: not-allowed !important;
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.nav-item.disabled-topbar .notification-dot {
+    display: none;
 }
 
 /* Normal sidebar hover effects */
@@ -489,7 +529,12 @@ body.sidebar-toggled .topbar {
             <div class="bg-white py-2 collapse-inner rounded">
                 <a class="collapse-item" href="../models/loan.php">New Loan</a>
                 <a class="collapse-item" href="../models/pending_approval.php">Pending Approval</a>
-                <a class="collapse-item" href="../models/disbursement.php">Disbursements</a>
+                <!-- Disbursements - Admin Only -->
+                <a class="collapse-item <?php echo !$is_admin ? 'disabled' : ''; ?>" 
+                   href="<?php echo $is_admin ? '../models/disbursement.php' : '#'; ?>"
+                   <?php echo !$is_admin ? 'title="Admin access required"' : ''; ?>>
+                    Disbursements
+                </a>
                 <a class="collapse-item" href="../models/arrears.php">Arrears</a>
             </div>
         </div>
@@ -504,8 +549,18 @@ body.sidebar-toggled .topbar {
         </a>
         <div id="collapseFinance" class="collapse" aria-labelledby="headingFinance" data-parent="#accordionSidebar">
             <div class="bg-white py-2 collapse-inner rounded">
-                <a class="collapse-item" href="../views/daily-reconciliation.php">Daily Reconciliation</a>
-                <a class="collapse-item" href="../views/expenses_tracking.php">Expenses Tracking</a>
+                <!-- Daily Reconciliation - Admin Only -->
+                <a class="collapse-item <?php echo !$is_admin ? 'disabled' : ''; ?>" 
+                   href="<?php echo $is_admin ? '../views/daily-reconciliation.php' : '#'; ?>"
+                   <?php echo !$is_admin ? 'title="Admin access required"' : ''; ?>>
+                    Daily Reconciliation
+                </a>
+                <!-- Expenses Tracking - Admin Only -->
+                <a class="collapse-item <?php echo !$is_admin ? 'disabled' : ''; ?>" 
+                   href="<?php echo $is_admin ? '../views/expenses_tracking.php' : '#'; ?>"
+                   <?php echo !$is_admin ? 'title="Admin access required"' : ''; ?>>
+                    Expenses Tracking
+                </a>
                 <a class="collapse-item" href="../views/manage_expenses.php">Manage Expenses</a>
                 <a class="collapse-item" href="../views/receipts.php">Receipts</a>
             </div>
@@ -588,12 +643,18 @@ body.sidebar-toggled .topbar {
 
             <!-- Topbar Navbar -->
             <ul class="navbar-nav ml-auto">
-                <!-- Nav Item - Notifications -->
-                <li class="nav-item dropdown no-arrow mx-1">
-                    <a class="nav-link" href="../views/notifications.php" title="Notifications">
-                        <i class="fas fa-bell fa-fw"></i>
-                        <span class="notification-dot"></span>
-                    </a>
+                <!-- Nav Item - Notifications (Admin Only) -->
+                <li class="nav-item dropdown no-arrow mx-1 <?php echo !$is_admin ? 'disabled-topbar' : ''; ?>">
+                    <?php if ($is_admin): ?>
+                        <a class="nav-link" href="../views/notifications.php" title="Notifications">
+                            <i class="fas fa-bell fa-fw"></i>
+                            <span class="notification-dot"></span>
+                        </a>
+                    <?php else: ?>
+                        <span class="nav-link" title="Admin access required">
+                            <i class="fas fa-bell fa-fw"></i>
+                        </span>
+                    <?php endif; ?>
                 </li>
 
                 <!-- Nav Item - Announcements -->
@@ -716,6 +777,26 @@ body.sidebar-toggled .topbar {
                 }
             });
         }
+
+        // Prevent clicks on disabled items
+        const disabledItems = document.querySelectorAll('.disabled, .disabled-topbar');
+        disabledItems.forEach(item => {
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                return false;
+            });
+            
+            // Also prevent clicks on child elements
+            const links = item.querySelectorAll('a');
+            links.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    return false;
+                });
+            });
+        });
 
         // Responsive handler
         function handleResize() {

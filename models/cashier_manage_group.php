@@ -358,7 +358,7 @@ function safeJsonEncode($data) {
 
     <?php if ($groupDetails): ?>
         <!-- Include Sidebar Component -->
-        <?php include '../components/manage_groups/sidebar.php'; ?>
+        <?php include '../components/manage_groups/cashier_sidebar.php'; ?>
 
         <!-- Include Members Component -->
         <?php include '../components/manage_groups/members.php'; ?>

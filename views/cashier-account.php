@@ -274,8 +274,8 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
 
     <!-- Page Wrapper -->
     <div id="wrapper">
-   <!-- Import Sidebar -->
-    <?php require_once '../components/includes/sidebar.php'; ?>
+   <!-- Include Sidebar and Header -->
+    <?php include '../components/includes/cashier_sidebar.php'; ?>
 
                 <!-- Begin Page Content -->
                 <div class="container-fluid pt-4">
@@ -834,7 +834,7 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
     }
 
     function viewAccount(accountId) {
-        window.open('view_account.php?id=' + accountId, '_blank');
+        window.open('cashier_view_account.php?id=' + accountId, '_blank');
     }
 
     // Function to load data and open modal

@@ -238,7 +238,7 @@ class ExpensesUtilities {
     
     // Check user permissions
     public static function checkPermissions($session) {
-        if (!isset($session['user_id']) || ($session['role'] !== 'admin' && $session['role'] !== 'manager')) {
+        if (!isset($session['user_id']) || ($session['role'] !== 'admin' && $session['role'] !== 'superadmin')) {
             $session['error_msg'] = "Unauthorized access";
             header('Location: index.php');
             exit();

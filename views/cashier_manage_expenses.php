@@ -224,8 +224,8 @@
 
 <body id="page-top">
     <div id="wrapper">
-        <!-- Import Sidebar -->
-        <?php require_once '../components/includes/sidebar.php'; ?>
+       <!-- Include Sidebar and Header -->
+        <?php include '../components/includes/cashier_sidebar.php'; ?>
 
         <div class="container-fluid pt-4">
             

@@ -365,7 +365,31 @@ public function get_database_size() {
 }
 
 
-
+public function get_user_role($user_id) {
+    try {
+        $query = $this->conn->prepare("SELECT role FROM `user` WHERE `user_id` = ?");
+        if (!$query) {
+            error_log("Prepare failed: " . $this->conn->error);
+            return 'user'; // default fallback
+        }
+        
+        $query->bind_param("i", $user_id);
+        
+        if ($query->execute()) {
+            $result = $query->get_result();
+            if ($result->num_rows > 0) {
+                $user = $result->fetch_assoc();
+                $query->close();
+                return $user['role'];
+            }
+        }
+        $query->close();
+        return 'user'; // default fallback if user not found
+    } catch (Exception $e) {
+        error_log("Error getting user role: " . $e->getMessage());
+        return 'user'; // default fallback on error
+    }
+}
 
     
     public function login($username, $password) {

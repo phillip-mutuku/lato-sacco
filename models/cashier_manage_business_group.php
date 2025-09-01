@@ -320,7 +320,7 @@ if ($groupId) {
 
     <?php if ($groupDetails): ?>
         <!-- Include Sidebar Component -->
-        <?php include '../components/business_groups/sidebar.php'; ?>
+        <?php include '../components/business_groups/cashier_sidebar.php'; ?>
 
         <!-- Include Dashboard & Information Component -->
         <?php include '../components/business_groups/dashboard_info.php'; ?>
