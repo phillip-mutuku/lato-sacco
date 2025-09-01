@@ -880,63 +880,77 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
     }
 
     // Function to save the updated data
-    function updateAccount() {
-        // Validate all fields are filled
-        var isValid = true;
-        var requiredFields = [
-            'account_id', 'first_name', 'last_name', 'shareholder_no',
-            'national_id', 'phone_number', 'division', 'village'
-        ];
+    // Function to save the updated data
+function updateAccount() {
+    // Validate all fields are filled
+    var isValid = true;
+    
+    // Check text input fields
+    var requiredTextFields = [
+        'account_id', 'first_name', 'last_name', 'shareholder_no',
+        'national_id', 'phone_number', 'division', 'village'
+    ];
 
-        // Check each required field
-        requiredFields.forEach(function(field) {
-            var input = $('[name="' + field + '"]');
-            if (!input.val()) {
-                isValid = false;
-                input.addClass('is-invalid');
-            } else {
-                input.removeClass('is-invalid');
-            }
-        });
-
-        // Check account types
-        if ($('#update_account_type').val().length === 0) {
+    // Check each required text field using the update form field names
+    requiredTextFields.forEach(function(field) {
+        var input = $('#update_' + field);
+        if (field === 'account_id') {
+            input = $('#' + field); // account_id doesn't have update_ prefix
+        }
+        
+        if (!input.val() || input.val().trim() === '') {
             isValid = false;
-            $('#update_account_type').next('.select2-container').addClass('is-invalid');
+            input.addClass('is-invalid');
+            console.log('Field ' + field + ' is empty');
         } else {
-            $('#update_account_type').next('.select2-container').removeClass('is-invalid');
+            input.removeClass('is-invalid');
         }
+    });
 
-        if (!isValid) {
-            toastManager.error('Please fill in all required fields');
-            return;
-        }
-
-        $.ajax({
-            url: '../controllers/accountController.php?action=update',
-            method: 'POST',
-            data: $('#updateAccountForm').serialize(),
-            dataType: 'json',
-            success: function(response) {
-                console.log('Server response:', response);
-                if(response.status === 'success') {
-                    toastManager.success('Account updated successfully!');
-                    $('#updateAccountModal').modal('hide');
-                    setTimeout(() => location.reload(), 1500);
-                } else {
-                    toastManager.error(response.message || 'Error updating account. Please try again.');
-                }
-            },
-            error: function(xhr, status, error) {
-                console.error('Update error:', {
-                    status: status,
-                    error: error,
-                    response: xhr.responseText
-                });
-                toastManager.error('Error updating account. Please try again.');
-            }
-        });
+    // Check account types separately
+    var selectedAccountTypes = $('#update_account_type').val();
+    if (!selectedAccountTypes || selectedAccountTypes.length === 0) {
+        isValid = false;
+        $('#update_account_type').next('.select2-container').addClass('is-invalid');
+        console.log('No account types selected');
+    } else {
+        $('#update_account_type').next('.select2-container').removeClass('is-invalid');
     }
+
+    if (!isValid) {
+        toastManager.error('Please fill in all required fields');
+        return;
+    }
+
+    // Debug: Log form data before sending
+    var formData = $('#updateAccountForm').serialize();
+    console.log('Form data being sent:', formData);
+
+    $.ajax({
+        url: '../controllers/accountController.php?action=update',
+        method: 'POST',
+        data: formData,
+        dataType: 'json',
+        success: function(response) {
+            console.log('Server response:', response);
+            if(response.status === 'success') {
+                toastManager.success('Account updated successfully!');
+                $('#updateAccountModal').modal('hide');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                toastManager.error(response.message || 'Error updating account. Please try again.');
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('Update error:', {
+                status: status,
+                error: error,
+                response: xhr.responseText
+            });
+            toastManager.error('Error updating account. Please try again.');
+        }
+    });
+}
 
     function deleteAccount(accountId) {
         $('#deleteConfirmModal').modal('show');
