@@ -1,5 +1,11 @@
 <?php
 // components/reconciliation/float_management.php
+
+// Use filtered totals if available, otherwise use daily totals
+$display_opening_float = isset($filtered_opening_float) ? $filtered_opening_float : $opening_float;
+$display_total_offloaded = isset($filtered_total_offloaded) ? $filtered_total_offloaded : $total_offloaded;
+$display_closing_float = isset($filtered_closing_float) ? $filtered_closing_float : $closing_float;
+$display_transaction_count = isset($float_transactions) ? $float_transactions->num_rows : 0;
 ?>
 
 <style>
@@ -42,19 +48,6 @@
     transition: all 0.3s ease;
 }
 
-.loading-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(255, 255, 255, 0.9);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 9999;
-}
-
 .receipt {
     max-width: 400px;
     margin: 0 auto;
@@ -90,19 +83,19 @@
             <div class="col-md-4">
                 <div class="float-card">
                     <div class="float-title">Opening Float</div>
-                    <div class="float-amount">KSh <?= number_format($opening_float, 2) ?></div>
+                    <div class="float-amount">KSh <?= number_format($display_opening_float, 2) ?></div>
                 </div>
             </div>
             <div class="col-md-4">
                 <div class="float-card">
                     <div class="float-title">Total Offloaded</div>
-                    <div class="float-amount">KSh <?= number_format($total_offloaded, 2) ?></div>
+                    <div class="float-amount">KSh <?= number_format($display_total_offloaded, 2) ?></div>
                 </div>
             </div>
             <div class="col-md-4">
                 <div class="float-card">
                     <div class="float-title">Closing Float</div>
-                    <div class="float-amount" id="closingFloatAmount">KSh <?= number_format($closing_float, 2) ?></div>
+                    <div class="float-amount" id="closingFloatAmount">KSh <?= number_format($display_closing_float, 2) ?></div>
                     <button class="btn btn-warning mt-3 w-100" onclick="calculateClosingFloat()">
                         <i class="fas fa-calculator"></i> Calculate
                     </button>
@@ -195,103 +188,3 @@
         </div>
     </div>
 </div>
-
-<!-- Receipt Print Modal -->
-<div class="modal fade" id="receiptModal" tabindex="-1" role="dialog" aria-hidden="true">
-    <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            <div class="modal-header" style="background-color: #51087E;">
-                <h5 class="modal-title text-white">Transaction Receipt</h5>
-                <button class="close text-white" type="button" data-dismiss="modal" aria-label="Close">
-                    <span aria-hidden="true">×</span>
-                </button>
-            </div>
-            <div class="modal-body">
-                <div class="receipt" id="receiptContent">
-                    <div class="receipt-header">
-                        <img src="../public/image/mylogo.png" alt="Lato Management System Logo" style="width: 150px;">
-                        <h4 class="mt-3">Transaction Receipt</h4>
-                        <p class="text-muted">Lato Sacco LTD</p>
-                    </div>
-                    <div class="receipt-details">
-                        <table class="table table-borderless">
-                            <tr>
-                                <td><strong>Receipt No:</strong></td>
-                                <td id="receiptNo"></td>
-                            </tr>
-                            <tr>
-                                <td><strong>Amount:</strong></td>
-                                <td id="receiptAmount"></td>
-                            </tr>
-                            <tr>
-                                <td><strong>Transaction Type:</strong></td>
-                                <td id="receiptType"></td>
-                            </tr>
-                            <tr>
-                                <td><strong>Date:</strong></td>
-                                <td id="receiptDate"></td>
-                            </tr>
-                            <tr>
-                                <td><strong>Served By:</strong></td>
-                                <td id="receiptServedBy"></td>
-                            </tr>
-                        </table>
-                    </div>
-                    <div class="receipt-footer">
-                        <hr>
-                        <p class="mb-1">Thank you for choosing Lato Sacco LTD</p>
-                        <p class="small text-muted">This is a computer generated receipt</p>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-secondary" type="button" data-dismiss="modal">Close</button>
-                <button class="btn btn-primary" onclick="printReceipt()">
-                    <i class="fas fa-print"></i> Print Receipt
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<script>
-function calculateClosingFloat() {
-    const openingFloat = parseFloat('<?= $opening_float ?>');
-    const totalOffloaded = parseFloat('<?= $total_offloaded ?>');
-    const closingFloat = openingFloat - totalOffloaded;
-    
-    $('#closingFloatAmount').text('KSh ' + closingFloat.toLocaleString('en-US', {minimumFractionDigits: 2}));
-    
-    // Animate the calculation
-    $('#closingFloatAmount').fadeOut(200).fadeIn(200);
-}
-
-function printReceipt() {
-    const printContents = document.getElementById('receiptContent').innerHTML;
-    const originalContents = document.body.innerHTML;
-
-    document.body.innerHTML = printContents;
-    window.print();
-    document.body.innerHTML = originalContents;
-    
-    // Reinitialize event handlers
-    $(document).ready();
-}
-
-function showLoadingSpinner() {
-    $('body').append(`
-        <div class="loading-overlay">
-            <div class="spinner-border text-primary" role="status">
-                <span class="sr-only">Loading...</span>
-            </div>
-        </div>
-    `);
-}
-
-// Handle float form submissions
-$(document).ready(function() {
-    $('#addFloatForm, #offloadFloatForm').on('submit', function() {
-        showLoadingSpinner();
-    });
-});
-</script>

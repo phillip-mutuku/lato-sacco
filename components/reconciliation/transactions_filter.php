@@ -101,35 +101,45 @@
     margin-bottom: 20px;
 }
 
-.withdrawal-fees-section {
-    background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
-    color: white;
-    padding: 15px;
-    border-radius: 8px;
-    margin-bottom: 15px;
-}
-
-.fees-grid {
+.breakdown-summary {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 15px;
-    margin-top: 10px;
+    margin-bottom: 20px;
 }
 
-.fee-item {
-    background: rgba(255, 255, 255, 0.1);
-    padding: 10px;
-    border-radius: 6px;
+.breakdown-item {
+    background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);
+    color: white;
+    padding: 12px;
+    border-radius: 8px;
+    text-align: left;
 }
 
-.fee-label {
+.breakdown-item h6 {
+    margin: 0;
     font-size: 0.85rem;
     opacity: 0.9;
 }
 
-.fee-amount {
+.breakdown-item .amount {
     font-size: 1.1rem;
     font-weight: bold;
+    margin-top: 5px;
+}
+
+.total-breakdown {
+    background: linear-gradient(135deg, #51087E 0%, #6a1b99 100%) !important;
+    padding: 15px !important;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.total-breakdown h5 {
+    color: white;
+    margin: 0;
+    font-weight: bold;
+    text-align: center;
 }
 </style>
 
@@ -229,75 +239,29 @@
                     </div>
                 </div>
 
-                <!-- Withdrawal Fees Section -->
-                <?php
-                $total_group_withdrawal_fees = 0;
-                $total_business_withdrawal_fees = 0; 
-                $total_individual_withdrawal_fees = 0;
-                $total_disbursement_fees = 0;
-
-                // Calculate withdrawal fees
-                foreach ($business_withdrawals_data as $row) {
-                    if ($row['type'] == 'Withdrawal Fee') {
-                        $total_business_withdrawal_fees += $row['amount'];
-                    }
-                }
-
-                foreach ($savings_data as $row) {
-                    if ($row['type'] == 'Withdrawal') {
-                        $total_individual_withdrawal_fees += $row['withdrawal_fee'];
-                    }
-                }
-
-                foreach ($payments_data as $row) {
-                    $total_disbursement_fees += $row['withdrawal_fee'];
-                }
-
-                $total_withdrawal_fees = $total_group_withdrawal_fees + $total_business_withdrawal_fees + $total_individual_withdrawal_fees + $total_disbursement_fees;
-                ?>
-
-                <div class="withdrawal-fees-section">
-                    <h6><i class="fas fa-calculator"></i> Withdrawal Fees Breakdown</h6>
-                    <div class="fees-grid">
-                        <div class="fee-item">
-                            <div class="fee-label">Group Withdrawal Fees</div>
-                            <div class="fee-amount">KSh <?= number_format($total_group_withdrawal_fees, 2) ?></div>
-                        </div>
-                        <div class="fee-item">
-                            <div class="fee-label">Business Withdrawal Fees</div>
-                            <div class="fee-amount">KSh <?= number_format($total_business_withdrawal_fees, 2) ?></div>
-                        </div>
-                        <div class="fee-item">
-                            <div class="fee-label">Individual Withdrawal Fees</div>
-                            <div class="fee-amount">KSh <?= number_format($total_individual_withdrawal_fees, 2) ?></div>
-                        </div>
-                        <div class="fee-item">
-                            <div class="fee-label">Loan Disbursement Fees</div>
-                            <div class="fee-amount">KSh <?= number_format($total_disbursement_fees, 2) ?></div>
-                        </div>
-                        <div class="fee-item" style="background: rgba(255, 255, 255, 0.2);">
-                            <div class="fee-label">Total Withdrawal Fees</div>
-                            <div class="fee-amount">KSh <?= number_format($total_withdrawal_fees, 2) ?></div>
-                        </div>
+                <!-- Money In Breakdown -->
+                <div class="breakdown-summary">
+                    <div class="breakdown-item">
+                        <h6>Group Savings</h6>
+                        <div class="amount">KSh <?= number_format($total_group_savings, 2) ?></div>
+                    </div>
+                    <div class="breakdown-item">
+                        <h6>Business Savings</h6>
+                        <div class="amount">KSh <?= number_format($total_business_savings, 2) ?></div>
+                    </div>
+                    <div class="breakdown-item">
+                        <h6>Individual Savings</h6>
+                        <div class="amount">KSh <?= number_format($total_individual_savings, 2) ?></div>
+                    </div>
+                    <div class="breakdown-item">
+                        <h6>Loan Repayments</h6>
+                        <div class="amount">KSh <?= number_format($total_repayments, 2) ?></div>
                     </div>
                 </div>
 
-                <!-- Money In Summary -->
-                <div class="transaction-summary">
-                    <div class="row">
-                        <div class="col-md-3">
-                            <h6>Group Savings: <span class="text-success">KSh <?= number_format($total_group_savings, 2) ?></span></h6>
-                        </div>
-                        <div class="col-md-3">
-                            <h6>Business Savings: <span class="text-success">KSh <?= number_format($total_business_savings, 2) ?></span></h6>
-                        </div>
-                        <div class="col-md-3">
-                            <h6>Individual Savings: <span class="text-success">KSh <?= number_format($total_individual_savings, 2) ?></span></h6>
-                        </div>
-                        <div class="col-md-3">
-                            <h6>Loan Repayments: <span class="text-success">KSh <?= number_format($total_repayments, 2) ?></span></h6>
-                        </div>
-                    </div>
+                <!-- Total Money In -->
+                <div class="total-breakdown">
+                    <h5>Total Money In: KSh <?= number_format($total_inflows, 2) ?></h5>
                 </div>
 
                 <!-- Money In Table -->
@@ -406,7 +370,7 @@
                     </div>
                 </div>
 
-                <!-- Withdrawal Fees Section -->
+                <!-- Money Out Breakdown -->
                 <?php
                 $total_group_withdrawal_fees = 0;
                 $total_business_withdrawal_fees = 0; 
@@ -433,54 +397,36 @@
                 $total_withdrawal_fees = $total_group_withdrawal_fees + $total_business_withdrawal_fees + $total_individual_withdrawal_fees + $total_disbursement_fees;
                 ?>
 
-                <div class="withdrawal-fees-section">
-                    <h6><i class="fas fa-calculator"></i> Withdrawal Fees Breakdown</h6>
-                    <div class="fees-grid">
-                        <div class="fee-item">
-                            <div class="fee-label">Group Withdrawal Fees</div>
-                            <div class="fee-amount">KSh <?= number_format($total_group_withdrawal_fees, 2) ?></div>
-                        </div>
-                        <div class="fee-item">
-                            <div class="fee-label">Business Withdrawal Fees</div>
-                            <div class="fee-amount">KSh <?= number_format($total_business_withdrawal_fees, 2) ?></div>
-                        </div>
-                        <div class="fee-item">
-                            <div class="fee-label">Individual Withdrawal Fees</div>
-                            <div class="fee-amount">KSh <?= number_format($total_individual_withdrawal_fees, 2) ?></div>
-                        </div>
-                        <div class="fee-item">
-                            <div class="fee-label">Loan Disbursement Fees</div>
-                            <div class="fee-amount">KSh <?= number_format($total_disbursement_fees, 2) ?></div>
-                        </div>
-                        <div class="fee-item" style="background: rgba(255, 255, 255, 0.2);">
-                            <div class="fee-label">Total Withdrawal Fees</div>
-                            <div class="fee-amount">KSh <?= number_format($total_withdrawal_fees, 2) ?></div>
-                        </div>
+                <div class="breakdown-summary">
+                    <div class="breakdown-item">
+                        <h6>Group Withdrawals</h6>
+                        <div class="amount">KSh <?= number_format($total_group_withdrawals, 2) ?></div>
+                    </div>
+                    <div class="breakdown-item">
+                        <h6>Business Withdrawals</h6>
+                        <div class="amount">KSh <?= number_format($total_business_withdrawals, 2) ?></div>
+                    </div>
+                    <div class="breakdown-item">
+                        <h6>Individual Withdrawals</h6>
+                        <div class="amount">KSh <?= number_format($total_individual_withdrawals, 2) ?></div>
+                    </div>
+                    <div class="breakdown-item">
+                        <h6>Loan Disbursements</h6>
+                        <div class="amount">KSh <?= number_format($total_payments, 2) ?></div>
+                    </div>
+                    <div class="breakdown-item">
+                        <h6>Expenses</h6>
+                        <div class="amount">KSh <?= number_format($total_expenses, 2) ?></div>
+                    </div>
+                    <div class="breakdown-item">
+                        <h6>Total Fees</h6>
+                        <div class="amount">KSh <?= number_format($total_withdrawal_fees, 2) ?></div>
                     </div>
                 </div>
 
-                <!-- Money Out Summary -->
-                <div class="transaction-summary">
-                    <div class="row">
-                        <div class="col-md-2">
-                            <h6>Group Withdrawals: <span class="text-danger">KSh <?= number_format($total_group_withdrawals, 2) ?></span></h6>
-                        </div>
-                        <div class="col-md-2">
-                            <h6>Business Withdrawals: <span class="text-danger">KSh <?= number_format($total_business_withdrawals, 2) ?></span></h6>
-                        </div>
-                        <div class="col-md-2">
-                            <h6>Individual Withdrawals: <span class="text-danger">KSh <?= number_format($total_individual_withdrawals, 2) ?></span></h6>
-                        </div>
-                        <div class="col-md-2">
-                            <h6>Loan Disbursements: <span class="text-danger">KSh <?= number_format($total_payments, 2) ?></span></h6>
-                        </div>
-                        <div class="col-md-2">
-                            <h6>Expenses: <span class="text-danger">KSh <?= number_format($total_expenses, 2) ?></span></h6>
-                        </div>
-                        <div class="col-md-2">
-                            <h6>Total Fees: <span class="text-info">KSh <?= number_format($total_withdrawal_fees, 2) ?></span></h6>
-                        </div>
-                    </div>
+                <!-- Total Money Out -->
+                <div class="total-breakdown">
+                    <h5>Total Money Out: KSh <?= number_format($total_outflows, 2) ?></h5>
                 </div>
 
                 <!-- Money Out Table -->
@@ -587,180 +533,3 @@
         </div>
     </div>
 </div>
-
-<script>
-$(document).ready(function() {
-    // Initialize DataTables for Money In
-    var moneyInTable = $('#moneyInTable').DataTable({
-        "order": [[0, "desc"]],
-        "pageLength": 10,
-        "responsive": true,
-        "footerCallback": function(row, data, start, end, display) {
-            var api = this.api();
-            var totalAmount = 0;
-            api.column(3, { page: 'current', search: 'applied' }).data().each(function(value) {
-                var numValue = parseFloat(value.toString().replace(/,/g, ''));
-                if (!isNaN(numValue)) {
-                    totalAmount += numValue;
-                }
-            });
-            $(api.column(3).footer()).html('<strong>' + totalAmount.toLocaleString('en-US', {minimumFractionDigits: 2}) + '</strong>');
-        },
-        "language": {
-            "search": "Search money in transactions: ",
-            "lengthMenu": "Show _MENU_ entries per page",
-            "info": "Showing _START_ to _END_ of _TOTAL_ money in transactions",
-            "infoEmpty": "No money in transactions found",
-            "infoFiltered": "(filtered from _MAX_ total transactions)"
-        }
-    });
-
-    // Initialize DataTables for Money Out
-    var moneyOutTable = $('#moneyOutTable').DataTable({
-        "order": [[0, "desc"]],
-        "pageLength": 10,
-        "responsive": true,
-        "footerCallback": function(row, data, start, end, display) {
-            var api = this.api();
-            var totalAmount = 0;
-            var totalFees = 0;
-            
-            api.column(3, { page: 'current', search: 'applied' }).data().each(function(value) {
-                var numValue = parseFloat(value.toString().replace(/,/g, ''));
-                if (!isNaN(numValue)) {
-                    totalAmount += numValue;
-                }
-            });
-            
-            api.column(4, { page: 'current', search: 'applied' }).data().each(function(value) {
-                var numValue = parseFloat(value.toString().replace(/,/g, ''));
-                if (!isNaN(numValue)) {
-                    totalFees += numValue;
-                }
-            });
-            
-            $(api.column(3).footer()).html('<strong>' + totalAmount.toLocaleString('en-US', {minimumFractionDigits: 2}) + '</strong>');
-            $(api.column(4).footer()).html('<strong>' + totalFees.toLocaleString('en-US', {minimumFractionDigits: 2}) + '</strong>');
-        },
-        "language": {
-            "search": "Search money out transactions: ",
-            "lengthMenu": "Show _MENU_ entries per page",
-            "info": "Showing _START_ to _END_ of _TOTAL_ money out transactions",
-            "infoEmpty": "No money out transactions found",
-            "infoFiltered": "(filtered from _MAX_ total transactions)"
-        }
-    });
-
-    // Store table references globally
-    window.moneyInTable = moneyInTable;
-    window.moneyOutTable = moneyOutTable;
-
-    // Handle transaction filter form submission
-    $('#transactionFilterForm').on('submit', function(e) {
-        e.preventDefault();
-        const startDate = $('#transactionStartDate').val();
-        const endDate = $('#transactionEndDate').val();
-
-        if (!startDate || !endDate) {
-            alert('Please select both start and end dates');
-            return false;
-        }
-
-        if (startDate > endDate) {
-            alert('Start date cannot be later than end date');
-            return false;
-        }
-
-        showLoadingSpinner();
-        this.submit();
-    });
-});
-
-function filterMoneyIn() {
-    const searchTerm = $('#moneyInSearch').val();
-    const transactionType = $('#moneyInType').val();
-    
-    var table = window.moneyInTable;
-    
-    // Clear existing filters
-    $.fn.dataTable.ext.search = [];
-    
-    // Apply custom filtering
-    if (transactionType) {
-        $.fn.dataTable.ext.search.push(
-            function(settings, data, dataIndex) {
-                if (settings.nTable.id !== 'moneyInTable') {
-                    return true;
-                }
-                
-                var row = table.row(dataIndex).node();
-                return $(row).hasClass(transactionType);
-            }
-        );
-    }
-    
-    // Apply search term
-    if (searchTerm) {
-        table.search(searchTerm);
-    }
-    
-    table.draw();
-    
-    // Clear custom filters
-    if (transactionType) {
-        $.fn.dataTable.ext.search.pop();
-    }
-}
-
-function filterMoneyOut() {
-    const searchTerm = $('#moneyOutSearch').val();
-    const transactionType = $('#moneyOutType').val();
-    
-    var table = window.moneyOutTable;
-    
-    // Clear existing filters
-    $.fn.dataTable.ext.search = [];
-    
-    // Apply custom filtering
-    if (transactionType) {
-        $.fn.dataTable.ext.search.push(
-            function(settings, data, dataIndex) {
-                if (settings.nTable.id !== 'moneyOutTable') {
-                    return true;
-                }
-                
-                var row = table.row(dataIndex).node();
-                return $(row).hasClass(transactionType);
-            }
-        );
-    }
-    
-    // Apply search term
-    if (searchTerm) {
-        table.search(searchTerm);
-    }
-    
-    table.draw();
-    
-    // Clear custom filters
-    if (transactionType) {
-        $.fn.dataTable.ext.search.pop();
-    }
-}
-
-function showLoadingSpinner() {
-    $('body').append(`
-        <div class="loading-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.9); display: flex; justify-content: center; align-items: center; z-index: 9999;">
-            <div class="spinner-border text-primary" role="status">
-                <span class="sr-only">Loading...</span>
-            </div>
-        </div>
-    `);
-}
-
-function generateReport() {
-    const startDate = $('#transactionStartDate').val();
-    const endDate = $('#transactionEndDate').val();
-    window.location.href = `../controllers/generate_reconciliation_report.php?start_date=${startDate}&end_date=${endDate}`;
-}
-</script>

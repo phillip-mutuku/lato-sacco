@@ -100,37 +100,42 @@
                     <?php 
                     $total_added_display = 0;
                     $total_offloaded_display = 0;
-                    foreach ($float_transactions as $transaction): 
-                        if ($transaction['type'] == 'add') {
-                            $total_added_display += $transaction['amount'];
-                        } else {
-                            $total_offloaded_display += $transaction['amount'];
-                        }
+                    if ($float_transactions && $float_transactions->num_rows > 0): 
+                        $float_transactions->data_seek(0); // Reset pointer
+                        while ($transaction = $float_transactions->fetch_assoc()): 
+                            if ($transaction['type'] == 'add') {
+                                $total_added_display += $transaction['amount'];
+                            } else {
+                                $total_offloaded_display += $transaction['amount'];
+                            }
                     ?>
                     <tr data-type="<?= $transaction['type'] ?>" data-date="<?= date('Y-m-d', strtotime($transaction['date_created'])) ?>">
                         <td><?= date('M d, Y', strtotime($transaction['date_created'])) ?></td>
-                        <td><?= $transaction['receipt_no'] ?></td>
+                        <td><?= htmlspecialchars($transaction['receipt_no']) ?></td>
                         <td>
                             <span class="badge badge-<?= $transaction['type'] == 'add' ? 'success' : 'danger' ?>">
                                 <?= ucfirst($transaction['type']) ?> Float
                             </span>
                         </td>
                         <td><?= number_format($transaction['amount'], 2) ?></td>
-                        <td><?= $transaction['served_by'] ?></td>
+                        <td><?= htmlspecialchars($transaction['served_by']) ?></td>
                         <td><?= date('H:i', strtotime($transaction['date_created'])) ?></td>
                         <td>
                             <button class="btn btn-warning btn-sm print-receipt" 
-                                    data-receipt="<?= $transaction['receipt_no'] ?>"
+                                    data-receipt="<?= htmlspecialchars($transaction['receipt_no']) ?>"
                                     data-amount="<?= $transaction['amount'] ?>"
                                     data-type="<?= ucfirst($transaction['type']) ?> Float"
                                     data-date="<?= $transaction['date_created'] ?>"
-                                    data-served="<?= $transaction['served_by'] ?>"
+                                    data-served="<?= htmlspecialchars($transaction['served_by']) ?>"
                                     title="Print Receipt">
                                 <i class="fas fa-print"></i>
                             </button>
                         </td>
                     </tr>
-                    <?php endforeach; ?>
+                    <?php 
+                        endwhile; 
+                    endif; 
+                    ?>
                 </tbody>
                 <tfoot>
                     <tr class="total-row">
@@ -202,177 +207,3 @@
         </div>
     </div>
 </div>
-
- <!-- Bootstrap core JavaScript-->
-    <script src="../public/js/jquery.js"></script>
-    <script src="../public/js/bootstrap.bundle.js"></script>
-
-    <!-- Core plugin JavaScript-->
-    <script src="../public/js/jquery.easing.js"></script>
-
-    <!-- Page level plugins -->
-    <script src="../public/js/jquery.dataTables.js"></script>
-    <script src="../public/js/dataTables.bootstrap4.js"></script>
-
-    <!-- Custom scripts for all pages-->
-    <script src="../public/js/sb-admin-2.js"></script>
-
-<script>
-$(document).ready(function() {
-    // Initialize DataTable
-    window.floatTable = $('#floatTransactionsTable').DataTable({
-        "order": [[0, "desc"]],
-        "pageLength": 25,
-        "responsive": true,
-        "footerCallback": function(row, data, start, end, display) {
-            var api = this.api();
-            
-            // Calculate totals for visible rows
-            var totalAmount = 0;
-            api.column(3, { page: 'current', search: 'applied' }).data().each(function(value) {
-                var numValue = parseFloat(value.toString().replace(/,/g, ''));
-                if (!isNaN(numValue)) {
-                    totalAmount += numValue;
-                }
-            });
-                
-            // Update footer
-            $('#tableTotalAmount').html(totalAmount.toLocaleString('en-US', {minimumFractionDigits: 2}));
-        },
-        "language": {
-            "search": "Search transactions: ",
-            "lengthMenu": "Show _MENU_ entries per page",
-            "info": "Showing _START_ to _END_ of _TOTAL_ entries",
-            "infoEmpty": "No transactions found",
-            "infoFiltered": "(filtered from _MAX_ total entries)"
-        }
-    });
-
-    // Automatic filtering when dropdown changes
-    $('#floatType').on('change', function() {
-        applyFloatFilters();
-    });
-
-    // Automatic filtering when date changes
-    $('#floatStartDate, #floatEndDate').on('change', function() {
-        applyFloatFilters();
-    });
-
-    // Handle manual filter button click
-    $('#floatFilterForm').on('submit', function(e) {
-        e.preventDefault();
-        applyFloatFilters();
-    });
-
-    // Handle receipt printing
-    $(document).on('click', '.print-receipt', function(e) {
-        e.preventDefault();
-        const data = $(this).data();
-        
-        // Populate modal with data
-        $('#floatReceiptNo').text(data.receipt || 'N/A');
-        $('#floatReceiptAmount').text('KSh ' + parseFloat(data.amount || 0).toLocaleString('en-US', {minimumFractionDigits: 2}));
-        $('#floatReceiptType').text(data.type || 'N/A');
-        $('#floatReceiptDate').text(new Date(data.date).toLocaleString() || 'N/A');
-        $('#floatReceiptServedBy').text(data.served || 'N/A');
-        $('#printDate').text(new Date().toLocaleString());
-        
-        // Show modal
-        $('#floatReceiptModal').modal('show');
-    });
-});
-
-function applyFloatFilters() {
-    const floatType = $('#floatType').val();
-    const startDate = $('#floatStartDate').val();
-    const endDate = $('#floatEndDate').val();
-    
-    var table = window.floatTable;
-    
-    // Clear existing search
-    table.search('').columns().search('').draw();
-    
-    // Remove any existing custom filters
-    $.fn.dataTable.ext.search = [];
-    
-    // Apply custom filtering
-    $.fn.dataTable.ext.search.push(
-        function(settings, data, dataIndex) {
-            if (settings.nTable.id !== 'floatTransactionsTable') {
-                return true;
-            }
-            
-            // Get the actual row data
-            var transactionTypeCell = data[2]; // Transaction Type column
-            var dateCell = data[0]; // Date column
-            
-            // Extract transaction type from badge HTML
-            var typeMatch = transactionTypeCell.match(/(Add|Offload)\s+Float/i);
-            var rowType = typeMatch ? typeMatch[1].toLowerCase() : '';
-            
-            // Parse date from the date column
-            var rowDate = new Date(dateCell);
-            var filterStartDate = startDate ? new Date(startDate) : null;
-            var filterEndDate = endDate ? new Date(endDate + 'T23:59:59') : null;
-            
-            // Type filter
-            if (floatType !== 'all' && rowType !== floatType) {
-                return false;
-            }
-            
-            // Date filter
-            if (filterStartDate && rowDate < filterStartDate) {
-                return false;
-            }
-            
-            if (filterEndDate && rowDate > filterEndDate) {
-                return false;
-            }
-            
-            return true;
-        }
-    );
-    
-    // Redraw table
-    table.draw();
-}
-
-function printFloatReceipt() {
-    var printContent = document.getElementById('floatReceiptContent').innerHTML;
-    var originalContent = document.body.innerHTML;
-    
-    // Create a new window for printing
-    var printWindow = window.open('', '_blank');
-    printWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Float Transaction Receipt</title>
-            <style>
-                body { font-family: Arial, sans-serif; margin: 20px; }
-                .receipt { max-width: 400px; margin: 0 auto; }
-                .receipt-header { text-align: center; margin-bottom: 20px; }
-                .receipt-details table { width: 100%; }
-                .receipt-details td { padding: 5px; }
-                .receipt-footer { text-align: center; margin-top: 20px; }
-                hr { border: 1px solid #ccc; }
-                @media print {
-                    body { margin: 0; }
-                    .receipt { max-width: none; }
-                }
-            </style>
-        </head>
-        <body>
-            <div class="receipt">${printContent}</div>
-        </body>
-        </html>
-    `);
-    
-    printWindow.document.close();
-    printWindow.print();
-    printWindow.close();
-    
-    // Close the modal
-    $('#floatReceiptModal').modal('hide');
-}
-</script>
