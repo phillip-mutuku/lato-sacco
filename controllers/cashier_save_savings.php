@@ -18,7 +18,7 @@ if(isset($_POST['save_savings'])) {
     header("Location: ../views/view_account.php?id=" . $account_id);
     exit();
 } else {
-    header("Location: ../views/account.php");
+    header("Location: ../views/cashier-account.php");
     exit();
 }
 ?>

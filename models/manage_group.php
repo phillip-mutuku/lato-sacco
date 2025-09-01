@@ -9,7 +9,7 @@ $db = new db_class();
 // Check if user is logged in and is either an admin or manager
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'manager')) {
     $_SESSION['error_msg'] = "Unauthorized access";
-    header('Location: index.php');
+    header('Location: ../views/index.php');
     exit();
 }
 

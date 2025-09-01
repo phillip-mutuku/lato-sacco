@@ -34,7 +34,6 @@ if(isset($_POST['save'])) {
             throw new Exception("Receipt number is required");
         }
 
-
         if (!$user_id) {
             throw new Exception("User ID not found in session");
         }
@@ -63,8 +62,8 @@ if(isset($_POST['save'])) {
         $payment_result = $db->save_payment($loan_id, $receipt_no, $payee, $pay_amount, $penalty, $overdue, $withdrawal_fee, $user_id);
         
         if($payment_result) {
-            // Update loan status to completed (3)
-            $update_loan_result = $db->conn->query("UPDATE `loan` SET `status`='3', `date_released`=NOW() WHERE `loan_id`='$loan_id'");
+            // Update loan status to disbursed (use integer value instead of string)
+            $update_loan_result = $db->conn->query("UPDATE `loan` SET `status`='2', `date_released`=NOW() WHERE `loan_id`='$loan_id'");
             if (!$update_loan_result) {
                 throw new Exception("Failed to update loan status: " . $db->conn->error);
             }
@@ -93,8 +92,26 @@ if(isset($_POST['save'])) {
             $db->conn->commit();
             
             logError("Disbursement successful for loan_id: $loan_id");
-            header("Location: ../models/cashier_disbursement.php?success=1");
-            exit();
+            
+            // Check if this is an AJAX request (multiple ways to detect)
+            $is_ajax = (
+                (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && 
+                 strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') ||
+                (isset($_POST['ajax']) && $_POST['ajax'] == '1') ||
+                (isset($_REQUEST['format']) && $_REQUEST['format'] == 'json')
+            );
+            
+            if ($is_ajax) {
+                header('Content-Type: application/json');
+                echo json_encode([
+                    'success' => true,
+                    'message' => 'Loan disbursed successfully'
+                ]);
+                exit();
+            } else {
+                header("Location: ../models/cashier_disbursement.php?success=1");
+                exit();
+            }
         } else {
             throw new Exception("Failed to save payment");
         }
@@ -102,12 +119,41 @@ if(isset($_POST['save'])) {
         // An error occurred; rollback the transaction
         $db->conn->rollback();
         logError("Error in save_payment.php: " . $e->getMessage());
-        echo "<script>alert('An error occurred: " . addslashes($e->getMessage()) . "');</script>";
-        echo "<script>window.location='../models/cashier_disbursement.php?error=1';</script>";
+        
+        // Check if this is an AJAX request (multiple ways to detect)
+        $is_ajax = (
+            (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && 
+             strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') ||
+            (isset($_POST['ajax']) && $_POST['ajax'] == '1') ||
+            (isset($_REQUEST['format']) && $_REQUEST['format'] == 'json')
+        );
+        
+        if ($is_ajax) {
+            header('Content-Type: application/json');
+            echo json_encode([
+                'success' => false,
+                'message' => $e->getMessage()
+            ]);
+            exit();
+        } else {
+            echo "<script>alert('An error occurred: " . addslashes($e->getMessage()) . "');</script>";
+            echo "<script>window.location='../models/cashier_disbursement.php?error=1';</script>";
+        }
     }
 } else {
     logError("POST 'save' not set in save_payment.php");
-    header("Location: ../models/cashier_disbursement.php?error=2");
-    exit();
+    
+    // Return JSON response for AJAX requests
+    if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
+        header('Content-Type: application/json');
+        echo json_encode([
+            'success' => false,
+            'message' => 'Invalid request method'
+        ]);
+        exit();
+    } else {
+        header("Location: ../models/cashier_disbursement.php?error=2");
+        exit();
+    }
 }
 ?>

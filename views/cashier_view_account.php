@@ -7,7 +7,7 @@ require_once '../config/class.php';
 $db = new db_class(); 
 
 // Check if user is logged in and is either an admin or manager
-if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'manager')) {
+if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'cashier')) {
     $_SESSION['error_msg'] = "Unauthorized access";
     header('Location: index.php');
     exit();
@@ -633,562 +633,972 @@ function safeJsonEncode($data) {
     <script src="../public/js/dataTables.bootstrap4.js"></script>
 
     <script>
-    $(document).ready(function() {
-        // =====================================
-        // CONSTANTS AND UTILITIES
-        // =====================================
-        const ACCOUNT_ID = <?= $accountId ?>;
-        let draggedElement = null;
-        
-        // Hide loading overlay after page loads
-        setTimeout(function() {
-            $('#loadingOverlay').fadeOut(300);
-        }, 800);
-
-        // =====================================
-        // DRAG AND DROP FUNCTIONALITY
-        // =====================================
-        
-        function initializeDragAndDrop() {
-            const statsGrid = document.getElementById('statsGrid');
-            const statCards = statsGrid.querySelectorAll('.stat-card');
-
-            // Load saved card order from localStorage
-            loadCardOrder();
-
-            statCards.forEach(card => {
-                card.addEventListener('dragstart', handleDragStart);
-                card.addEventListener('dragover', handleDragOver);
-                card.addEventListener('dragenter', handleDragEnter);
-                card.addEventListener('dragleave', handleDragLeave);
-                card.addEventListener('drop', handleDrop);
-                card.addEventListener('dragend', handleDragEnd);
-            });
-
-            function handleDragStart(e) {
-                draggedElement = this;
-                this.classList.add('dragging');
-                e.dataTransfer.effectAllowed = 'move';
-                e.dataTransfer.setData('text/html', this.outerHTML);
-            }
-
-            function handleDragOver(e) {
-                if (e.preventDefault) {
-                    e.preventDefault();
-                }
-                e.dataTransfer.dropEffect = 'move';
-                return false;
-            }
-
-            function handleDragEnter(e) {
-                this.classList.add('drag-over');
-            }
-
-            function handleDragLeave(e) {
-                this.classList.remove('drag-over');
-            }
-
-            function handleDrop(e) {
-                if (e.stopPropagation) {
-                    e.stopPropagation();
-                }
-
-                if (draggedElement !== this) {
-                    const draggedIndex = Array.from(statsGrid.children).indexOf(draggedElement);
-                    const targetIndex = Array.from(statsGrid.children).indexOf(this);
-
-                    if (draggedIndex < targetIndex) {
-                        statsGrid.insertBefore(draggedElement, this.nextSibling);
-                    } else {
-                        statsGrid.insertBefore(draggedElement, this);
-                    }
-
-                    saveCardOrder();
-                    showToast('Card layout updated successfully!', 'success');
-                }
-
-                return false;
-            }
-
-            function handleDragEnd(e) {
-                const statCards = statsGrid.querySelectorAll('.stat-card');
-                statCards.forEach(card => {
-                    card.classList.remove('dragging', 'drag-over');
-                });
-            }
-
-            function saveCardOrder() {
-                const cardOrder = Array.from(statsGrid.children).map(card => 
-                    card.getAttribute('data-card-id')
-                );
-                localStorage.setItem('statsCardOrder_' + ACCOUNT_ID, JSON.stringify(cardOrder));
-            }
-
-            function loadCardOrder() {
-                const savedOrder = localStorage.getItem('statsCardOrder_' + ACCOUNT_ID);
-                if (savedOrder) {
-                    try {
-                        const cardOrder = JSON.parse(savedOrder);
-                        const cards = {};
-                        
-                        // Store current cards by their ID
-                        statsGrid.querySelectorAll('.stat-card').forEach(card => {
-                            const cardId = card.getAttribute('data-card-id');
-                            cards[cardId] = card;
-                        });
-
-                        // Clear the grid
-                        statsGrid.innerHTML = '';
-
-                        // Append cards in saved order
-                        cardOrder.forEach(cardId => {
-                            if (cards[cardId]) {
-                                statsGrid.appendChild(cards[cardId]);
-                            }
-                        });
-
-                        // Add any cards that weren't in the saved order (new cards)
-                        Object.values(cards).forEach(card => {
-                            if (!statsGrid.contains(card)) {
-                                statsGrid.appendChild(card);
-                            }
-                        });
-                    } catch (e) {
-                        console.error('Error loading card order:', e);
-                    }
-                }
-            }
+$(document).ready(function() {
+    
+    // =====================================
+    // CONSTANTS AND GLOBAL VARIABLES
+    // =====================================
+    
+    const ACCOUNT_ID = <?= $accountId ?>;
+    let draggedElement = null;
+    let fullyPaidLoansTable;
+    let currentFullyPaidLoanData = {};
+    
+    
+    // =====================================
+    // INITIALIZATION
+    // =====================================
+    
+    // Hide loading overlay after page loads
+    setTimeout(function() {
+        $('#loadingOverlay').fadeOut(300);
+    }, 800);
+    
+    // Initialize drag and drop functionality
+    initializeDragAndDrop();
+    
+    // Initialize with default filter value
+    $('#accountTypeFilter').val('all');
+    
+    // Initialize dashboard section as active on page load
+    setTimeout(() => {
+        $(document).trigger('sectionChanged', ['dashboard']);
+    }, 1000);
+    
+    // Trigger initial filter to load data
+    setTimeout(() => {
+        $('#accountTypeFilter').trigger('change');
+    }, 500);
+    
+    
+    // =====================================
+    // FULLY PAID LOANS FUNCTIONALITY
+    // =====================================
+    
+    // Load fully paid loans when section becomes active
+    $(document).on('sectionChanged', function(event, section) {
+        if (section === 'fully-paid-loans') {
+            loadFullyPaidLoans();
         }
-
-        // Initialize drag and drop
-        initializeDragAndDrop();
-
-        // =====================================
-        // TOAST NOTIFICATIONS
-        // =====================================
-        function showToast(message, type = 'success') {
-            const toastId = 'toast-' + Date.now();
-            const toastClass = type === 'error' ? 'error' : type === 'warning' ? 'warning' : '';
-            const iconClass = type === 'error' ? 'fa-exclamation-triangle' : type === 'warning' ? 'fa-exclamation-circle' : 'fa-check-circle';
-            
-            const toast = `
-                <div class="toast-modern ${toastClass}" id="${toastId}">
-                    <div class="toast-header">
-                        <i class="fas ${iconClass}" style="margin-right: 8px;"></i>
-                        <span>${type.charAt(0).toUpperCase() + type.slice(1)}</span>
-                        <button type="button" style="margin-left: auto; background: none; border: none; font-size: 1.2rem; cursor: pointer;" onclick="closeToast('${toastId}')">&times;</button>
-                    </div>
-                    <div class="toast-body">${message}</div>
-                </div>
-            `;
-            
-            $('#toastContainer').append(toast);
-            
-            setTimeout(() => {
-                $(`#${toastId}`).addClass('show');
-            }, 100);
-            
-            setTimeout(() => {
-                closeToast(toastId);
-            }, 5000);
-        }
-        
-        function closeToast(toastId) {
-            $(`#${toastId}`).removeClass('show');
-            setTimeout(() => {
-                $(`#${toastId}`).remove();
-            }, 300);
-        }
-        
-        window.closeToast = closeToast;
-        window.showToast = showToast;
-
-        // =====================================
-        // UTILITY FUNCTIONS
-        // =====================================
-        
-        function formatCurrency(amount) {
-            return parseFloat(amount).toLocaleString('en-KE', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-            });
-        }
-
-        function formatDateTime(dateString) {
-            return new Date(dateString).toLocaleString('en-KE', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-        }
-
-        window.formatCurrency = formatCurrency;
-        window.formatDateTime = formatDateTime;
-
-       // ACCOUNT TYPE FILTER (SERVER-SIDE)
-        // =====================================
-        
-        $('#accountTypeFilter').change(function() {
-            const selectedType = $(this).val();
-            
-            // Add loading state to select
-            $(this).addClass('loading');
-            
-            // Show loading state for all cards
-            updateStatCard('#totalSavings', 'Loading...');
-            updateStatCard('#totalWithdrawals', 'Loading...');
-            updateStatCard('#outstandingLoans', 'Loading...');
-            updateStatCard('#activeLoansCount', 'Loading...');
-            updateStatCard('#totalGroupSavings', 'Loading...');
-            
-            // Make AJAX request to get filtered data
-            $.ajax({
-                url: '../controllers/accountController.php',
-                method: 'GET',
-                data: {
-                    action: 'getFilteredSummary',
-                    accountId: ACCOUNT_ID,
-                    accountType: selectedType
-                },
-                dataType: 'json',
-                success: function(response) {
-                    if (response.status === 'success') {
-                        // Update summary cards with actual filtered data
-                        updateStatCard('#totalSavings', 'KSh ' + formatCurrency(response.totalSavings));
-                        updateStatCard('#totalWithdrawals', 'KSh ' + formatCurrency(response.totalWithdrawals));
-                        updateStatCard('#outstandingLoans', 'KSh ' + formatCurrency(response.outstandingLoans));
-                        updateStatCard('#activeLoansCount', response.activeLoansCount);
-                        updateStatCard('#totalGroupSavings', 'KSh ' + formatCurrency(response.totalGroupSavings));
-                    } else {
-                        showToast('Error filtering account data: ' + response.message, 'error');
-                        resetStatCards();
-                    }
-                },
-                error: function(xhr, status, error) {
-                    showToast('Error loading filtered data', 'error');
-                    resetStatCards();
-                },
-                complete: function() {
-                    // Remove loading state from select
-                    $('#accountTypeFilter').removeClass('loading');
-                }
-            });
-        });
-        
-        function updateStatCard(selector, value) {
-            const $element = $(selector);
-            $element.fadeOut(200, function() {
-                $element.text(value);
-                $element.fadeIn(200);
-            });
-        }
-        
-        function resetStatCards() {
-            updateStatCard('#totalSavings', 'KSh <?= number_format($totalSavings, 2) ?>');
-            updateStatCard('#totalWithdrawals', 'KSh <?= number_format($totalWithdrawals, 2) ?>');
-            updateStatCard('#outstandingLoans', 'KSh <?= number_format($outstandingLoans, 2) ?>');
-            updateStatCard('#activeLoansCount', '<?= $activeLoansCount ?>');
-            updateStatCard('#totalGroupSavings', 'KSh <?= number_format($totalGroupSavings, 2) ?>');
-        }
-
-        // Initialize with default value
-        $('#accountTypeFilter').val('all');
-
-        // =====================================
-        // REAL-TIME UPDATES FOR TRANSACTIONS
-        // =====================================
-        
-        // Listen for loan repayment success
-        $(document).on('loanRepaymentSuccess', function(e, data) {
-            if (data.newOutstandingLoans !== undefined) {
-                updateStatCard('#outstandingLoans', 'KSh ' + formatCurrency(data.newOutstandingLoans));
-            }
-            
-            // Refresh all stats to ensure consistency
-            const currentAccountType = $('#accountTypeFilter').val();
-            $('#accountTypeFilter').trigger('change');
-        });
-
-        // Listen for savings success
-        $(document).on('savingsSuccess', function() {
-            const currentAccountType = $('#accountTypeFilter').val();
-            $('#accountTypeFilter').trigger('change');
-        });
-
-        // Listen for withdrawal success  
-        $(document).on('withdrawalSuccess', function() {
-            const currentAccountType = $('#accountTypeFilter').val();
-            $('#accountTypeFilter').trigger('change');
-        });
-
-        // Enhanced event handlers for better integration
-        $(document).on('loanRepaymentProcessed', function(e, response) {
-            if (response.status === 'success') {
-                if (response.newOutstandingLoans !== undefined) {
-                    updateStatCard('#outstandingLoans', 'KSh ' + formatCurrency(response.newOutstandingLoans));
-                }
-                
-                showToast('Loan repayment processed successfully!', 'success');
-                
-                setTimeout(() => {
-                    $('#accountTypeFilter').trigger('change');
-                }, 1000);
-            }
-        });
-
-        $(document).on('savingsProcessed', function(e, response) {
-            if (response.status === 'success') {
-                showToast('Savings processed successfully!', 'success');
-                
-                setTimeout(() => {
-                    $('#accountTypeFilter').trigger('change');
-                }, 1000);
-            }
-        });
-
-        $(document).on('withdrawalProcessed', function(e, response) {
-            if (response.status === 'success') {
-                showToast('Withdrawal processed successfully!', 'success');
-                
-                setTimeout(() => {
-                    $('#accountTypeFilter').trigger('change');
-                }, 1000);
-            }
-        });
-
-        // =====================================
-        // PRINTING FUNCTIONALITY
-        // =====================================
-        
-        function printLoanRepaymentReceipt(data) {
-            const receiptWindow = window.open('', '_blank', 'width=400,height=600');
-            const content = `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>Loan Repayment Receipt</title>
-                    <style>
-                        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
-                        .receipt { border: 1px solid #ccc; padding: 20px; max-width: 800px; margin: 0 auto; }
-                        .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
-                        .detail-row { margin: 10px 0; border-bottom: 1px solid #eee; padding-bottom: 5px; }
-                        .footer { text-align: center; margin-top: 20px; border-top: 2px solid #333; padding-top: 10px; }
-                    </style>
-                </head>
-                <body>
-                    <div class="receipt">
-                        <div class="header">
-                            <h2>Lato Sacco LTD</h2>
-                            <h3>Loan Repayment Receipt</h3>
-                        </div>
-                        <div class="detail-row"><strong>Receipt No:</strong> ${data.receipt_number || 'N/A'}</div>
-                        <div class="detail-row"><strong>Date:</strong> ${formatDateTime(data.date_paid)}</div>
-                        <div class="detail-row"><strong>Client Name:</strong> ${data.first_name} ${data.last_name}</div>
-                        <div class="detail-row"><strong>Loan Ref No:</strong> ${data.loan_ref_no}</div>
-                        <div class="detail-row"><strong>Amount Paid:</strong> KSh ${formatCurrency(data.amount_repaid)}</div>
-                        <div class="detail-row"><strong>Payment Mode:</strong> ${data.payment_mode}</div>
-                        <div class="detail-row"><strong>Served By:</strong> ${data.served_by || 'System'}</div>
-                        <div class="footer">
-                            <p>Thank you for banking with us!</p>
-                            <p>Printed on: ${formatDateTime(new Date())}</p>
-                        </div>
-                    </div>
-                </body>
-                </html>
-            `;
-            
-            receiptWindow.document.write(content);
-            receiptWindow.document.close();
-            setTimeout(() => { receiptWindow.print(); receiptWindow.close(); }, 500);
-        }
-
-        function printSavingsReceipt(data, type) {
-            const receiptWindow = window.open('', '_blank', 'width=400,height=600');
-            const content = `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>${type} Receipt</title>
-                    <style>
-                        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
-                        .receipt { border: 1px solid #ccc; padding: 20px; max-width: 800px; margin: 0 auto; }
-                        .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
-                        .detail-row { margin: 10px 0; border-bottom:1px solid #eee; padding-bottom: 5px; }
-                        .footer { text-align: center; margin-top: 20px; border-top: 2px solid #333; padding-top: 10px; }
-                    </style>
-                </head>
-                <body>
-                    <div class="receipt">
-                        <div class="header">
-                            <h2>Lato Sacco LTD</h2>
-                            <h3>${type} Receipt</h3>
-                        </div>
-                        <div class="detail-row"><strong>Receipt No:</strong> ${data.receipt_number}</div>
-                        <div class="detail-row"><strong>Date:</strong> ${formatDateTime(data.date)}</div>
-                        <div class="detail-row"><strong>Client Name:</strong> ${data.client_name}</div>
-                        <div class="detail-row"><strong>Account Type:</strong> ${data.account_type}</div>
-                        <div class="detail-row"><strong>Amount:</strong> KSh ${formatCurrency(data.amount)}</div>
-                        ${data.withdrawal_fee ? `<div class="detail-row"><strong>Withdrawal Fee:</strong> KSh ${formatCurrency(data.withdrawal_fee)}</div>` : ''}
-                        <div class="detail-row"><strong>Payment Mode:</strong> ${data.payment_mode}</div>
-                        <div class="detail-row"><strong>Served By:</strong> ${data.served_by || 'System'}</div>
-                        <div class="footer">
-                            <p>Thank you for banking with us!</p>
-                            <p>Printed on: ${formatDateTime(new Date())}</p>
-                        </div>
-                    </div>
-                </body>
-                </html>
-            `;
-            
-            receiptWindow.document.write(content);
-            receiptWindow.document.close();
-            setTimeout(() => { receiptWindow.print(); receiptWindow.close(); }, 500);
-        }
-
-        function printWithdrawalReceipt(data) {
-            printSavingsReceipt(data, 'Withdrawal');
-        }
-
-        // Make print functions globally accessible
-        window.printLoanRepaymentReceipt = printLoanRepaymentReceipt;
-        window.printSavingsReceipt = printSavingsReceipt;
-        window.printWithdrawalReceipt = printWithdrawalReceipt;
-
-        // =====================================
-        // RESPONSIVE HANDLING
-        // =====================================
-        
-        $(window).resize(function() {
-            if (window.innerWidth > 768) {
-                $('#sidebar').removeClass('mobile-open');
-            }
-            
-            // Redraw DataTables on resize
-            setTimeout(() => {
-                $.fn.dataTable.tables({ visible: true, api: true }).columns.adjust();
-            }, 100);
-
-            // Reinitialize drag and drop after resize
-            setTimeout(() => {
-                initializeDragAndDrop();
-            }, 200);
-        });
-
-        // =====================================
-        // MODAL AND BOOTSTRAP FIXES
-        // =====================================
-        
-        $(document).on('click', '.dropdown-menu', function(e) {
-            e.stopPropagation();
-        });
-
-        $(document).on('hidden.bs.modal', '.modal', function () {
-            $('body').removeClass('modal-open');
-            $('.modal-backdrop').remove();
-        });
-
-        $(document).on('show.bs.modal', '.modal', function () {
-            const zIndex = 1040 + (10 * $('.modal:visible').length);
-            $(this).css('z-index', zIndex);
-            setTimeout(() => {
-                $('.modal-backdrop').not('.modal-stack').css('z-index', zIndex - 1).addClass('modal-stack');
-            }, 0);
-        });
-
-        // =====================================
-        // KEYBOARD SHORTCUTS
-        // =====================================
-        
-        $(document).keydown(function(e) {
-            // Alt + R to reset card order
-            if (e.altKey && e.keyCode === 82) {
-                e.preventDefault();
-                localStorage.removeItem('statsCardOrder_' + ACCOUNT_ID);
-                location.reload();
-                showToast('Card layout reset to default!', 'success');
-            }
-            
-            // Alt + F to focus filter
-            if (e.altKey && e.keyCode === 70) {
-                e.preventDefault();
-                $('#accountTypeFilter').focus();
-            }
-        });
-
-        // =====================================
-        // INITIALIZATION AND CLEANUP
-        // =====================================
-        
-        // Initialize dashboard section as active on page load
-        setTimeout(() => {
-            $(document).trigger('sectionChanged', ['dashboard']);
-        }, 1000);
-
-        // Cleanup function for when page is unloaded
-        $(window).on('beforeunload', function() {
-            clearTimeout();
-            
-            $(document).off('loanRepaymentProcessed');
-            $(document).off('savingsProcessed'); 
-            $(document).off('withdrawalProcessed');
-            $(document).off('loanRepaymentSuccess');
-            $(document).off('savingsSuccess');
-            $(document).off('withdrawalSuccess');
-        });
-
-        // =====================================
-        // ERROR HANDLING AND DEBUGGING
-        // =====================================
-        
-        $(document).ajaxError(function(event, xhr, settings, thrownError) {
-            if (xhr.status !== 0) {
-                console.error('AJAX Error:', {
-                    url: settings.url,
-                    status: xhr.status,
-                    error: thrownError,
-                    response: xhr.responseText
-                });
-                
-                showToast('An error occurred while processing your request. Please try again.', 'error');
-            }
-        });
-
-        // Log account information for debugging
-        console.log('Account Details Loaded:', {
-            accountId: ACCOUNT_ID,
-            outstandingLoans: <?= $outstandingLoans ?>,
-            activeLoansCount: <?= $activeLoansCount ?>,
-            totalGroupSavings: <?= $totalGroupSavings ?>
-        });
-
-        // =====================================
-        // ADDITIONAL FEATURES
-        // =====================================
-        
-        // Double-click to reset single card position
-        $('.stat-card').on('dblclick', function() {
-            const cardId = $(this).attr('data-card-id');
-            showToast('Double-click feature: Card "' + cardId + '" selected. Use Alt+R to reset all positions.', 'info');
-        });
-
-        // Add tooltip for drag handles
-        $('.drag-handle').attr('title', 'Drag to reorder cards');
-
-        // Show keyboard shortcuts help
-        if (!localStorage.getItem('keyboardShortcutsShown_' + ACCOUNT_ID)) {
-            setTimeout(() => {
-                showToast('Tip: Use Alt+R to reset card layout, Alt+F to focus filter', 'info');
-                localStorage.setItem('keyboardShortcutsShown_' + ACCOUNT_ID, 'true');
-            }, 3000);
-        }
-
-        // Trigger initial filter to load data
-        setTimeout(() => {
-            $('#accountTypeFilter').trigger('change');
-        }, 500);
     });
-    </script>
+
+    function loadFullyPaidLoans() {
+        showLoading('#fullyPaidLoansContainer');
+        
+        console.log('Loading fully paid loans for account:', ACCOUNT_ID);
+        
+        $.ajax({
+            url: '../controllers/accountController.php',
+            method: 'GET',
+            data: {
+                action: 'getFullyPaidLoans',
+                accountId: ACCOUNT_ID,
+                accountType: $('#accountTypeFilter').val() || 'all'
+            },
+            dataType: 'json',
+            success: function(response) {
+                console.log('Fully paid loans response:', response);
+                if (response.status === 'success') {
+                    displayFullyPaidLoans(response.loans);
+                    updateSummaryStats(response.summary);
+                } else {
+                    showError('#fullyPaidLoansContainer', response.message || 'Error loading fully paid loans');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.log('AJAX Error Details:', {
+                    status: status,
+                    error: error,
+                    responseText: xhr.responseText,
+                    statusCode: xhr.status
+                });
+                showError('#fullyPaidLoansContainer', 'Error loading fully paid loans: ' + error);
+            }
+        });
+    }
+
+    function displayFullyPaidLoans(loans) {
+        const container = $('#fullyPaidLoansContainer');
+        
+        if (!loans || loans.length === 0) {
+            container.html(`
+                <div class="empty-state">
+                    <i class="fas fa-check-circle empty-icon"></i>
+                    <p class="empty-text">No fully paid loans found for this account.</p>
+                </div>
+            `);
+            return;
+        }
+
+        const tableHtml = `
+            <div class="card mb-4 table-container">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered" id="fullyPaidLoansTable" width="100%" cellspacing="0">
+                            <thead>
+                                <tr>
+                                    <th>Ref No</th>
+                                    <th>Loan Product</th>
+                                    <th>Original Amount</th>
+                                    <th>Interest Rate</th>
+                                    <th>Total Paid</th>
+                                    <th>Interest Paid</th>
+                                    <th>Date Applied</th>
+                                    <th>Date Completed</th>
+                                    <th>Duration</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${loans.map(loan => `
+                                    <tr>
+                                        <td>${loan.ref_no}</td>
+                                        <td>${loan.loan_product_id}</td>
+                                        <td>KSh ${formatCurrency(loan.amount)}</td>
+                                        <td>${parseFloat(loan.interest_rate).toFixed(2)}%</td>
+                                        <td>KSh ${formatCurrency(loan.total_paid)}</td>
+                                        <td>KSh ${formatCurrency(loan.interest_paid)}</td>
+                                        <td>${formatDate(loan.date_applied)}</td>
+                                        <td>${formatDate(loan.date_completed)}</td>
+                                        <td>${loan.duration_months} months</td>
+                                        <td>
+                                            <button class="btn btn-success-modern btn-sm view-completed-schedule" data-loan-id="${loan.loan_id}">
+                                                <i class="fas fa-calendar-check"></i> View Schedule
+                                            </button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        container.html(tableHtml);
+        initializeFullyPaidLoansTable();
+    }
+
+    function initializeFullyPaidLoansTable() {
+        if (fullyPaidLoansTable) {
+            fullyPaidLoansTable.destroy();
+        }
+
+        fullyPaidLoansTable = $('#fullyPaidLoansTable').DataTable({
+            responsive: true,
+            pageLength: 10,
+            order: [[7, 'desc']], // Order by date completed
+            scrollX: true,
+            autoWidth: false,
+            language: {
+                search: "Search:",
+                lengthMenu: "Show _MENU_ entries",
+                info: "Showing _START_ to _END_ of _TOTAL_ entries",
+                paginate: {
+                    first: "First",
+                    last: "Last",
+                    next: "Next",
+                    previous: "Previous"
+                }
+            },
+            columnDefs: [
+                { targets: '_all', className: 'text-nowrap' }
+            ]
+        });
+    }
+
+    function updateSummaryStats(summary) {
+        if (summary) {
+            $('#totalCompletedLoans').text(summary.total_loans || 0);
+            $('#totalAmountPaid').text('KSh ' + formatCurrency(summary.total_amount_paid || 0));
+            $('#totalInterestPaid').text('KSh ' + formatCurrency(summary.total_interest_paid || 0));
+        }
+    }
+
+    // View Completed Loan Schedule Event Handler
+    $(document).on('click', '.view-completed-schedule', function() {
+        const loanId = $(this).data('loan-id');
+        
+        $.ajax({
+            url: '../controllers/accountController.php',
+            type: 'GET',
+            data: { 
+                action: 'getFullyPaidLoanSchedule',
+                loan_id: loanId 
+            },
+            dataType: 'json',
+            success: function(response) {
+                if(response.status === 'success' && response.schedule) {
+                    currentFullyPaidLoanData = response.loan_details;
+                    displayCompletedSchedule(response.schedule, response.loan_details);
+                    $('#fullyPaidLoanScheduleModal').modal('show');
+                } else {
+                    showToast('Error: ' + (response.message || 'Invalid schedule data'), 'error');
+                }
+            },
+            error: function(xhr, status, error) {
+                showToast('Error fetching loan schedule', 'error');
+                console.error('AJAX Error:', xhr.responseText);
+            }
+        });
+    });
+
+    function displayCompletedSchedule(schedule, loanDetails) {
+        const tableBody = $('#fullyPaidScheduleTableBody');
+        const completionInfo = $('#completionInfo');
+        
+        tableBody.empty();
+        
+        let totalPrincipal = 0;
+        let totalInterest = 0;
+        let totalDueAmount = 0;
+        let totalAmountPaid = 0;
+
+        $.each(schedule, function(index, item) {
+            const dueDate = new Date(item.due_date);
+            const paidDate = new Date(item.paid_date);
+            const daysDifference = Math.floor((paidDate - dueDate) / (1000 * 60 * 60 * 24));
+            
+            let paymentStatus = '';
+            if (daysDifference > 0) {
+                paymentStatus = `<span class="text-warning">${daysDifference} days late</span>`;
+            } else if (daysDifference < 0) {
+                paymentStatus = `<span class="text-success">${Math.abs(daysDifference)} days early</span>`;
+            } else {
+                paymentStatus = '<span class="text-info">On time</span>';
+            }
+
+            const principal = parseFloat(item.principal.replace(/,/g, ''));
+            const interest = parseFloat(item.interest.replace(/,/g, ''));
+            const dueAmount = parseFloat(item.amount.replace(/,/g, ''));
+            const amountPaid = parseFloat(item.repaid_amount.replace(/,/g, ''));
+
+            totalPrincipal += principal;
+            totalInterest += interest;
+            totalDueAmount += dueAmount;
+            totalAmountPaid += amountPaid;
+            
+            const row = `
+                <tr>
+                    <td>${formatDate(item.due_date)}</td>
+                    <td>KSh ${item.principal}</td>
+                    <td>KSh ${item.interest}</td>
+                    <td>KSh ${item.amount}</td>
+                    <td>KSh ${item.repaid_amount}</td>
+                    <td>${formatDate(item.paid_date)}</td>
+                    <td>${paymentStatus}</td>
+                    <td><span class="badge-modern badge-completed">Paid</span></td>
+                </tr>
+            `;
+            tableBody.append(row);
+        });
+
+        // Update totals
+        $('#totalPrincipal').text('KSh ' + formatCurrency(totalPrincipal));
+        $('#totalInterest').text('KSh ' + formatCurrency(totalInterest));
+        $('#totalDueAmount').text('KSh ' + formatCurrency(totalDueAmount));
+        $('#totalAmountPaid').text('KSh ' + formatCurrency(totalAmountPaid));
+
+        // Update completion info
+        if (loanDetails) {
+            const completionText = `This loan was completed on ${formatDate(loanDetails.date_completed)}. 
+                                   Total amount paid: KSh ${formatCurrency(totalAmountPaid)}.`;
+            completionInfo.text(completionText);
+        }
+    }
+
+    // Print Completed Schedule Event Handler
+    $(document).on('click', '#printFullyPaidSchedule', function() {
+        printCompletedLoanSchedule(currentFullyPaidLoanData);
+    });
+
+    function printCompletedLoanSchedule(loanData) {
+        const printWindow = window.open('', '_blank', 'width=800,height=600');
+        const scheduleRows = [];
+        
+        $('#fullyPaidScheduleTableBody tr').each(function() {
+            const cells = $(this).find('td');
+            scheduleRows.push({
+                dueDate: cells.eq(0).text(),
+                principal: cells.eq(1).text(),
+                interest: cells.eq(2).text(),
+                dueAmount: cells.eq(3).text(),
+                amountPaid: cells.eq(4).text(),
+                paidDate: cells.eq(5).text(),
+                status: cells.eq(6).text()
+            });
+        });
+
+        const content = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Completed Loan Schedule</title>
+                <style>
+                    body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+                    .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #1cc88a; padding-bottom: 15px; }
+                    .loan-info { margin-bottom: 20px; background: #f8f9fc; padding: 15px; border-radius: 5px; }
+                    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+                    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 12px; }
+                    th { background-color: #1cc88a; color: white; font-weight: bold; }
+                    .totals { background-color: #f8f9fc; font-weight: bold; }
+                    .completion-badge { background: #1cc88a; color: white; padding: 10px; text-align: center; border-radius: 5px; margin: 20px 0; }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h2>Lato SACCO LTD</h2>
+                    <h3>Completed Loan Payment Schedule</h3>
+                </div>
+                
+                <div class="completion-badge">
+                    ✓ LOAN FULLY PAID AND COMPLETED
+                </div>
+
+                <div class="loan-info">
+                    <strong>Loan Reference:</strong> ${loanData.ref_no || 'N/A'}<br>
+                    <strong>Client:</strong> ${loanData.client_name || 'N/A'}<br>
+                    <strong>Original Amount:</strong> KSh ${formatCurrency(loanData.amount || 0)}<br>
+                    <strong>Date Completed:</strong> ${formatDate(loanData.date_completed)}<br>
+                    <strong>Total Payments Made:</strong> ${scheduleRows.length}
+                </div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Due Date</th>
+                            <th>Principal</th>
+                            <th>Interest</th>
+                            <th>Due Amount</th>
+                            <th>Amount Paid</th>
+                            <th>Payment Date</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${scheduleRows.map(row => `
+                            <tr>
+                                <td>${row.dueDate}</td>
+                                <td>${row.principal}</td>
+                                <td>${row.interest}</td>
+                                <td>${row.dueAmount}</td>
+                                <td>${row.amountPaid}</td>
+                                <td>${row.paidDate}</td>
+                                <td>PAID</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                    <tfoot>
+                        <tr class="totals">
+                            <td>TOTALS</td>
+                            <td>${$('#totalPrincipal').text()}</td>
+                            <td>${$('#totalInterest').text()}</td>
+                            <td>${$('#totalDueAmount').text()}</td>
+                            <td>${$('#totalAmountPaid').text()}</td>
+                            <td colspan="2">-</td>
+                        </tr>
+                    </tfoot>
+                </table>
+
+                <div style="text-align: center; margin-top: 30px; border-top: 1px solid #ddd; padding-top: 15px;">
+                    <p><strong>Thank you for banking with us!</strong></p>
+                    <p>Printed on: ${formatDateTime(new Date())}</p>
+                </div>
+            </body>
+            </html>
+        `;
+        
+        printWindow.document.write(content);
+        printWindow.document.close();
+        setTimeout(() => { 
+            printWindow.print(); 
+            printWindow.close(); 
+        }, 500);
+    }
+
+    // Listen for account type filter changes (for fully paid loans)
+    $(document).on('change', '#accountTypeFilter', function() {
+        const activeSection = $('.content-section.active').attr('id');
+        if (activeSection === 'fully-paid-loans-section') {
+            loadFullyPaidLoans();
+        }
+    });
+
+    // Make functions globally accessible
+    window.loadFullyPaidLoans = loadFullyPaidLoans;
+    
+    
+    // =====================================
+    // DRAG AND DROP FUNCTIONALITY
+    // =====================================
+    
+    function initializeDragAndDrop() {
+        const statsGrid = document.getElementById('statsGrid');
+        const statCards = statsGrid.querySelectorAll('.stat-card');
+
+        // Load saved card order from localStorage
+        loadCardOrder();
+
+        statCards.forEach(card => {
+            card.addEventListener('dragstart', handleDragStart);
+            card.addEventListener('dragover', handleDragOver);
+            card.addEventListener('dragenter', handleDragEnter);
+            card.addEventListener('dragleave', handleDragLeave);
+            card.addEventListener('drop', handleDrop);
+            card.addEventListener('dragend', handleDragEnd);
+        });
+
+        function handleDragStart(e) {
+            draggedElement = this;
+            this.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/html', this.outerHTML);
+        }
+
+        function handleDragOver(e) {
+            if (e.preventDefault) {
+                e.preventDefault();
+            }
+            e.dataTransfer.dropEffect = 'move';
+            return false;
+        }
+
+        function handleDragEnter(e) {
+            this.classList.add('drag-over');
+        }
+
+        function handleDragLeave(e) {
+            this.classList.remove('drag-over');
+        }
+
+        function handleDrop(e) {
+            if (e.stopPropagation) {
+                e.stopPropagation();
+            }
+
+            if (draggedElement !== this) {
+                const draggedIndex = Array.from(statsGrid.children).indexOf(draggedElement);
+                const targetIndex = Array.from(statsGrid.children).indexOf(this);
+
+                if (draggedIndex < targetIndex) {
+                    statsGrid.insertBefore(draggedElement, this.nextSibling);
+                } else {
+                    statsGrid.insertBefore(draggedElement, this);
+                }
+
+                saveCardOrder();
+                showToast('Card layout updated successfully!', 'success');
+            }
+
+            return false;
+        }
+
+        function handleDragEnd(e) {
+            const statCards = statsGrid.querySelectorAll('.stat-card');
+            statCards.forEach(card => {
+                card.classList.remove('dragging', 'drag-over');
+            });
+        }
+
+        function saveCardOrder() {
+            const cardOrder = Array.from(statsGrid.children).map(card => 
+                card.getAttribute('data-card-id')
+            );
+            localStorage.setItem('statsCardOrder_' + ACCOUNT_ID, JSON.stringify(cardOrder));
+        }
+
+        function loadCardOrder() {
+            const savedOrder = localStorage.getItem('statsCardOrder_' + ACCOUNT_ID);
+            if (savedOrder) {
+                try {
+                    const cardOrder = JSON.parse(savedOrder);
+                    const cards = {};
+                    
+                    // Store current cards by their ID
+                    statsGrid.querySelectorAll('.stat-card').forEach(card => {
+                        const cardId = card.getAttribute('data-card-id');
+                        cards[cardId] = card;
+                    });
+
+                    // Clear the grid
+                    statsGrid.innerHTML = '';
+
+                    // Append cards in saved order
+                    cardOrder.forEach(cardId => {
+                        if (cards[cardId]) {
+                            statsGrid.appendChild(cards[cardId]);
+                        }
+                    });
+
+                    // Add any cards that weren't in the saved order (new cards)
+                    Object.values(cards).forEach(card => {
+                        if (!statsGrid.contains(card)) {
+                            statsGrid.appendChild(card);
+                        }
+                    });
+                } catch (e) {
+                    console.error('Error loading card order:', e);
+                }
+            }
+        }
+    }
+    
+    
+    // =====================================
+    // ACCOUNT TYPE FILTER (SERVER-SIDE)
+    // =====================================
+    
+    $('#accountTypeFilter').change(function() {
+        const selectedType = $(this).val();
+        
+        // Add loading state to select
+        $(this).addClass('loading');
+        
+        // Show loading state for all cards
+        updateStatCard('#totalSavings', 'Loading...');
+        updateStatCard('#totalWithdrawals', 'Loading...');
+        updateStatCard('#outstandingLoans', 'Loading...');
+        updateStatCard('#activeLoansCount', 'Loading...');
+        updateStatCard('#totalGroupSavings', 'Loading...');
+        
+        // Make AJAX request to get filtered data
+        $.ajax({
+            url: '../controllers/accountController.php',
+            method: 'GET',
+            data: {
+                action: 'getFilteredSummary',
+                accountId: ACCOUNT_ID,
+                accountType: selectedType
+            },
+            dataType: 'json',
+            success: function(response) {
+                if (response.status === 'success') {
+                    // Update summary cards with actual filtered data
+                    updateStatCard('#totalSavings', 'KSh ' + formatCurrency(response.totalSavings));
+                    updateStatCard('#totalWithdrawals', 'KSh ' + formatCurrency(response.totalWithdrawals));
+                    updateStatCard('#outstandingLoans', 'KSh ' + formatCurrency(response.outstandingLoans));
+                    updateStatCard('#activeLoansCount', response.activeLoansCount);
+                    updateStatCard('#totalGroupSavings', 'KSh ' + formatCurrency(response.totalGroupSavings));
+                } else {
+                    showToast('Error filtering account data: ' + response.message, 'error');
+                    resetStatCards();
+                }
+            },
+            error: function(xhr, status, error) {
+                showToast('Error loading filtered data', 'error');
+                resetStatCards();
+            },
+            complete: function() {
+                // Remove loading state from select
+                $('#accountTypeFilter').removeClass('loading');
+            }
+        });
+    });
+    
+    function updateStatCard(selector, value) {
+        const $element = $(selector);
+        $element.fadeOut(200, function() {
+            $element.text(value);
+            $element.fadeIn(200);
+        });
+    }
+    
+    function resetStatCards() {
+        updateStatCard('#totalSavings', 'KSh <?= number_format($totalSavings, 2) ?>');
+        updateStatCard('#totalWithdrawals', 'KSh <?= number_format($totalWithdrawals, 2) ?>');
+        updateStatCard('#outstandingLoans', 'KSh <?= number_format($outstandingLoans, 2) ?>');
+        updateStatCard('#activeLoansCount', '<?= $activeLoansCount ?>');
+        updateStatCard('#totalGroupSavings', 'KSh <?= number_format($totalGroupSavings, 2) ?>');
+    }
+    
+    
+    // =====================================
+    // TOAST NOTIFICATIONS
+    // =====================================
+    
+    function showToast(message, type = 'success') {
+        const toastId = 'toast-' + Date.now();
+        const toastClass = type === 'error' ? 'error' : type === 'warning' ? 'warning' : '';
+        const iconClass = type === 'error' ? 'fa-exclamation-triangle' : type === 'warning' ? 'fa-exclamation-circle' : 'fa-check-circle';
+        
+        const toast = `
+            <div class="toast-modern ${toastClass}" id="${toastId}">
+                <div class="toast-header">
+                    <i class="fas ${iconClass}" style="margin-right: 8px;"></i>
+                    <span>${type.charAt(0).toUpperCase() + type.slice(1)}</span>
+                    <button type="button" style="margin-left: auto; background: none; border: none; font-size: 1.2rem; cursor: pointer;" onclick="closeToast('${toastId}')">&times;</button>
+                </div>
+                <div class="toast-body">${message}</div>
+            </div>
+        `;
+        
+        $('#toastContainer').append(toast);
+        
+        setTimeout(() => {
+            $(`#${toastId}`).addClass('show');
+        }, 100);
+        
+        setTimeout(() => {
+            closeToast(toastId);
+        }, 5000);
+    }
+    
+    function closeToast(toastId) {
+        $(`#${toastId}`).removeClass('show');
+        setTimeout(() => {
+            $(`#${toastId}`).remove();
+        }, 300);
+    }
+    
+    
+    // =====================================
+    // UTILITY FUNCTIONS
+    // =====================================
+    
+    function formatCurrency(amount) {
+        return parseFloat(amount).toLocaleString('en-KE', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    }
+
+    function formatDateTime(dateString) {
+        return new Date(dateString).toLocaleString('en-KE', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+
+    function formatDate(dateString) {
+        if (!dateString) return 'N/A';
+        return new Date(dateString).toLocaleDateString('en-KE', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+    }
+    
+    function showLoading(selector) {
+        $(selector).html(`
+            <div class="text-center py-4">
+                <div class="spinner-border text-success" role="status">
+                    <span class="sr-only">Loading...</span>
+                </div>
+                <p class="mt-2">Loading fully paid loans...</p>
+            </div>
+        `);
+    }
+
+    function showError(selector, message) {
+        $(selector).html(`
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle"></i>
+                ${message}
+            </div>
+        `);
+    }
+    
+    
+    // =====================================
+    // REAL-TIME UPDATES FOR TRANSACTIONS
+    // =====================================
+    
+    // Listen for loan repayment success
+    $(document).on('loanRepaymentSuccess', function(e, data) {
+        if (data.newOutstandingLoans !== undefined) {
+            updateStatCard('#outstandingLoans', 'KSh ' + formatCurrency(data.newOutstandingLoans));
+        }
+        
+        // Refresh all stats to ensure consistency
+        const currentAccountType = $('#accountTypeFilter').val();
+        $('#accountTypeFilter').trigger('change');
+    });
+
+    // Listen for savings success
+    $(document).on('savingsSuccess', function() {
+        const currentAccountType = $('#accountTypeFilter').val();
+        $('#accountTypeFilter').trigger('change');
+    });
+
+    // Listen for withdrawal success  
+    $(document).on('withdrawalSuccess', function() {
+        const currentAccountType = $('#accountTypeFilter').val();
+        $('#accountTypeFilter').trigger('change');
+    });
+
+    // Enhanced event handlers for better integration
+    $(document).on('loanRepaymentProcessed', function(e, response) {
+        if (response.status === 'success') {
+            if (response.newOutstandingLoans !== undefined) {
+                updateStatCard('#outstandingLoans', 'KSh ' + formatCurrency(response.newOutstandingLoans));
+            }
+            
+            showToast('Loan repayment processed successfully!', 'success');
+            
+            setTimeout(() => {
+                $('#accountTypeFilter').trigger('change');
+            }, 1000);
+        }
+    });
+
+    $(document).on('savingsProcessed', function(e, response) {
+        if (response.status === 'success') {
+            showToast('Savings processed successfully!', 'success');
+            
+            setTimeout(() => {
+                $('#accountTypeFilter').trigger('change');
+            }, 1000);
+        }
+    });
+
+    $(document).on('withdrawalProcessed', function(e, response) {
+        if (response.status === 'success') {
+            showToast('Withdrawal processed successfully!', 'success');
+            
+            setTimeout(() => {
+                $('#accountTypeFilter').trigger('change');
+            }, 1000);
+        }
+    });
+    
+    
+    // =====================================
+    // PRINTING FUNCTIONALITY
+    // =====================================
+    
+    function printLoanRepaymentReceipt(data) {
+        const receiptWindow = window.open('', '_blank', 'width=400,height=600');
+        const content = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Loan Repayment Receipt</title>
+                <style>
+                    body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+                    .receipt { border: 1px solid #ccc; padding: 20px; max-width: 800px; margin: 0 auto; }
+                    .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+                    .detail-row { margin: 10px 0; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+                    .footer { text-align: center; margin-top: 20px; border-top: 2px solid #333; padding-top: 10px; }
+                </style>
+            </head>
+            <body>
+                <div class="receipt">
+                    <div class="header">
+                        <h2>Lato Sacco LTD</h2>
+                        <h3>Loan Repayment Receipt</h3>
+                    </div>
+                    <div class="detail-row"><strong>Receipt No:</strong> ${data.receipt_number || 'N/A'}</div>
+                    <div class="detail-row"><strong>Date:</strong> ${formatDateTime(data.date_paid)}</div>
+                    <div class="detail-row"><strong>Client Name:</strong> ${data.first_name} ${data.last_name}</div>
+                    <div class="detail-row"><strong>Loan Ref No:</strong> ${data.loan_ref_no}</div>
+                    <div class="detail-row"><strong>Amount Paid:</strong> KSh ${formatCurrency(data.amount_repaid)}</div>
+                    <div class="detail-row"><strong>Payment Mode:</strong> ${data.payment_mode}</div>
+                    <div class="detail-row"><strong>Served By:</strong> ${data.served_by || 'System'}</div>
+                    <div class="footer">
+                        <p>Thank you for banking with us!</p>
+                        <p>Printed on: ${formatDateTime(new Date())}</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `;
+        
+        receiptWindow.document.write(content);
+        receiptWindow.document.close();
+        setTimeout(() => { receiptWindow.print(); receiptWindow.close(); }, 500);
+    }
+
+    function printSavingsReceipt(data, type) {
+        const receiptWindow = window.open('', '_blank', 'width=400,height=600');
+        const content = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>${type} Receipt</title>
+                <style>
+                    body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+                    .receipt { border: 1px solid #ccc; padding: 20px; max-width: 800px; margin: 0 auto; }
+                    .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+                    .detail-row { margin: 10px 0; border-bottom:1px solid #eee; padding-bottom: 5px; }
+                    .footer { text-align: center; margin-top: 20px; border-top: 2px solid #333; padding-top: 10px; }
+                </style>
+            </head>
+            <body>
+                <div class="receipt">
+                    <div class="header">
+                        <h2>Lato Sacco LTD</h2>
+                        <h3>${type} Receipt</h3>
+                    </div>
+                    <div class="detail-row"><strong>Receipt No:</strong> ${data.receipt_number}</div>
+                    <div class="detail-row"><strong>Date:</strong> ${formatDateTime(data.date)}</div>
+                    <div class="detail-row"><strong>Client Name:</strong> ${data.client_name}</div>
+                    <div class="detail-row"><strong>Account Type:</strong> ${data.account_type}</div>
+                    <div class="detail-row"><strong>Amount:</strong> KSh ${formatCurrency(data.amount)}</div>
+                    ${data.withdrawal_fee ? `<div class="detail-row"><strong>Withdrawal Fee:</strong> KSh ${formatCurrency(data.withdrawal_fee)}</div>` : ''}
+                    <div class="detail-row"><strong>Payment Mode:</strong> ${data.payment_mode}</div>
+                    <div class="detail-row"><strong>Served By:</strong> ${data.served_by || 'System'}</div>
+                    <div class="footer">
+                        <p>Thank you for banking with us!</p>
+                        <p>Printed on: ${formatDateTime(new Date())}</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `;
+        
+        receiptWindow.document.write(content);
+        receiptWindow.document.close();
+        setTimeout(() => { receiptWindow.print(); receiptWindow.close(); }, 500);
+    }
+
+    function printWithdrawalReceipt(data) {
+        printSavingsReceipt(data, 'Withdrawal');
+    }
+    
+    
+    // =====================================
+    // RESPONSIVE HANDLING
+    // =====================================
+    
+    $(window).resize(function() {
+        if (window.innerWidth > 768) {
+            $('#sidebar').removeClass('mobile-open');
+        }
+        
+        // Redraw DataTables on resize
+        setTimeout(() => {
+            $.fn.dataTable.tables({ visible: true, api: true }).columns.adjust();
+        }, 100);
+
+        // Reinitialize drag and drop after resize
+        setTimeout(() => {
+            initializeDragAndDrop();
+        }, 200);
+    });
+    
+    
+    // =====================================
+    // MODAL AND BOOTSTRAP FIXES
+    // =====================================
+    
+    $(document).on('click', '.dropdown-menu', function(e) {
+        e.stopPropagation();
+    });
+
+    $(document).on('hidden.bs.modal', '.modal', function () {
+        $('body').removeClass('modal-open');
+        $('.modal-backdrop').remove();
+    });
+
+    $(document).on('show.bs.modal', '.modal', function () {
+        const zIndex = 1040 + (10 * $('.modal:visible').length);
+        $(this).css('z-index', zIndex);
+        setTimeout(() => {
+            $('.modal-backdrop').not('.modal-stack').css('z-index', zIndex - 1).addClass('modal-stack');
+        }, 0);
+    });
+    
+    
+    // =====================================
+    // KEYBOARD SHORTCUTS
+    // =====================================
+    
+    $(document).keydown(function(e) {
+        // Alt + R to reset card order
+        if (e.altKey && e.keyCode === 82) {
+            e.preventDefault();
+            localStorage.removeItem('statsCardOrder_' + ACCOUNT_ID);
+            location.reload();
+            showToast('Card layout reset to default!', 'success');
+        }
+        
+        // Alt + F to focus filter
+        if (e.altKey && e.keyCode === 70) {
+            e.preventDefault();
+            $('#accountTypeFilter').focus();
+        }
+    });
+    
+    
+    // =====================================
+    // ERROR HANDLING AND DEBUGGING
+    // =====================================
+    
+    $(document).ajaxError(function(event, xhr, settings, thrownError) {
+        if (xhr.status !== 0) {
+            console.error('AJAX Error:', {
+                url: settings.url,
+                status: xhr.status,
+                error: thrownError,
+                response: xhr.responseText
+            });
+            
+            showToast('An error occurred while processing your request. Please try again.', 'error');
+        }
+    });
+
+    // Log account information for debugging
+    console.log('Account Details Loaded:', {
+        accountId: ACCOUNT_ID,
+        outstandingLoans: <?= $outstandingLoans ?>,
+        activeLoansCount: <?= $activeLoansCount ?>,
+        totalGroupSavings: <?= $totalGroupSavings ?>
+    });
+    
+    
+    // =====================================
+    // ADDITIONAL FEATURES
+    // =====================================
+    
+    // Double-click to reset single card position
+    $('.stat-card').on('dblclick', function() {
+        const cardId = $(this).attr('data-card-id');
+        showToast('Double-click feature: Card "' + cardId + '" selected. Use Alt+R to reset all positions.', 'info');
+    });
+
+    // Add tooltip for drag handles
+    $('.drag-handle').attr('title', 'Drag to reorder cards');
+
+    // Show keyboard shortcuts help
+    if (!localStorage.getItem('keyboardShortcutsShown_' + ACCOUNT_ID)) {
+        setTimeout(() => {
+            showToast('Tip: Use Alt+R to reset card layout, Alt+F to focus filter', 'info');
+            localStorage.setItem('keyboardShortcutsShown_' + ACCOUNT_ID, 'true');
+        }, 3000);
+    }
+    
+    
+    // =====================================
+    // CLEANUP AND FINAL SETUP
+    // =====================================
+    
+    // Cleanup function for when page is unloaded
+    $(window).on('beforeunload', function() {
+        clearTimeout();
+        
+        $(document).off('loanRepaymentProcessed');
+        $(document).off('savingsProcessed'); 
+        $(document).off('withdrawalProcessed');
+        $(document).off('loanRepaymentSuccess');
+        $(document).off('savingsSuccess');
+        $(document).off('withdrawalSuccess');
+    });
+    
+    // Make print functions globally accessible
+    window.printLoanRepaymentReceipt = printLoanRepaymentReceipt;
+    window.printSavingsReceipt = printSavingsReceipt;
+    window.printWithdrawalReceipt = printWithdrawalReceipt;
+    
+    // Make utility functions globally accessible
+    window.formatCurrency = formatCurrency;
+    window.formatDateTime = formatDateTime;
+    window.closeToast = closeToast;
+    window.showToast = showToast;
+
+}); // End of document ready function
+</script>
 </body>
 </html>

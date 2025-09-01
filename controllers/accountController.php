@@ -754,85 +754,15 @@ public function getFullyPaidLoanSchedule($loanId) {
  */
 private function handleGetFullyPaidLoans() {
     try {
-        error_log("=== DEBUG: getFullyPaidLoans called ===");
-        
         $accountId = $_GET['accountId'] ?? null;
         $accountType = $_GET['accountType'] ?? 'all';
-        
-        error_log("Account ID: " . $accountId);
-        error_log("Account Type: " . $accountType);
 
         if (!$accountId) {
             throw new Exception("Account ID is required");
         }
 
-        // Test basic query first
-        $testQuery = "SELECT COUNT(*) as total FROM loan WHERE account_id = ? AND status = 3";
-        $stmt = $this->model->getConnection()->prepare($testQuery);
-        $stmt->bind_param("i", $accountId);
-        $stmt->execute();
-        $result = $stmt->get_result()->fetch_assoc();
-        
-        error_log("Total completed loans found: " . $result['total']);
-        
-        // If no completed loans, return empty result
-        if ($result['total'] == 0) {
-            echo json_encode([
-                'status' => 'success',
-                'loans' => [],
-                'summary' => [
-                    'total_loans' => 0,
-                    'total_amount_paid' => 0,
-                    'total_interest_paid' => 0
-                ]
-            ]);
-            return;
-        }
-
-        // Simple query to get basic loan info
-        $query = "SELECT 
-            l.loan_id,
-            l.ref_no,
-            l.loan_product_id,
-            l.amount,
-            l.interest_rate,
-            l.date_applied,
-            l.status
-        FROM loan l
-        WHERE l.account_id = ? AND l.status = 3
-        ORDER BY l.loan_id DESC";
-        
-        $stmt = $this->model->getConnection()->prepare($query);
-        $stmt->bind_param("i", $accountId);
-        
-        if (!$stmt->execute()) {
-            throw new Exception("Query execution failed: " . $stmt->error);
-        }
-        
-        $result = $stmt->get_result();
-        $loans = $result->fetch_all(MYSQLI_ASSOC);
-        
-        error_log("Loans found: " . count($loans));
-        
-        // Add dummy calculated fields for now
-        foreach ($loans as &$loan) {
-            $loan['total_paid'] = $loan['amount']; // Placeholder
-            $loan['interest_paid'] = 0; // Placeholder
-            $loan['date_completed'] = $loan['date_applied']; // Placeholder
-            $loan['duration_months'] = 12; // Placeholder
-        }
-        
-        $summary = [
-            'total_loans' => count($loans),
-            'total_amount_paid' => array_sum(array_column($loans, 'total_paid')),
-            'total_interest_paid' => 0
-        ];
-
-        echo json_encode([
-            'status' => 'success',
-            'loans' => $loans,
-            'summary' => $summary
-        ]);
+        $result = $this->getFullyPaidLoans($accountId, $accountType);
+        echo json_encode($result);
         
     } catch (Exception $e) {
         error_log("Error in handleGetFullyPaidLoans: " . $e->getMessage());

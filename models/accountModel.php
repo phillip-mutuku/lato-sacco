@@ -2332,44 +2332,39 @@ public function getTotalWithdrawals($accountId, $accountType = 'all') {
  */
 public function getFullyPaidLoans($accountId, $accountType = 'all') {
     try {
-        // Simple query that matches your actual database structure
         $query = "
             SELECT 
                 l.loan_id,
                 l.ref_no,
-                l.loan_product_id,
+                COALESCE(l.loan_product_id, 'N/A') as loan_product_id,
                 l.amount,
-                l.interest_rate,
-                l.loan_term,
+                COALESCE(l.interest_rate, 0) as interest_rate,
                 l.date_applied,
                 l.status,
-                l.monthly_payment,
-                COALESCE(l.total_payable, l.amount) as total_payable,
-                COALESCE(l.total_interest, 0) as total_interest,
-                -- Calculate total paid from loan_repayments
+                -- Calculate total paid from repayments
                 COALESCE((
                     SELECT SUM(amount_repaid) 
                     FROM loan_repayments 
                     WHERE loan_id = l.loan_id
-                ), l.amount) as total_paid,
-                -- Calculate interest paid (total paid - principal)
+                ), 0) as total_paid,
+                -- Calculate interest paid
                 COALESCE((
                     SELECT SUM(amount_repaid) 
                     FROM loan_repayments 
                     WHERE loan_id = l.loan_id
-                ), l.amount) - l.amount as interest_paid,
-                -- Get completion date from last repayment
+                ), 0) - l.amount as interest_paid,
+                -- Get completion date
                 COALESCE((
                     SELECT MAX(date_paid) 
                     FROM loan_repayments 
                     WHERE loan_id = l.loan_id
                 ), l.date_applied) as date_completed,
-                -- Calculate duration in months
+                -- Calculate duration
                 COALESCE(TIMESTAMPDIFF(MONTH, l.date_applied, (
                     SELECT MAX(date_paid) 
                     FROM loan_repayments 
                     WHERE loan_id = l.loan_id
-                )), l.loan_term) as duration_months
+                )), 12) as duration_months
             FROM loan l
             WHERE l.account_id = ?
             AND l.status = 3"; // Status 3 = Completed
@@ -2397,8 +2392,6 @@ public function getFullyPaidLoans($accountId, $accountType = 'all') {
         
         $result = $stmt->get_result();
         $loans = $result->fetch_all(MYSQLI_ASSOC);
-        
-        error_log("Found " . count($loans) . " completed loans for account $accountId");
         
         return $loans;
         
