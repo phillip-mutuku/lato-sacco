@@ -2,6 +2,7 @@
 date_default_timezone_set("Africa/Nairobi");
 require_once '../config/config.php';
 require_once '../controllers/accountController.php';
+require_once '../controllers/AccountSummaryController.php';
 require_once '../helpers/session.php';
 require_once '../config/class.php';
 $db = new db_class(); 
@@ -14,6 +15,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
 }
 
 $accountController = new AccountController();
+$summaryController = new AccountSummaryController();
 
 // Initialize variables
 $accountId = $_GET['id'] ?? null;
@@ -38,22 +40,21 @@ if ($accountId) {
             throw new Exception("Account not found.");
         }
         
-        // Load all data
+        // Load account operational data (individual operations)
         $transactions = $accountController->getAccountTransactions($accountId, $accountType);
         $loans = $accountController->getAccountLoans($accountId, $accountType);
         $repayments = $accountController->getLoanRepayments($accountId);
         $savings = $accountController->getAccountSavings($accountId, $accountType);
-        $totalSavings = $accountController->getTotalSavings($accountId, $accountType);
-        $totalWithdrawals = $accountController->getTotalWithdrawals($accountId, $accountType);
         
-        // Get outstanding loans (principal balance from loan schedule)
-        $outstandingLoans = $accountController->getTotalOutstandingLoans($accountId, $accountType);
-        
-        // Get active loans count (status = 2)
-        $activeLoansCount = $accountController->getActiveLoansCount($accountId, $accountType);
-        
-        // Get total group savings
-        $totalGroupSavings = $accountController->getTotalGroupSavings($accountId, $accountType);
+        // Load account summary data (totals across all operations)
+        $summaryData = $summaryController->getAccountSummary($accountId, $accountType);
+        if ($summaryData['status'] === 'success') {
+            $totalSavings = $summaryData['data']['total_savings'];
+            $totalWithdrawals = $summaryData['data']['total_withdrawals'];
+            $outstandingLoans = $summaryData['data']['outstanding_loans'];
+            $activeLoansCount = $summaryData['data']['active_loans_count'];
+            $totalGroupSavings = $summaryData['data']['total_group_savings'];
+        }
         
     } catch (Exception $e) {
         $error = $e->getMessage();
@@ -212,7 +213,7 @@ function safeJsonEncode($data) {
         .custom-select {
             width: 100%;
             max-width: 400px;
-            padding: 1px 15px;
+            padding: 1px 12px;
             border: 2px solid rgba(255,255,255,0.3);
             border-radius: 8px;
             background: rgba(255,255,255,0.95);
@@ -597,7 +598,7 @@ function safeJsonEncode($data) {
                 <?php include '../components/account/savings.php'; ?>
                 <?php include '../components/account/transactions.php'; ?>          
                 <?php include '../components/account/client-info.php'; ?>
-                 <?php include '../components/account/fully-paid-loans.php'; ?>
+                <?php include '../components/account/fully-paid-loans.php'; ?>
                 <?php include '../components/account/loans.php'; ?>            
                 <?php include '../components/account/repayments.php'; ?>
              
@@ -688,10 +689,10 @@ $(document).ready(function() {
         console.log('Loading fully paid loans for account:', ACCOUNT_ID);
         
         $.ajax({
-            url: '../controllers/accountController.php',
+            url: '../controllers/AccountSummaryController.php',
             method: 'GET',
             data: {
-                action: 'getFullyPaidLoans',
+                action: 'getAccountFullyPaidLoans',
                 accountId: ACCOUNT_ID,
                 accountType: $('#accountTypeFilter').val() || 'all'
             },
@@ -816,34 +817,63 @@ $(document).ready(function() {
     }
 
     // View Completed Loan Schedule Event Handler
-    $(document).on('click', '.view-completed-schedule', function() {
-        const loanId = $(this).data('loan-id');
-        
-        $.ajax({
-            url: '../controllers/accountController.php',
-            type: 'GET',
-            data: { 
-                action: 'getFullyPaidLoanSchedule',
-                loan_id: loanId 
-            },
-            dataType: 'json',
-            success: function(response) {
-                if(response.status === 'success' && response.schedule) {
-                    currentFullyPaidLoanData = response.loan_details;
-                    displayCompletedSchedule(response.schedule, response.loan_details);
-                    $('#fullyPaidLoanScheduleModal').modal('show');
-                } else {
-                    showToast('Error: ' + (response.message || 'Invalid schedule data'), 'error');
+        $(document).on('click', '.view-completed-schedule', function() {
+            const loanId = $(this).data('loan-id');
+            const $button = $(this);
+            
+            // Show loading state
+            $button.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Loading...');
+            
+            $.ajax({
+                url: '../controllers/AccountSummaryController.php',
+                type: 'GET',
+                data: { 
+                    action: 'getFullyPaidLoanSchedule',
+                    loan_id: loanId 
+                },
+                dataType: 'json',
+                timeout: 10000, // 10 second timeout
+                success: function(response) {
+                    console.log('Schedule response:', response);
+                    if(response.status === 'success') {
+                        if (response.schedule && response.schedule.length > 0) {
+                            currentFullyPaidLoanData = response.loan_details;
+                            displayCompletedSchedule(response.schedule, response.loan_details);
+                            $('#fullyPaidLoanScheduleModal').modal('show');
+                        } else {
+                            showToast('No payment schedule found for this loan', 'warning');
+                        }
+                    } else {
+                        showToast('Error: ' + (response.message || 'Invalid schedule data'), 'error');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('AJAX Error Details:', {
+                        status: status,
+                        error: error,
+                        responseText: xhr.responseText,
+                        statusCode: xhr.status
+                    });
+                    
+                    let errorMessage = 'Error fetching loan schedule';
+                    if (status === 'timeout') {
+                        errorMessage = 'Request timed out. Please try again.';
+                    } else if (xhr.status === 404) {
+                        errorMessage = 'Loan schedule not found';
+                    } else if (xhr.status === 500) {
+                        errorMessage = 'Server error. Please try again later.';
+                    }
+                    
+                    showToast(errorMessage, 'error');
+                },
+                complete: function() {
+                    // Reset button state
+                    $button.prop('disabled', false).html('<i class="fas fa-calendar-check"></i> View Schedule');
                 }
-            },
-            error: function(xhr, status, error) {
-                showToast('Error fetching loan schedule', 'error');
-                console.error('AJAX Error:', xhr.responseText);
-            }
+            });
         });
-    });
 
-    function displayCompletedSchedule(schedule, loanDetails) {
+        function displayCompletedSchedule(schedule, loanDetails) {
         const tableBody = $('#fullyPaidScheduleTableBody');
         const completionInfo = $('#completionInfo');
         
@@ -861,13 +891,14 @@ $(document).ready(function() {
             
             let paymentStatus = '';
             if (daysDifference > 0) {
-                paymentStatus = `<span class="text-warning">${daysDifference} days late</span>`;
+                paymentStatus = `<span class="text-warning"><i class="fas fa-clock"></i> ${daysDifference} days late</span>`;
             } else if (daysDifference < 0) {
-                paymentStatus = `<span class="text-success">${Math.abs(daysDifference)} days early</span>`;
+                paymentStatus = `<span class="text-success"><i class="fas fa-check-circle"></i> ${Math.abs(daysDifference)} days early</span>`;
             } else {
-                paymentStatus = '<span class="text-info">On time</span>';
+                paymentStatus = '<span class="text-info"><i class="fas fa-calendar-check"></i> On time</span>';
             }
 
+            // Parse amounts (remove commas and convert to numbers)
             const principal = parseFloat(item.principal.replace(/,/g, ''));
             const interest = parseFloat(item.interest.replace(/,/g, ''));
             const dueAmount = parseFloat(item.amount.replace(/,/g, ''));
@@ -887,7 +918,7 @@ $(document).ready(function() {
                     <td>KSh ${item.repaid_amount}</td>
                     <td>${formatDate(item.paid_date)}</td>
                     <td>${paymentStatus}</td>
-                    <td><span class="badge-modern badge-completed">Paid</span></td>
+                    <td><span class="badge badge-success"><i class="fas fa-check"></i> Paid</span></td>
                 </tr>
             `;
             tableBody.append(row);
@@ -902,7 +933,8 @@ $(document).ready(function() {
         // Update completion info
         if (loanDetails) {
             const completionText = `This loan was completed on ${formatDate(loanDetails.date_completed)}. 
-                                   Total amount paid: KSh ${formatCurrency(totalAmountPaid)}.`;
+                                Total amount paid: KSh ${formatCurrency(totalAmountPaid)}. 
+                                Original loan amount: KSh ${formatCurrency(loanDetails.amount)}.`;
             completionInfo.text(completionText);
         }
     }
@@ -1145,7 +1177,7 @@ $(document).ready(function() {
     
     
     // =====================================
-    // ACCOUNT TYPE FILTER (SERVER-SIDE)
+    // ACCOUNT TYPE FILTER (USING AccountSummaryController)
     // =====================================
     
     $('#accountTypeFilter').change(function() {
@@ -1161,12 +1193,12 @@ $(document).ready(function() {
         updateStatCard('#activeLoansCount', 'Loading...');
         updateStatCard('#totalGroupSavings', 'Loading...');
         
-        // Make AJAX request to get filtered data
+        // Make AJAX request to AccountSummaryController for filtered data
         $.ajax({
-            url: '../controllers/accountController.php',
+            url: '../controllers/AccountSummaryController.php',
             method: 'GET',
             data: {
-                action: 'getFilteredSummary',
+                action: 'getAccountSummary',
                 accountId: ACCOUNT_ID,
                 accountType: selectedType
             },
@@ -1186,6 +1218,7 @@ $(document).ready(function() {
             },
             error: function(xhr, status, error) {
                 showToast('Error loading filtered data', 'error');
+                console.error('Filter AJAX Error:', xhr.responseText);
                 resetStatCards();
             },
             complete: function() {
@@ -1308,10 +1341,6 @@ $(document).ready(function() {
     
     // Listen for loan repayment success
     $(document).on('loanRepaymentSuccess', function(e, data) {
-        if (data.newOutstandingLoans !== undefined) {
-            updateStatCard('#outstandingLoans', 'KSh ' + formatCurrency(data.newOutstandingLoans));
-        }
-        
         // Refresh all stats to ensure consistency
         const currentAccountType = $('#accountTypeFilter').val();
         $('#accountTypeFilter').trigger('change');
@@ -1332,10 +1361,6 @@ $(document).ready(function() {
     // Enhanced event handlers for better integration
     $(document).on('loanRepaymentProcessed', function(e, response) {
         if (response.status === 'success') {
-            if (response.newOutstandingLoans !== undefined) {
-                updateStatCard('#outstandingLoans', 'KSh ' + formatCurrency(response.newOutstandingLoans));
-            }
-            
             showToast('Loan repayment processed successfully!', 'success');
             
             setTimeout(() => {

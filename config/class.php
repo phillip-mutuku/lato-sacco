@@ -1077,6 +1077,159 @@ return false;
         return false;
     }
 
+
+    // Enhanced delete_loan method that removes all related data
+public function delete_loan_completely($loan_id) {
+    try {
+        // Start transaction
+        $this->conn->begin_transaction();
+        
+        // First verify the loan exists
+        $loan = $this->get_loan($loan_id);
+        if (!$loan) {
+            throw new Exception("Loan not found");
+        }
+        
+        // Delete loan schedule entries
+        $delete_schedule = $this->conn->prepare("DELETE FROM loan_schedule WHERE loan_id = ?");
+        $delete_schedule->bind_param("i", $loan_id);
+        if (!$delete_schedule->execute()) {
+            throw new Exception("Failed to delete loan schedule: " . $delete_schedule->error);
+        }
+        
+        // Delete payment records
+        $delete_payments = $this->conn->prepare("DELETE FROM payment WHERE loan_id = ?");
+        $delete_payments->bind_param("i", $loan_id);
+        if (!$delete_payments->execute()) {
+            throw new Exception("Failed to delete payments: " . $delete_payments->error);
+        }
+        
+        // Delete loan pledges if you have a separate pledges table
+        // Uncomment if you have a pledges table
+        /*
+        $delete_pledges = $this->conn->prepare("DELETE FROM loan_pledges WHERE loan_id = ?");
+        $delete_pledges->bind_param("i", $loan_id);
+        if (!$delete_pledges->execute()) {
+            throw new Exception("Failed to delete pledges: " . $delete_pledges->error);
+        }
+        */
+        
+        // Finally delete the main loan record
+        $delete_loan = $this->conn->prepare("DELETE FROM loan WHERE loan_id = ?");
+        $delete_loan->bind_param("i", $loan_id);
+        if (!$delete_loan->execute()) {
+            throw new Exception("Failed to delete loan: " . $delete_loan->error);
+        }
+        
+        // Commit transaction
+        $this->conn->commit();
+        return true;
+        
+    } catch (Exception $e) {
+        // Rollback on error
+        $this->conn->rollback();
+        error_log("Error in delete_loan_completely: " . $e->getMessage());
+        throw $e;
+    }
+}
+
+// Method to check if a loan can be safely deleted
+public function can_delete_loan($loan_id) {
+    $loan = $this->get_loan($loan_id);
+    if (!$loan) {
+        return array('can_delete' => false, 'reason' => 'Loan not found');
+    }
+    
+    // Only allow deletion of pending loans (status = 0)
+    if ($loan['status'] != 0) {
+        $status_text = array(
+            1 => 'approved',
+            2 => 'disbursed', 
+            3 => 'completed',
+            4 => 'denied'
+        );
+        return array(
+            'can_delete' => false, 
+            'reason' => 'Cannot delete ' . ($status_text[$loan['status']] ?? 'processed') . ' loans'
+        );
+    }
+    
+    // Check if any payments have been made (shouldn't happen for pending loans, but safety check)
+    $payment_check = $this->conn->prepare("SELECT COUNT(*) as payment_count FROM payment WHERE loan_id = ?");
+    $payment_check->bind_param("i", $loan_id);
+    $payment_check->execute();
+    $result = $payment_check->get_result()->fetch_assoc();
+    
+    if ($result['payment_count'] > 0) {
+        return array(
+            'can_delete' => false, 
+            'reason' => 'Cannot delete loan with existing payments'
+        );
+    }
+    
+    return array('can_delete' => true);
+}
+
+// Enhanced method to get loan with client details for better logging
+public function get_loan_with_client($loan_id) {
+    $query = $this->conn->prepare("
+        SELECT l.*, 
+               ca.first_name, ca.last_name, ca.shareholder_no, ca.phone_number,
+               lp.loan_type
+        FROM loan l
+        INNER JOIN client_accounts ca ON l.account_id = ca.account_id
+        INNER JOIN loan_products lp ON l.loan_product_id = lp.id
+        WHERE l.loan_id = ?
+    ");
+    
+    $query->bind_param("i", $loan_id);
+    if ($query->execute()) {
+        $result = $query->get_result();
+        return $result->fetch_assoc();
+    }
+    return false;
+}
+
+// Method to log loan denial for audit trail
+public function log_loan_denial($loan_id, $user_id, $reason = 'Denied by admin') {
+    try {
+        $loan_details = $this->get_loan_with_client($loan_id);
+        if (!$loan_details) {
+            return false;
+        }
+        
+        $log_entry = array(
+            'action' => 'loan_denied_deleted',
+            'loan_id' => $loan_id,
+            'ref_no' => $loan_details['ref_no'],
+            'client_name' => $loan_details['first_name'] . ' ' . $loan_details['last_name'],
+            'shareholder_no' => $loan_details['shareholder_no'],
+            'amount' => $loan_details['amount'],
+            'user_id' => $user_id,
+            'reason' => $reason,
+            'timestamp' => date('Y-m-d H:i:s')
+        );
+        
+        // If you have an audit_log table, insert the log entry
+        $query = $this->conn->prepare("
+            INSERT INTO audit_log (action, details, user_id, created_at) 
+            VALUES (?, ?, ?, NOW())
+        ");
+        
+        if ($query) {
+            $details = json_encode($log_entry);
+            $query->bind_param("ssi", $log_entry['action'], $details, $user_id);
+            $query->execute();
+        }
+        
+        return true;
+    } catch (Exception $e) {
+        error_log("Error logging loan denial: " . $e->getMessage());
+        return false;
+    }
+}
+
+
     public function process_payment($loan_id, $amount, $payment_date) {
         // Start transaction
         $this->conn->begin_transaction();

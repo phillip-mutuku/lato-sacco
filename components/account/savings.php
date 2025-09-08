@@ -183,6 +183,35 @@ if (isset($accountDetails['account_type']) && !empty($accountDetails['account_ty
     box-shadow: 0 0 0 0.2rem rgba(81, 8, 126, 0.25);
 }
 
+.btn-danger-modern {
+    background-color: #e74a3b;
+    border-color: #e74a3b;
+    color: #fff;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 400;
+    line-height: 1.5;
+    border-radius: 0.35rem;
+    transition: all 0.15s ease-in-out;
+    border: 1px solid transparent;
+    display: inline-block;
+    text-align: center;
+    vertical-align: middle;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.btn-danger-modern:hover {
+    background-color: #c0392b;
+    border-color: #c0392b;
+    color: #fff;
+    text-decoration: none;
+}
+
+.btn-danger-modern:focus {
+    box-shadow: 0 0 0 0.2rem rgba(231, 74, 59, 0.25);
+}
+
 .btn-sm {
     padding: 0.25rem 0.5rem;
     font-size: 0.875rem;
@@ -290,6 +319,13 @@ if (isset($accountDetails['account_type']) && !empty($accountDetails['account_ty
     margin: 0;
 }
 
+/* Action buttons container */
+.action-buttons-container {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .savings-section .section-header {
@@ -315,6 +351,11 @@ if (isset($accountDetails['account_type']) && !empty($accountDetails['account_ty
     .btn-sm {
         padding: 0.125rem 0.25rem;
         font-size: 0.75rem;
+    }
+    
+    .action-buttons-container {
+        flex-direction: column;
+        gap: 3px;
     }
 }
 
@@ -382,11 +423,22 @@ if (isset($accountDetails['account_type']) && !empty($accountDetails['account_ty
                                     <td><?= htmlspecialchars($saving['payment_mode']) ?></td>
                                     <td><?= htmlspecialchars($saving['served_by_name'] ?? 'System') ?></td>
                                     <td>
-                                        <button class="btn btn-primary-modern btn-sm print-savings-receipt" 
-                                                data-id="<?= $saving['saving_id'] ?>" 
-                                                data-type="<?= htmlspecialchars($saving['type']) ?>">
-                                            <i class="fas fa-print"></i> Print Receipt
-                                        </button>
+                                        <div class="action-buttons-container">
+                                            <button class="btn btn-primary-modern btn-sm print-savings-receipt" 
+                                                    data-id="<?= $saving['saving_id'] ?>" 
+                                                    data-type="<?= htmlspecialchars($saving['type']) ?>">
+                                                <i class="fas fa-print"></i> Print Receipt
+                                            </button>
+                                            <?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
+                                                <button class="btn btn-danger-modern btn-sm delete-savings-record" 
+                                                        data-id="<?= $saving['saving_id'] ?>" 
+                                                        data-type="<?= htmlspecialchars($saving['type']) ?>"
+                                                        data-receipt="<?= htmlspecialchars($saving['receipt_number']) ?>"
+                                                        data-amount="<?= $saving['amount'] ?>">
+                                                    <i class="fas fa-trash"></i> Delete
+                                                </button>
+                                            <?php endif; ?>
+                                        </div>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -517,6 +569,37 @@ if (isset($accountDetails['account_type']) && !empty($accountDetails['account_ty
                     <button type="submit" class="btn btn-warning">Withdraw</button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteSavingsModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-danger">
+                <h5 class="modal-title text-white">
+                    <i class="fas fa-exclamation-triangle mr-2"></i>Confirm Deletion
+                </h5>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <strong>Warning:</strong> This action cannot be undone. Are you sure you want to delete this record?
+                </div>
+                <div id="deleteDetails">
+                    <!-- Delete details will be populated here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteSavings">
+                    <i class="fas fa-trash"></i> Delete Record
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -753,6 +836,136 @@ $(document).ready(function() {
                 submitButton.prop('disabled', false).html(originalText);
             }
         });
+    });
+
+    // =====================================
+    // DELETE SAVINGS/WITHDRAWAL FUNCTIONALITY
+    // =====================================
+    
+    let deleteRecordId = null;
+    let deleteRecordType = null;
+    
+    // Delete savings/withdrawal record button click
+    $(document).on('click', '.delete-savings-record', function() {
+        const recordId = $(this).data('id');
+        const recordType = $(this).data('type');
+        const receiptNumber = $(this).data('receipt');
+        const amount = $(this).data('amount');
+        
+        // Store the record details for deletion
+        deleteRecordId = recordId;
+        deleteRecordType = recordType;
+        
+        // Populate delete confirmation modal
+        const deleteDetails = `
+            <div class="row">
+                <div class="col-sm-4"><strong>Record Type:</strong></div>
+                <div class="col-sm-8">${recordType}</div>
+            </div>
+            <div class="row">
+                <div class="col-sm-4"><strong>Receipt Number:</strong></div>
+                <div class="col-sm-8">${receiptNumber}</div>
+            </div>
+            <div class="row">
+                <div class="col-sm-4"><strong>Amount:</strong></div>
+                <div class="col-sm-8">KSh ${formatCurrency(amount)}</div>
+            </div>
+            <br>
+            <p class="text-danger">
+                <i class="fas fa-info-circle"></i>
+                This will delete the ${recordType.toLowerCase()} record, related transaction entries, and update account balances accordingly.
+            </p>
+        `;
+        
+        $('#deleteDetails').html(deleteDetails);
+        $('#deleteSavingsModal').modal('show');
+    });
+
+    // Confirm delete savings/withdrawal record
+    $('#confirmDeleteSavings').click(function() {
+        if (!deleteRecordId || !deleteRecordType) {
+            if (typeof showToast === 'function') {
+                showToast('Error: No record selected for deletion', 'error');
+            }
+            return;
+        }
+
+        const submitButton = $(this);
+        const originalText = submitButton.html();
+        
+        submitButton.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Deleting...');
+
+        // Debug: Log what we're sending
+        console.log('Sending delete request:', {
+            recordId: deleteRecordId,
+            recordType: deleteRecordType,
+            accountId: ACCOUNT_ID
+        });
+
+        $.ajax({
+            url: '../controllers/accountController.php?action=deleteSavingsRecord',
+            type: 'POST',
+            data: {
+                recordId: deleteRecordId,
+                recordType: deleteRecordType,
+                accountId: ACCOUNT_ID
+            },
+            // Remove dataType to see raw response
+            success: function(response) {
+                console.log('Raw delete response:', response);
+                
+                try {
+                    const data = typeof response === 'string' ? JSON.parse(response) : response;
+                    
+                    if (data && data.status === 'success') {
+                        if (typeof showToast === 'function') {
+                            showToast(`${deleteRecordType} record deleted successfully!`, 'success');
+                        }
+                        $('#deleteSavingsModal').modal('hide');
+                        
+                        // Trigger custom event for dashboard updates
+                        $(document).trigger('savingsDeleted', [data]);
+                        
+                        setTimeout(() => location.reload(), 1500);
+                    } else {
+                        if (typeof showToast === 'function') {
+                            showToast('Error: ' + (data && data.message ? data.message : 'Failed to delete record'), 'error');
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error parsing response:', e);
+                    console.log('Response was:', response);
+                    if (typeof showToast === 'function') {
+                        showToast('Error: Invalid response from server', 'error');
+                    }
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Delete AJAX Error:', {
+                    status: xhr.status,
+                    statusText: xhr.statusText,
+                    responseText: xhr.responseText,
+                    error: error
+                });
+                
+                if (typeof showToast === 'function') {
+                    showToast('Error deleting record. Please try again.', 'error');
+                }
+            },
+            complete: function() {
+                submitButton.prop('disabled', false).html(originalText);
+                // Reset delete variables
+                deleteRecordId = null;
+                deleteRecordType = null;
+            }
+        });
+    });
+
+    // Reset delete modal when closed
+    $('#deleteSavingsModal').on('hidden.bs.modal', function() {
+        deleteRecordId = null;
+        deleteRecordType = null;
+        $('#deleteDetails').html('');
     });
 
     // Print savings receipt

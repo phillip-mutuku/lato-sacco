@@ -175,10 +175,9 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                                         <td><?php echo $loan['last_name'] . ", " . $loan['first_name']?></td>
                                         <td><?php echo $loan['shareholder_no']?></td>
                                         <td class="loan-amount"><?php echo number_format($loan['amount'], 2)?></td>
-                                        <td>
+                                       <td>
                                             <div class="payment-terms">
-                                                <div><span class="term-months"><?php echo $loan['loan_term']?> months</span></div>
-                                                <div><span class="monthly-amount">KSh <?php echo number_format($loan['monthly_payment'], 2)?>/month</span></div>
+                                                <span class="term-months"><?php echo $loan['loan_term']?> months</span>
                                             </div>
                                         </td>
                                         <td>
@@ -416,117 +415,181 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
             var currentAction = null;
             var currentButton = null;
 
-            // Function to show custom confirmation modal
-            function showConfirmationModal(action, loanId, button) {
-                var row = button.closest('tr');
-                var clientName = row.find('td:eq(1)').text().trim();
-                var loanAmount = row.find('td:eq(3)').text().trim();
-                var refNo = row.find('td:eq(0)').text().trim();
-                
-                currentLoanId = loanId;
-                currentAction = action;
-                currentButton = button;
-                
-                // Update modal content based on action
-                var modalHeader = $('#confirmModalHeader');
-                var modalTitle = $('#confirmModalTitle');
-                var confirmBtn = $('#confirmActionBtn');
-                var message = $('#confirmationMessage');
-                
-                if (action === 'approve') {
-                    modalHeader.removeClass('bg-danger').addClass('bg-success');
-                    modalTitle.html('<i class="fas fa-check-circle mr-2"></i>Approve Loan');
-                    confirmBtn.removeClass('btn-danger').addClass('btn-success');
-                    confirmBtn.html('<i class="fas fa-check mr-1"></i> Approve Loan');
-                    message.html('Are you sure you want to <strong class="text-success">approve</strong> this loan application?');
-                } else {
-                    modalHeader.removeClass('bg-success').addClass('bg-danger');
-                    modalTitle.html('<i class="fas fa-times-circle mr-2"></i>Deny Loan');
-                    confirmBtn.removeClass('btn-success').addClass('btn-danger');
-                    confirmBtn.html('<i class="fas fa-times mr-1"></i> Deny Loan');
-                    message.html('Are you sure you want to <strong class="text-danger">deny</strong> this loan application?<br><small class="text-muted">This action cannot be undone.</small>');
-                }
-                
-                // Update client details
-                $('#clientNameDisplay').text(clientName);
-                $('#loanAmountDisplay').text(loanAmount);
-                $('#refNoDisplay').text(refNo);
-                
-                // Show modal
-                $('#confirmationModal').modal('show');
-            }
-
-            // Handle confirmation modal confirm button
-            $('#confirmActionBtn').click(function() {
-                $('#confirmationModal').modal('hide');
-                
-                if (currentAction === 'approve') {
-                    processLoanAction(currentLoanId, 1, currentButton, 'approve');
-                } else {
-                    processLoanAction(currentLoanId, 4, currentButton, 'deny');
-                }
-            });
-
-            // Function to process loan action
-            function processLoanAction(loanId, status, button, actionType) {
-                var row = button.closest('tr');
-                var clientName = row.find('td:eq(1)').text();
-                var loanAmount = row.find('td:eq(3)').text();
-                var actionText = actionType === 'approve' ? 'Approving' : 'Denying';
-                var actionPast = actionType === 'approve' ? 'approved' : 'denied';
-                
-                button.prop('disabled', true).html(`<i class="fas fa-spinner fa-spin"></i> ${actionText}...`);
-                showLoading();
-                
-                $.ajax({
-                    url: '../controllers/update_loan_status.php',
-                    type: 'POST',
-                    data: { loan_id: loanId, status: status },
-                    dataType: 'json',
-                    timeout: 10000,
-                    success: function(response) {
-                        hideLoading();
-                        if (response.success) {
-                            var toastType = actionType === 'approve' ? 'success' : 'warning';
-                            var toastTitle = actionType === 'approve' ? 'Loan Approved' : 'Loan Denied';
+           // helper function to update counters after denial
+                        function updateCounters() {
+                            var remainingRows = $('#dataTable tbody tr:visible').length;
+                            $('#totalCountBadge').text(remainingRows);
                             
-                            showToast(
-                                `Loan for ${clientName} (${loanAmount}) has been ${actionPast} successfully.`,
-                                toastType,
-                                toastTitle
-                            );
-                            setTimeout(function() {
-                                location.reload();
-                            }, 2000);
-                        } else {
+                            // Recalculate total amount
+                            var total = 0;
+                            $('#dataTable tbody tr:visible').each(function() {
+                                var amountText = $(this).find('td:eq(3)').text();
+                                var numValue = parseFloat(amountText.replace(/[^\d.-]/g, ''));
+                                if (!isNaN(numValue)) {
+                                    total += numValue;
+                                }
+                            });
+                            
+                            $('#totalAmount').html('KSh ' + total.toLocaleString('en-US', { minimumFractionDigits: 2 }));
+                            $('.total-row td:last-child').html('<span class="badge badge-info">' + remainingRows + ' loan(s) pending</span>');
+                        }
+
+                        // Update the confirmation modal message for deny action
+                        function showConfirmationModal(action, loanId, button) {
+                            var row = button.closest('tr');
+                            var clientName = row.find('td:eq(1)').text().trim();
+                            var loanAmount = row.find('td:eq(3)').text().trim();
+                            var refNo = row.find('td:eq(0)').text().trim();
+                            
+                            currentLoanId = loanId;
+                            currentAction = action;
+                            currentButton = button;
+                            
+                            // Update modal content based on action
+                            var modalHeader = $('#confirmModalHeader');
+                            var modalTitle = $('#confirmModalTitle');
+                            var confirmBtn = $('#confirmActionBtn');
+                            var message = $('#confirmationMessage');
+                            
+                            if (action === 'approve') {
+                                modalHeader.removeClass('bg-danger').addClass('bg-success');
+                                modalTitle.html('<i class="fas fa-check-circle mr-2"></i>Approve Loan');
+                                confirmBtn.removeClass('btn-danger').addClass('btn-success');
+                                confirmBtn.html('<i class="fas fa-check mr-1"></i> Approve Loan');
+                                message.html('Are you sure you want to <strong class="text-success">approve</strong> this loan application?');
+                            } else {
+                                modalHeader.removeClass('bg-success').addClass('bg-danger');
+                                modalTitle.html('<i class="fas fa-times-circle mr-2"></i>Deny & Delete Loan');
+                                confirmBtn.removeClass('btn-success').addClass('btn-danger');
+                                confirmBtn.html('<i class="fas fa-times mr-1"></i> Deny & Delete');
+                                message.html(`
+                                    <strong class="text-danger">Warning:</strong> This will <strong>permanently delete</strong> this loan application from the system.<br>
+                                    <small class="text-muted">The loan will be completely removed and will not appear in the client's account history.</small><br>
+                                    <small class="text-danger">This action cannot be undone.</small>
+                                `);
+                            }
+                            
+                            // Update client details
+                            $('#clientNameDisplay').text(clientName);
+                            $('#loanAmountDisplay').text(loanAmount);
+                            $('#refNoDisplay').text(refNo);
+                            
+                            // Show modal
+                            $('#confirmationModal').modal('show');
+                        }
+
+
+            function processLoanAction(loanId, status, button, actionType) {
+                    var row = button.closest('tr');
+                    var clientName = row.find('td:eq(1)').text();
+                    var loanAmount = row.find('td:eq(3)').text();
+                    var actionText = actionType === 'approve' ? 'Approving' : 'Denying';
+                    var actionPast = actionType === 'approve' ? 'approved' : 'denied';
+                    
+                    button.prop('disabled', true).html(`<i class="fas fa-spinner fa-spin"></i> ${actionText}...`);
+                    showLoading();
+                    
+                    // Determine which endpoint to use based on action type
+                    var endpoint = actionType === 'approve' ? 
+                        '../controllers/update_loan_status.php' : 
+                        '../controllers/delete_denied_loan.php';
+                    
+                    var requestData = actionType === 'approve' ? 
+                        { loan_id: loanId, status: status } : 
+                        { loan_id: loanId };
+                    
+                    $.ajax({
+                        url: endpoint,
+                        type: 'POST',
+                        data: requestData,
+                        dataType: 'json',
+                        timeout: 15000,
+                        success: function(response) {
+                            hideLoading();
+                            
+                            // Debug: Log the response to console
+                            console.log('AJAX Success Response:', response);
+                            
+                            if (response && response.success) {
+                                var toastType = actionType === 'approve' ? 'success' : 'warning';
+                                var toastTitle = actionType === 'approve' ? 'Loan Approved' : 'Loan Denied & Removed';
+                                
+                                var message = actionType === 'approve' ? 
+                                    `Loan for ${clientName} (${loanAmount}) has been ${actionPast} successfully.` :
+                                    `Loan application for ${clientName} (${loanAmount}) has been denied and completely removed from the system.`;
+                                
+                                showToast(message, toastType, toastTitle);
+                                
+                                // Remove the row from the table immediately for better UX
+                                row.fadeOut(500, function() {
+                                    $(this).remove();
+                                    // Update counters
+                                    updateCounters();
+                                });
+                                
+                                // Reload page after a delay for full refresh
+                                setTimeout(function() {
+                                    location.reload();
+                                }, 2000);
+                            } else {
+                                var originalText = actionType === 'approve' ? 
+                                    '<i class="fas fa-check"></i> Approve' : 
+                                    '<i class="fas fa-times"></i> Deny';
+                                button.prop('disabled', false).html(originalText);
+                                
+                                var errorMsg = response && response.message ? response.message : 'Unknown error occurred';
+                                showToast(
+                                    `Failed to ${actionType} loan: ${errorMsg}`,
+                                    'error',
+                                    `${actionType.charAt(0).toUpperCase() + actionType.slice(1)} Failed`
+                                );
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            hideLoading();
+                            
+                            // Debug: Log the error details
+                            console.log('AJAX Error Details:', {
+                                status: status,
+                                error: error,
+                                responseText: xhr.responseText,
+                                statusCode: xhr.status
+                            });
+                            
                             var originalText = actionType === 'approve' ? 
                                 '<i class="fas fa-check"></i> Approve' : 
                                 '<i class="fas fa-times"></i> Deny';
                             button.prop('disabled', false).html(originalText);
-                            showToast(
-                                `Failed to ${actionType} loan: ${response.message || 'Unknown error occurred'}`,
-                                'error',
-                                `${actionType.charAt(0).toUpperCase() + actionType.slice(1)} Failed`
-                            );
+                            
+                            var errorMessage = 'Network error occurred. Please check your connection and try again.';
+                            
+                            // Try to parse the response as JSON in case it contains an error message
+                            try {
+                                if (xhr.responseText) {
+                                    var errorResponse = JSON.parse(xhr.responseText);
+                                    if (errorResponse && errorResponse.message) {
+                                        errorMessage = errorResponse.message;
+                                    }
+                                }
+                            } catch (parseError) {
+                                // If parsing fails, check for specific error types
+                                if (status === 'timeout') {
+                                    errorMessage = 'Request timed out. Please try again.';
+                                } else if (xhr.status === 500) {
+                                    errorMessage = 'Server error occurred. Please contact administrator.';
+                                } else if (xhr.status === 403) {
+                                    errorMessage = 'Access denied. You do not have permission to perform this action.';
+                                } else if (xhr.responseText && xhr.responseText.includes('PHP')) {
+                                    errorMessage = 'Server configuration error. Please contact administrator.';
+                                }
+                            }
+                            
+                            showToast(errorMessage, 'error', 'Connection Error');
                         }
-                    },
-                    error: function(xhr, status, error) {
-                        hideLoading();
-                        var originalText = actionType === 'approve' ? 
-                            '<i class="fas fa-check"></i> Approve' : 
-                            '<i class="fas fa-times"></i> Deny';
-                        button.prop('disabled', false).html(originalText);
-                        
-                        var errorMessage = 'Network error occurred. Please check your connection and try again.';
-                        if (status === 'timeout') {
-                            errorMessage = 'Request timed out. Please try again.';
-                        }
-                        
-                        showToast(errorMessage, 'error', 'Connection Error');
-                    }
-                });
-            }
+                    });
+                }
 
+                
             // Approve loan with custom modal
             $(document).on('click', '.approve-loan', function() {
                 var loanId = $(this).data('loan-id');
@@ -537,6 +600,17 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
             $(document).on('click', '.deny-loan', function() {
                 var loanId = $(this).data('loan-id');
                 showConfirmationModal('deny', loanId, $(this));
+            });
+
+            // Handle confirmation modal confirm button
+            $('#confirmActionBtn').click(function() {
+                $('#confirmationModal').modal('hide');
+                
+                if (currentAction === 'approve') {
+                    processLoanAction(currentLoanId, 1, currentButton, 'approve');
+                } else {
+                    processLoanAction(currentLoanId, 4, currentButton, 'deny');
+                }
             });
 
             // Toggle the side navigation

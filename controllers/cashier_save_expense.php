@@ -17,9 +17,9 @@ try {
 }
 
 // Check if user is logged in
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'cashier') {
-    $_SESSION['error_msg'] = "Unauthorized access";
-    header('Location: index.php');
+if (!isset($_SESSION['user_id'])) {
+    $_SESSION['error_msg'] = "Unauthorized access. Please login first.";
+    header('Location: ../views/index.php');
     exit();
 }
 
@@ -31,52 +31,18 @@ function sanitize_input($data) {
     return $data;
 }
 
-// Function to get system account ID
-function get_system_account_id($db) {
-    $query = "SELECT account_id FROM client_accounts WHERE shareholder_no = 'SYS-001' LIMIT 1";
-    $result = $db->conn->query($query);
-    
-    if (!$result || $result->num_rows === 0) {
-        // If system account doesn't exist, create it
-        $create_query = "INSERT INTO client_accounts (
-            shareholder_no, 
-            national_id, 
-            first_name, 
-            last_name, 
-            phone_number, 
-            email, 
-            division, 
-            location, 
-            village, 
-            account_type
-        ) VALUES (
-            'SYS-001',
-            'SYSTEM',
-            'System',
-            'Account',
-            '-',
-            'system@latosacco.com',
-            '-',
-            '-',
-            '-',
-            'system'
-        )";
-        
-        if (!$db->conn->query($create_query)) {
-            throw new Exception("Failed to create system account");
-        }
-        return $db->conn->insert_id;
-    }
-    
-    $account = $result->fetch_assoc();
-    return $account['account_id'];
-}
-
 // Function to generate unique reference number
 function generate_reference($type, $prefix) {
     $date = date('Ymd');
     $random = sprintf('%04d', rand(1, 9999));
     return $prefix . '-' . $date . '-' . $random;
+}
+
+// Check if the form was actually submitted
+if (!isset($_POST['save_expense'])) {
+    $_SESSION['error_msg'] = "Form submission error: save_expense parameter missing";
+    header('Location: ../views/cashier_manage_expenses.php');
+    exit();
 }
 
 // Handle form submission
@@ -87,6 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_expense'])) {
 
         // Get and sanitize form data
         $category = isset($_POST['category']) ? sanitize_input($_POST['category']) : null;
+        $main_category = isset($_POST['main_category']) ? sanitize_input($_POST['main_category']) : null;
         $amount = isset($_POST['amount']) ? str_replace(',', '', $_POST['amount']) : null;
         $payment_method = isset($_POST['payment_method']) ? sanitize_input($_POST['payment_method']) : null;
         $date = isset($_POST['date']) ? sanitize_input($_POST['date']) : null;
@@ -94,9 +61,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_expense'])) {
         $remarks = isset($_POST['remarks']) ? sanitize_input($_POST['remarks']) : '';
         $status = isset($_POST['status']) ? sanitize_input($_POST['status']) : 'completed';
         $receipt_no = isset($_POST['receipt_no']) ? sanitize_input($_POST['receipt_no']) : null;
-
-        // Debug logging
-        error_log("Processing transaction - Status: $status, Amount: $amount, Category: $category");
 
         // Generate reference number
         $prefix = ($status === 'received') ? 'RCV' : 'EXP';
@@ -123,10 +87,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_expense'])) {
             throw new Exception("Please enter a valid amount greater than zero");
         }
 
-        // Set amount sign based on transaction type
-        if ($status !== 'received') {
-            $amount = -abs($amount);
-        }
+        // Set amount sign based on transaction type (for reporting purposes)
+        $signed_amount = ($status === 'received') ? abs($amount) : -abs($amount);
 
         // Validate date
         $formatted_date = date('Y-m-d H:i:s', strtotime($date));
@@ -137,19 +99,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_expense'])) {
         // Check for duplicate receipt number
         $check_receipt = "SELECT COUNT(*) as count FROM expenses WHERE receipt_no = ?";
         $stmt = $db->conn->prepare($check_receipt);
+        if (!$stmt) {
+            throw new Exception("Query preparation failed: " . $db->conn->error);
+        }
+        
         $stmt->bind_param('s', $receipt_no);
         $stmt->execute();
         $result = $stmt->get_result();
         $count = $result->fetch_assoc()['count'];
+        $stmt->close();
 
         if ($count > 0) {
             throw new Exception("Receipt number already exists. Please use a unique receipt number.");
         }
 
-        // Get system account ID
-        $system_account_id = get_system_account_id($db);
-
-        // Insert into expenses table
+        // Insert into expenses table - this is all you need!
         $expense_query = "INSERT INTO expenses (
             category,
             amount,
@@ -174,7 +138,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_expense'])) {
         $stmt->bind_param(
             'sdssssssis',
             $category,
-            $amount,
+            $signed_amount,
             $payment_method,
             $formatted_date,
             $description,
@@ -192,19 +156,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_expense'])) {
         $transaction_id = $stmt->insert_id;
         $stmt->close();
 
-        // Add system transaction record
-        $transaction_type = ($status === 'received') ? 'income' : 'expense';
-        if (!$db->add_transaction($system_account_id, $transaction_type, abs($amount), $description)) {
-            throw new Exception("Failed to record system transaction");
-        }
-
-        // Try to add notification, but don't fail if it doesn't work
+        // Optional: Add notification (if the method exists)
         try {
             $notification_message = ($status === 'received') ?
                 "New money received of KSh " . number_format(abs($amount), 2) . " has been recorded." :
                 "New expense of KSh " . number_format(abs($amount), 2) . " has been recorded.";
 
-            $db->addNotification($notification_message, $transaction_type, $transaction_id);
+            if (method_exists($db, 'addNotification')) {
+                $transaction_type = ($status === 'received') ? 'income' : 'expense';
+                $db->addNotification($notification_message, $transaction_type, $transaction_id);
+            }
         } catch (Exception $notificationError) {
             error_log("Warning: Notification creation failed but transaction completed successfully: " . 
                      $notificationError->getMessage());
@@ -215,6 +176,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_expense'])) {
             throw new Exception("Failed to commit transaction");
         }
 
+        $db->conn->autocommit(TRUE);
+
         // Set success message
         $_SESSION['success_msg'] = ($status === 'received' ? "Money received" : "Expense") . 
                                  " added successfully! Reference No: " . $reference_no;
@@ -223,6 +186,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_expense'])) {
         exit();
 
     } catch (Exception $e) {
+        // Rollback transaction
         $db->conn->rollback();
         $db->conn->autocommit(TRUE);
         
@@ -236,3 +200,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_expense'])) {
     header('Location: ../views/cashier_manage_expenses.php');
     exit();
 }
+?>

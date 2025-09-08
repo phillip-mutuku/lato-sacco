@@ -8,7 +8,7 @@ require_once '../config/class.php';
 $db = new db_class();
 
 // Check if user is logged in and is either an admin or manager
-if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'cashier')) {
+if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'officer')) {
     $_SESSION['error_msg'] = "Unauthorized access";
     header('Location: index.php');
     exit();
@@ -275,7 +275,7 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
     <!-- Page Wrapper -->
     <div id="wrapper">
    <!-- Import Sidebar -->
-    <?php require_once '../components/includes/cashier_sidebar.php'; ?>
+    <?php require_once '../components/includes/officer_sidebar.php'; ?>
 
                 <!-- Begin Page Content -->
                 <div class="container-fluid pt-4">
@@ -283,7 +283,6 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
                     <!-- Page Heading -->
                     <div class="d-sm-flex align-items-center justify-content-between mb-4">
                         <h1 class="h3 mb-0 text-gray-800">Manage Clients' Accounts</h1>
-                        <button class="btn btn-warning" data-toggle="modal" data-target="#addAccountModal">Add New Account</button>
                     </div>
 
                     <!-- Search and Filters Section -->
@@ -292,7 +291,6 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
                             <form class="form-inline" method="GET">
                                 <input type="text" class="form-control mr-2" name="search_query" placeholder="Search by Shareholder No or National ID" value="<?php echo isset($_GET['search_query']) ? $_GET['search_query'] : ''; ?>">
                                 <button style="background-color: #51087E; color: white;" type="submit" class="btn">Search</button>
-                                <a href="cashier-account.php" class="btn btn-warning ml-2">Refresh</a>
                             </form>
                         </div>
                     </div>
@@ -313,7 +311,6 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
                                             <th>Division</th>
                                             <th>Village</th>
                                             <th>Account Type</th>
-                                            <th>Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -341,17 +338,6 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
                                         <td><?php echo $fetch['division']; ?></td>
                                         <td><?php echo $fetch['village']; ?></td>
                                         <td><?php echo $formatted_account_types; ?></td>
-                                        <td>
-                                            <div class="dropdown">
-                                                <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton<?php echo $fetch['account_id']; ?>" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                                                    Action
-                                                </button>
-                                                <div class="dropdown-menu" aria-labelledby="dropdownMenuButton<?php echo $fetch['account_id']; ?>">
-                                                    <a class="dropdown-item" href="#" onclick="viewAccount(<?php echo $fetch['account_id']; ?>)">View</a>
-                                                    <a class="dropdown-item bg-warning text-white" href="#" onclick="editAccount(<?php echo $fetch['account_id']; ?>)">Edit</a>
-                                                </div>
-                                            </div>
-                                        </td>
                                     </tr>
                                     <?php } ?>
                                 </tbody>
@@ -833,7 +819,7 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
     }
 
     function viewAccount(accountId) {
-        window.open('cashier_view_account.php?id=' + accountId, '_blank');
+        window.open('view_account.php?id=' + accountId, '_blank');
     }
 
     // Function to load data and open modal
@@ -878,7 +864,6 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
         });
     }
 
-    // Function to save the updated data
     // Function to save the updated data
 function updateAccount() {
     // Validate all fields are filled

@@ -511,7 +511,7 @@ $(document).ready(function() {
     });
 
     // Print Statement Handler
-    $('#printStatement').click(function() {
+        $('#printStatement').click(function() {
         const fromDate = $('input[name="from_date"]').val();
         const toDate = $('input[name="to_date"]').val();
 
@@ -519,6 +519,17 @@ $(document).ready(function() {
             showMessage('Please select both start and end dates', 'error');
             return;
         }
+
+        // Validate date range
+        if (new Date(fromDate) > new Date(toDate)) {
+            showMessage('Start date cannot be after end date', 'error');
+            return;
+        }
+
+        // Show loading state
+        const btn = $(this);
+        const originalText = btn.html();
+        btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Generating...');
 
         $.ajax({
             url: '../controllers/businessGroupController.php',
@@ -530,19 +541,28 @@ $(document).ready(function() {
                 to_date: toDate
             },
             dataType: 'json',
+            timeout: 15000,
             success: function(response) {
+                console.log('Statement response:', response);
                 if (response.status === 'success') {
                     const statementWindow = window.open('', '_blank');
                     const statementContent = generateStatementHTML(response.data, fromDate, toDate);
                     statementWindow.document.write(statementContent);
                     statementWindow.document.close();
-                    setTimeout(() => statementWindow.print(), 500);
+                    setTimeout(() => {
+                        statementWindow.print();
+                        showMessage('Statement generated successfully', 'success');
+                    }, 500);
                 } else {
-                    showMessage('Error: ' + response.message, 'error');
+                    showMessage('Error: ' + (response.message || 'Failed to generate statement'), 'error');
                 }
             },
-            error: function() {
-                showMessage('Error generating statement', 'error');
+            error: function(xhr, status, error) {
+                console.error('Statement generation error:', error);
+                showMessage('Error generating statement: ' + error, 'error');
+            },
+            complete: function() {
+                btn.prop('disabled', false).html(originalText);
             }
         });
     });
@@ -651,145 +671,396 @@ $(document).ready(function() {
     }
 
     // Generate Statement HTML function
-    function generateStatementHTML(data, fromDate, toDate) {
-        if (!data || !data.transactions) {
-            console.error('Invalid data structure:', data);
-            return '<p>Error: Invalid data received</p>';
+        // Corrected generateStatementHTML function based on actual data structure
+function generateStatementHTML(data, fromDate, toDate) {
+    // Step 1: Validate input data
+    if (!data || !data.transactions) {
+        console.error('Invalid data structure:', data);
+        return '<p>Error: Invalid data received</p>';
+    }
+
+    // Step 2: Initialize variables for HTML content and calculations
+    let transactionsHTML = '';
+    let totalDeposits = 0;
+    let totalWithdrawals = 0;
+    let totalFees = 0;
+
+    // Step 3: Process each transaction with correct logic
+    data.transactions.forEach(function(transaction) {
+        // Parse amounts safely with fallback to 0
+        const amount = parseFloat(transaction.amount) || 0;
+        
+        // Normalize transaction type for comparison
+        const transactionType = transaction.type.toLowerCase().trim();
+        
+        // Step 4: Categorize transactions correctly based on your actual data structure
+        if (transactionType === 'savings') {
+            totalDeposits += amount;
+        } else if (transactionType === 'withdrawal') {
+            totalWithdrawals += amount;
+        } else if (transactionType === 'withdrawal fee') {
+            totalFees += amount;
         }
 
-        let transactionsHTML = '';
-        let totalDeposits = 0;
-        let totalWithdrawals = 0;
-        let totalFees = 0;
+        // Step 5: Determine transaction category for styling
+        let transactionCategory = '';
+        let badgeClass = '';
+        
+        if (transactionType === 'savings') {
+            transactionCategory = 'deposit';
+            badgeClass = 'success';
+        } else if (transactionType === 'withdrawal') {
+            transactionCategory = 'withdrawal';
+            badgeClass = 'warning';
+        } else if (transactionType === 'withdrawal fee') {
+            transactionCategory = 'fee';
+            badgeClass = 'info';
+        }
 
-        data.transactions.forEach(transaction => {
-            const amount = parseFloat(transaction.amount);
-            if (transaction.type.includes('Savings')) {
-                totalDeposits += amount;
-            } else if (transaction.type.includes('Withdrawal')) {
-                totalWithdrawals += amount;
-                totalFees += parseFloat(transaction.withdrawal_fee || 0);
-            }
-
-            transactionsHTML += `
-                <tr>
-                    <td>${new Date(transaction.date).toLocaleDateString()}</td>
-                    <td>${transaction.receipt_no}</td>
-                    <td>${transaction.type}</td>
-                    <td>KSh ${amount.toLocaleString(undefined, {
+        // Step 6: Build transaction row HTML
+        transactionsHTML += `
+            <tr>
+                <td>${new Date(transaction.date).toLocaleDateString('en-GB')}</td>
+                <td>${transaction.receipt_no}</td>
+                <td>
+                    <span class="badge badge-${badgeClass}">
+                        ${transaction.type}
+                    </span>
+                </td>
+                <td class="amount-cell">
+                    KSh ${amount.toLocaleString(undefined, {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2
-                    })}</td>
-                    <td>${transaction.payment_mode}</td>
-                    <td>${transaction.description}</td>
-                </tr>
-            `;
-        });
+                    })}
+                </td>
+                <td>${transaction.payment_mode || '-'}</td>
+                <td>${transaction.description || '-'}</td>
+            </tr>
+        `;
+    });
 
-        return `
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Business Group Statement</title>
-                <style>
+    // Step 7: Calculate final totals
+    const netMovement = totalDeposits - totalWithdrawals - totalFees;
+    const transactionCount = data.transactions.length;
+
+    // Step 8: Generate complete HTML document
+    return `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Business Group Statement - ${data.group_details.group_name}</title>
+            <style>
+                /* Reset and base styles */
+                * {
+                    margin: 0;
+                    padding: 0;
+                    box-sizing: border-box;
+                }
+                
+                body { 
+                    font-family: Arial, sans-serif;
+                    line-height: 1.6;
+                    padding: 20px;
+                    background-color: #fff;
+                    color: #333;
+                }
+                
+                /* Main container */
+                .statement {
+                    max-width: 1000px;
+                    margin: 0 auto;
+                    background: white;
+                    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+                    padding: 30px;
+                }
+                
+                /* Header section */
+                .header {
+                    text-align: center;
+                    margin-bottom: 30px;
+                    border-bottom: 3px solid #51087E;
+                    padding-bottom: 20px;
+                }
+                
+                .header h2 {
+                    color: #51087E;
+                    font-size: 2.2em;
+                    margin-bottom: 10px;
+                }
+                
+                .header h3 {
+                    color: #666;
+                    font-size: 1.4em;
+                    font-weight: normal;
+                }
+                
+                /* Group information section */
+                .group-info {
+                    margin-bottom: 30px;
+                    padding: 20px;
+                    background-color: #f8f9fa;
+                    border-left: 5px solid #51087E;
+                    border-radius: 5px;
+                }
+                
+                .group-info p {
+                    margin-bottom: 8px;
+                    font-size: 1.1em;
+                }
+                
+                .group-info strong {
+                    color: #51087E;
+                }
+                
+                /* Table styles */
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin: 20px 0;
+                    font-size: 0.95em;
+                }
+                
+                th, td {
+                    border: 1px solid #ddd;
+                    padding: 12px 8px;
+                    text-align: left;
+                }
+                
+                th {
+                    background-color: #51087E;
+                    color: white;
+                    font-weight: bold;
+                    text-align: center;
+                    text-transform: uppercase;
+                    font-size: 0.9em;
+                    letter-spacing: 0.5px;
+                }
+                
+                tr:nth-child(even) {
+                    background-color: #f8f9fa;
+                }
+                
+                tr:hover {
+                    background-color: #e9ecef;
+                }
+                
+                /* Badge styling */
+                .badge {
+                    padding: 4px 8px;
+                    border-radius: 12px;
+                    font-size: 0.85em;
+                    font-weight: bold;
+                    text-transform: uppercase;
+                    color: white;
+                }
+                
+                .badge-success {
+                    background-color: #28a745;
+                }
+                
+                .badge-warning {
+                    background-color: #ffc107;
+                    color: #212529;
+                }
+                
+                .badge-info {
+                    background-color: #17a2b8;
+                }
+                
+                /* Amount cell styling */
+                .amount-cell {
+                    text-align: right;
+                    font-weight: bold;
+                }
+                
+                /* Summary section */
+                .summary {
+                    margin-top: 30px;
+                    border-top: 3px solid #51087E;
+                    padding-top: 20px;
+                    background-color: #f8f9fa;
+                    padding: 20px;
+                    border-radius: 5px;
+                }
+                
+                .summary h4 {
+                    color: #51087E;
+                    margin-bottom: 15px;
+                    font-size: 1.3em;
+                }
+                
+                .summary-row {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin: 10px 0;
+                    padding: 8px 0;
+                    border-bottom: 1px solid #dee2e6;
+                }
+                
+                .summary-row:last-child {
+                    border-bottom: none;
+                }
+                
+                .summary-row.total {
+                    font-weight: bold;
+                    font-size: 1.1em;
+                    border-top: 2px solid #51087E;
+                    margin-top: 15px;
+                    padding-top: 15px;
+                    background-color: white;
+                    padding: 15px;
+                    border-radius: 5px;
+                }
+                
+                /* Color coding for amounts */
+                .positive { 
+                    color: #28a745; 
+                    font-weight: bold;
+                }
+                
+                .negative { 
+                    color: #dc3545; 
+                    font-weight: bold;
+                }
+                
+                .neutral {
+                    color: #6c757d;
+                    font-weight: bold;
+                }
+                
+                /* Footer */
+                .footer {
+                    text-align: center;
+                    margin-top: 40px;
+                    border-top: 1px solid #ddd;
+                    padding-top: 20px;
+                    color: #666;
+                }
+                
+                .footer p {
+                    margin-bottom: 5px;
+                }
+                
+                /* Print styles */
+                @media print {
                     body { 
-                        font-family: Arial, sans-serif;
-                        line-height: 1.6;
-                        padding: 20px;
+                        print-color-adjust: exact;
+                        -webkit-print-color-adjust: exact;
                     }
+                    
                     .statement {
-                        max-width: 1000px;
-                        margin: 0 auto;
+                        box-shadow: none;
+                        padding: 0;
                     }
-                    .header {
-                        text-align: center;
-                        margin-bottom: 30px;
-                        border-bottom: 2px solid #333;
-                        padding-bottom: 10px;
+                    
+                    th { 
+                        background-color: #51087E !important; 
+                        color: white !important; 
                     }
-                    .group-info {
-                        margin-bottom: 20px;
+                    
+                    .badge-success {
+                        background-color: #28a745 !important;
+                        color: white !important;
                     }
-                    table {
-                        width: 100%;
-                        border-collapse: collapse;
-                        margin: 20px 0;
+                    
+                    .badge-warning {
+                        background-color: #ffc107 !important;
+                        color: #212529 !important;
                     }
-                    th, td {
-                        border: 1px solid #ddd;
-                        padding: 8px;
-                        text-align: left;
+                    
+                    .badge-info {
+                        background-color: #17a2b8 !important;
+                        color: white !important;
                     }
-                    th {
-                        background-color: #51087E;
-                        color: white;
-                    }
-                    tr:nth-child(even) {
-                        background-color: #f8f9fa;
-                    }
-                    .summary {
-                        margin-top: 20px;
-                        border-top: 2px solid #333;
-                        padding-top: 10px;
-                    }
-                    @media print {
-                        body { print-color-adjust: exact; }
-                        th { background-color: #51087E !important; color: white !important; }
-                    }
-                </style>
-            </head>
-            <body>
-                <div class="statement">
-                    <div class="header">
-                        <h2>Lato Sacco LTD</h2>
-                        <h3>Business Group Transaction Statement</h3>
+                }
+            </style>
+        </head>
+        <body>
+            <div class="statement">
+                <!-- Header Section -->
+                <div class="header">
+                    <h2>Lato Sacco LTD</h2>
+                    <h3>Business Group Transaction Statement</h3>
+                </div>
+                
+                <!-- Group Information -->
+                <div class="group-info">
+                    <p><strong>Group Name:</strong> ${data.group_details.group_name}</p>
+                    <p><strong>Statement Period:</strong> ${new Date(fromDate).toLocaleDateString('en-GB')} to ${new Date(toDate).toLocaleDateString('en-GB')}</p>
+                    <p><strong>Total Transactions:</strong> ${transactionCount}</p>
+                    <p><strong>Generated On:</strong> ${new Date().toLocaleDateString('en-GB')} at ${new Date().toLocaleTimeString('en-GB')}</p>
+                </div>
+                
+                <!-- Transactions Table -->
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 12%;">Date</th>
+                            <th style="width: 15%;">Receipt No</th>
+                            <th style="width: 15%;">Transaction Type</th>
+                            <th style="width: 18%;">Amount</th>
+                            <th style="width: 15%;">Payment Mode</th>
+                            <th style="width: 25%;">Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${transactionsHTML}
+                    </tbody>
+                </table>
+                
+                <!-- Summary Section -->
+                <div class="summary">
+                    <h4>Statement Summary</h4>
+                    
+                    <div class="summary-row">
+                        <span><strong>Total Deposits (Savings):</strong></span>
+                        <span class="positive">KSh ${totalDeposits.toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                        })}</span>
                     </div>
-                    <div class="group-info">
-                        <p><strong>Group Name:</strong> ${data.group_details.group_name}</p>
-                        <p><strong>Period:</strong> ${new Date(fromDate).toLocaleDateString()} to ${new Date(toDate).toLocaleDateString()}</p>
+                    
+                    <div class="summary-row">
+                        <span><strong>Total Withdrawals:</strong></span>
+                        <span class="negative">KSh ${totalWithdrawals.toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                        })}</span>
                     </div>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>Receipt No</th>
-                                <th>Type</th>
-                                <th>Amount</th>
-                                <th>Payment Mode</th>
-                                <th>Description</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${transactionsHTML}
-                        </tbody>
-                    </table>
-                    <div class="summary">
-                        <h4>Summary</h4>
-                        <p><strong>Total Deposits:</strong> KSh ${totalDeposits.toLocaleString(undefined, {
+                    
+                    <div class="summary-row">
+                        <span><strong>Total Withdrawal Fees:</strong></span>
+                        <span class="negative">KSh ${totalFees.toLocaleString(undefined, {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2
-                        })}</p>
-                        <p><strong>Total Withdrawals:</strong> KSh ${totalWithdrawals.toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2
-                        })}</p>
-                        <p><strong>Total Fees:</strong> KSh ${totalFees.toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2
-                        })}</p>
-                        <p><strong>Net Movement:</strong> KSh ${(totalDeposits - totalWithdrawals - totalFees).toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2
-                        })}</p>
+                        })}</span>
                     </div>
-                    <div class="footer" style="text-align: center; margin-top: 30px;">
-                        <p>Generated on: ${new Date().toLocaleString()}</p>
+                    
+                    <div class="summary-row total">
+                        <span><strong>Net Movement:</strong></span>
+                        <span class="${netMovement > 0 ? 'positive' : netMovement < 0 ? 'negative' : 'neutral'}">
+                            KSh ${netMovement.toLocaleString(undefined, {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2
+                            })}
+                        </span>
                     </div>
                 </div>
-            </body>
-            </html>
-        `;
-    }
+                
+                <!-- Footer -->
+                <div class="footer">
+                    <p><strong>Lato Sacco LTD</strong></p>
+                    <p><em>This is a computer-generated statement and does not require a signature</em></p>
+                    <p><small>For any queries, please contact our customer service</small></p>
+                </div>
+            </div>
+        </body>
+        </html>
+    `;
+}
 
     // Form validation
     $('input[name="amount"], input[name="withdrawal_fee"]').on('input', function() {

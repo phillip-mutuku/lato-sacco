@@ -5,7 +5,7 @@
     $db = new db_class();
 
 // Check if user is logged in and is either an admin or manager
-if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'cashier')) {
+if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'manager')) {
     $_SESSION['error_msg'] = "Unauthorized access";
     header('Location: index.php');
     exit();
@@ -62,7 +62,57 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
         exit();
     }
 
-    // Get float totals for today
+    // Handle float transaction filtering
+    $float_start_date = isset($_GET['float_start_date']) ? $_GET['float_start_date'] . " 00:00:00" : date('Y-m-d 00:00:00');
+    $float_end_date = isset($_GET['float_end_date']) ? $_GET['float_end_date'] . " 23:59:59" : date('Y-m-d 23:59:59');
+    $float_type = isset($_GET['float_type']) ? $_GET['float_type'] : 'all';
+
+    // Get float totals for the filtered period
+    $float_query = "SELECT 
+                COALESCE(SUM(CASE WHEN type = 'add' THEN amount ELSE 0 END), 0) as total_added,
+                COALESCE(SUM(CASE WHEN type = 'offload' THEN amount ELSE 0 END), 0) as total_offloaded
+              FROM float_management 
+              WHERE date_created BETWEEN ? AND ?";
+    
+    if ($float_type !== 'all') {
+        $float_query .= " AND type = ?";
+    }
+    
+    $stmt = $db->conn->prepare($float_query);
+    if ($float_type !== 'all') {
+        $stmt->bind_param("sss", $float_start_date, $float_end_date, $float_type);
+    } else {
+        $stmt->bind_param("ss", $float_start_date, $float_end_date);
+    }
+    $stmt->execute();
+    $float_result = $stmt->get_result()->fetch_assoc();
+    
+    $filtered_opening_float = $float_result['total_added'];
+    $filtered_total_offloaded = $float_result['total_offloaded'];
+    $filtered_closing_float = $filtered_opening_float - $filtered_total_offloaded;
+
+    // Get float transactions with filtering
+    $float_transactions_query = "SELECT f.*, u.username as served_by 
+              FROM float_management f 
+              LEFT JOIN user u ON f.user_id = u.user_id 
+              WHERE f.date_created BETWEEN ? AND ?";
+    
+    if ($float_type !== 'all') {
+        $float_transactions_query .= " AND f.type = ?";
+    }
+    
+    $float_transactions_query .= " ORDER BY f.date_created DESC";
+    
+    $stmt = $db->conn->prepare($float_transactions_query);
+    if ($float_type !== 'all') {
+        $stmt->bind_param("sss", $float_start_date, $float_end_date, $float_type);
+    } else {
+        $stmt->bind_param("ss", $float_start_date, $float_end_date);
+    }
+    $stmt->execute();
+    $float_transactions = $stmt->get_result();
+
+    // For today's overview (separate from filtered data)
     $today_start = date('Y-m-d 00:00:00');
     $today_end = date('Y-m-d 23:59:59');
     
@@ -74,24 +124,13 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
     $stmt = $db->conn->prepare($query);
     $stmt->bind_param("ss", $today_start, $today_end);
     $stmt->execute();
-    $float_result = $stmt->get_result()->fetch_assoc();
+    $today_float_result = $stmt->get_result()->fetch_assoc();
     
-    $opening_float = $float_result['total_added'];
-    $total_offloaded = $float_result['total_offloaded'];
+    $opening_float = $today_float_result['total_added'];
+    $total_offloaded = $today_float_result['total_offloaded'];
     $closing_float = $opening_float - $total_offloaded;
 
-    // Get float transactions
-    $query = "SELECT f.*, u.username as served_by 
-              FROM float_management f 
-              LEFT JOIN user u ON f.user_id = u.user_id 
-              WHERE f.date_created BETWEEN ? AND ?
-              ORDER BY f.date_created DESC";
-    $stmt = $db->conn->prepare($query);
-    $stmt->bind_param("ss", $today_start, $today_end);
-    $stmt->execute();
-    $float_transactions = $stmt->get_result();
-
-    // Handle transaction filtering
+    // Handle transaction filtering for other transactions
     $start_date = isset($_GET['start_date']) ? $_GET['start_date'] . " 00:00:00" : $today_start;
     $end_date = isset($_GET['end_date']) ? $_GET['end_date'] . " 23:59:59" : $today_end;
 

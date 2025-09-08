@@ -485,78 +485,99 @@ public function getReceiptDetails($transactionId) {
 
     //statements
     public function getStatementData($groupId, $fromDate, $toDate) {
-        try {
-            // Get group details
-            $groupDetails = $this->getBusinessGroupById($groupId);
-            if (!$groupDetails) {
-                throw new Exception("Business group not found.");
-            }
-    
-            // Get transactions for the specified period
-            $sql = "SELECT t.*, 
-                    CONCAT(u.firstname, ' ', u.lastname) as served_by_name,
-                    CASE 
-                        WHEN t.type = 'Withdrawal Fee' THEN 
-                            (SELECT amount FROM business_group_transactions 
-                             WHERE receipt_no = SUBSTRING_INDEX(t.receipt_no, '-FEE', 1)
-                             AND type = 'Withdrawal'
-                             LIMIT 1)
-                        ELSE NULL 
-                    END as related_withdrawal_amount
-                    FROM business_group_transactions t 
-                    LEFT JOIN user u ON t.served_by = u.user_id 
-                    WHERE t.group_id = ? 
-                    AND DATE(t.date) BETWEEN ? AND ? 
-                    ORDER BY t.date DESC";
-            
-            $stmt = $this->db->conn->prepare($sql);
-            if (!$stmt) {
-                throw new Exception("Prepare failed: " . $this->db->conn->error);
-            }
-    
-            $stmt->bind_param("iss", $groupId, $fromDate, $toDate);
-            if (!$stmt->execute()) {
-                throw new Exception("Execute failed: " . $stmt->error);
-            }
-    
-            $result = $stmt->get_result();
-            
-            $transactions = [];
-            while ($row = $result->fetch_assoc()) {
-                // Clean up the data for display
-                $row['date'] = date('Y-m-d H:i:s', strtotime($row['date']));
-                $row['amount'] = number_format($row['amount'], 2);
-                if ($row['type'] === 'Withdrawal Fee' && $row['related_withdrawal_amount']) {
-                    $row['description'] .= ' (for withdrawal of KSh ' . number_format($row['related_withdrawal_amount'], 2) . ')';
-                }
-                unset($row['related_withdrawal_amount']); // Remove helper field
-                $transactions[] = $row;
-            }
-    
-            // Calculate totals
-            $totals = $this->getTotals($groupId);
-    
-            return [
-                'status' => 'success',
-                'data' => [
-                    'group_details' => $groupDetails,
-                    'transactions' => $transactions,
-                    'summary' => [
-                        'total_deposits' => number_format($totals['total_deposits'], 2),
-                        'total_withdrawals' => number_format($totals['total_withdrawals'], 2),
-                        'total_fees' => number_format($totals['total_fees'], 2),
-                        'net_balance' => number_format($totals['net_balance'], 2)
-                    ]
-                ]
-            ];
-        } catch (Exception $e) {
-            error_log("Error generating statement: " . $e->getMessage());
-            return [
-                'status' => 'error',
-                'message' => $e->getMessage()
-            ];
+    try {
+        // Get group details
+        $groupDetails = $this->getBusinessGroupById($groupId);
+        if (!$groupDetails) {
+            throw new Exception("Business group not found.");
         }
+
+        // Get transactions for the specified period
+        $sql = "SELECT t.*, 
+                CONCAT(u.firstname, ' ', u.lastname) as served_by_name,
+                CASE 
+                    WHEN t.type = 'Withdrawal Fee' THEN 
+                        (SELECT amount FROM business_group_transactions 
+                         WHERE receipt_no = SUBSTRING_INDEX(t.receipt_no, '-FEE', 1)
+                         AND type = 'Withdrawal'
+                         LIMIT 1)
+                    ELSE NULL 
+                END as related_withdrawal_amount
+                FROM business_group_transactions t 
+                LEFT JOIN user u ON t.served_by = u.user_id 
+                WHERE t.group_id = ? 
+                AND DATE(t.date) BETWEEN ? AND ? 
+                ORDER BY t.date DESC";
+        
+        $stmt = $this->db->conn->prepare($sql);
+        if (!$stmt) {
+            throw new Exception("Prepare failed: " . $this->db->conn->error);
+        }
+
+        $stmt->bind_param("iss", $groupId, $fromDate, $toDate);
+        if (!$stmt->execute()) {
+            throw new Exception("Execute failed: " . $stmt->error);
+        }
+
+        $result = $stmt->get_result();
+        
+        $transactions = [];
+        while ($row = $result->fetch_assoc()) {
+            // Keep amount as number for JavaScript calculations
+            $row['amount'] = floatval($row['amount']); // Convert to float, not formatted string
+            
+            // Format date properly
+            $row['date'] = date('Y-m-d H:i:s', strtotime($row['date']));
+            
+            // Add description enhancement for withdrawal fees
+            if ($row['type'] === 'Withdrawal Fee' && $row['related_withdrawal_amount']) {
+                $row['description'] .= ' (for withdrawal of KSh ' . number_format($row['related_withdrawal_amount'], 2) . ')';
+            }
+            
+            // Remove helper field
+            unset($row['related_withdrawal_amount']);
+            $transactions[] = $row;
+        }
+
+        // Get totals for the filtered period only
+        $totalsSql = "SELECT 
+            COALESCE(SUM(CASE WHEN type = 'Savings' THEN amount ELSE 0 END), 0) as total_deposits,
+            COALESCE(SUM(CASE WHEN type = 'Withdrawal' THEN amount ELSE 0 END), 0) as total_withdrawals,
+            COALESCE(SUM(CASE WHEN type = 'Withdrawal Fee' THEN amount ELSE 0 END), 0) as total_fees
+        FROM business_group_transactions 
+        WHERE group_id = ? 
+        AND DATE(date) BETWEEN ? AND ?";
+        
+        $stmt = $this->db->conn->prepare($totalsSql);
+        $stmt->bind_param("iss", $groupId, $fromDate, $toDate);
+        $stmt->execute();
+        $totals = $stmt->get_result()->fetch_assoc();
+
+        // Keep totals as numbers for JavaScript
+        $totals['net_balance'] = $totals['total_deposits'] - $totals['total_withdrawals'] - $totals['total_fees'];
+
+        return [
+            'status' => 'success',
+            'data' => [
+                'group_details' => $groupDetails,
+                'transactions' => $transactions,
+                'summary' => [
+                    // Keep as numbers, not formatted strings
+                    'total_deposits' => floatval($totals['total_deposits']),
+                    'total_withdrawals' => floatval($totals['total_withdrawals']),
+                    'total_fees' => floatval($totals['total_fees']),
+                    'net_balance' => floatval($totals['net_balance'])
+                ]
+            ]
+        ];
+    } catch (Exception $e) {
+        error_log("Error generating statement: " . $e->getMessage());
+        return [
+            'status' => 'error',
+            'message' => $e->getMessage()
+        ];
     }
+}
 
 
 

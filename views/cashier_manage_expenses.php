@@ -224,8 +224,8 @@
 
 <body id="page-top">
     <div id="wrapper">
-       <!-- Include Sidebar and Header -->
-        <?php include '../components/includes/cashier_sidebar.php'; ?>
+        <!-- Import Sidebar -->
+        <?php require_once '../components/includes/cashier_sidebar.php'; ?>
 
         <div class="container-fluid pt-4">
             
@@ -250,7 +250,7 @@
     </div>
 
     <!-- Modals Section Component -->
-    <?php require_once '../components/manage_expenses/modals_section.php'; ?>
+    <?php require_once '../components/manage_expenses/cashier_modals_section.php'; ?>
 
     <!-- Toast Container -->
     <div class="toast-container" id="toastContainer"></div>
@@ -389,13 +389,25 @@ $(document).ready(function() {
         }
         
         selectOption(value, text) {
-            this.select.value = value;
-            this.select.dispatchEvent(new Event('change', { bubbles: true }));
-            this.close();
-            
-            // Remove validation error if present
-            this.select.classList.remove('is-invalid');
-        }
+                this.select.value = value;
+                
+                // Trigger change event to ensure form validation works
+                this.select.dispatchEvent(new Event('change', { bubbles: true }));
+                
+                // Update the visual display if you have one
+                const displayElement = this.container.querySelector('.select-display');
+                if (displayElement) {
+                    displayElement.textContent = text;
+                }
+                
+                this.close();
+                
+                // Remove validation error if present
+                this.select.classList.remove('is-invalid');
+                
+                // Debug logging
+                console.log('Selected option:', value, text);
+            }
         
         filterOptions(searchTerm) {
             const term = searchTerm.toLowerCase();
@@ -449,28 +461,36 @@ $(document).ready(function() {
     });
 
     // Form validation and submission - Simplified
-    $('#expenseForm, #receivedForm').on('submit', function(e) {
+        $('#expenseForm, #receivedForm').on('submit', function(e) {
         const form = $(this);
         let isValid = true;
         
+        // Debug: Log form data before validation
+        console.log('Form submission attempt:', form.attr('id'));
+        
         // Simple validation - check required fields
         form.find('[required]').each(function() {
-            if (!$(this).val() || $(this).val() === '') {
+            const fieldValue = $(this).val();
+            console.log('Field:', $(this).attr('name'), 'Value:', fieldValue);
+            
+            if (!fieldValue || fieldValue === '') {
                 isValid = false;
                 $(this).addClass('is-invalid');
+                console.log('Invalid field:', $(this).attr('name'));
             } else {
                 $(this).removeClass('is-invalid');
             }
         });
 
         if (!isValid) {
+            console.log('Form validation failed');
             alert('Please fill in all required fields');
             e.preventDefault();
             return false;
         }
         
+        console.log('Form validation passed, submitting...');
         // If validation passes, let the form submit normally
-        // Don't preventDefault here - let it go to the server
     });
 
     // Clear validation on input change
@@ -618,11 +638,25 @@ $(document).ready(function() {
     };
 
     // Initialize modals - Enhanced
-    $('#addExpenseModal, #addReceivedModal').on('show.bs.modal', function() {
-        $(this).find('form')[0].reset();
-        $(this).find('.is-invalid').removeClass('is-invalid');
+        $('#addExpenseModal, #addReceivedModal').on('show.bs.modal', function() {
+        const modal = $(this);
         
-        // Re-initialize enhanced selects
+        // Reset form
+        modal.find('form')[0].reset();
+        modal.find('.is-invalid').removeClass('is-invalid');
+        
+        // Set today's date
+        const today = new Date().toISOString().split('T')[0];
+        modal.find('input[name="date"]').val(today);
+        
+        // Reset enhanced selects
+        modal.find('.enhanced-select').each(function() {
+            if (this.enhancedSelect) {
+                this.enhancedSelect.reset();
+            }
+        });
+        
+        // Re-initialize enhanced selects after a short delay
         setTimeout(() => {
             initializeEnhancedSelects();
         }, 100);

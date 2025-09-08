@@ -112,11 +112,13 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                                                                 data-id="<?php echo $row['group_id']; ?>">
                                                             <i class="fas fa-edit"></i> Edit
                                                         </button>
+                                                        <?php if ($_SESSION['role'] === 'admin'): ?>
                                                         <button type="button" class="btn btn-danger btn-sm delete-group" 
                                                                 data-id="<?php echo $row['group_id']; ?>"
                                                                 data-name="<?php echo htmlspecialchars($row['group_name']); ?>">
                                                             <i class="fas fa-trash"></i> Delete
                                                         </button>
+                                                        <?php endif; ?>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -628,7 +630,7 @@ function showAlert(type, message) {
 
         
         // Delete group handler
-        $('.delete-group').click(function() {
+        $(document).on('click', '.delete-group', function() {
             const groupId = $(this).data('id');
             const groupName = $(this).data('name');
             $('#groupToDelete').text(groupName);

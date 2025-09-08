@@ -107,7 +107,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
     $stmt->execute();
     $filtered_totals = $stmt->get_result()->fetch_assoc();
 
-    // Get pending loans with filters - Fixed to include payment terms and proper date
+    // Get pending loans with filters
     $pending_loans_query = "SELECT l.*, c.first_name, c.last_name,
                            COALESCE(l.date_released, l.date_applied) as approval_date
                            FROM loan l 
@@ -676,7 +676,6 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                                             <td>
                                                 <div class="payment-terms">
                                                     <div><span class="term-months"><?= $loan['loan_term'] ?> months</span></div>
-                                                    <div><span class="monthly-amount">KSh <?= number_format($loan['monthly_payment'], 2) ?>/month</span></div>
                                                 </div>
                                             </td>
                                             <td><?= $loan['approval_date'] ? date('M d, Y', strtotime($loan['approval_date'])) : 'Not set' ?></td>
@@ -745,7 +744,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                                         <td>
                                             <div class="payment-terms">
                                                 <div><span class="term-months"><?php echo $fetch['loan_term']?> months</span></div>
-                                                <div><span class="monthly-amount">KSh <?php echo number_format($fetch['monthly_payment'], 2)?>/month</span></div>
+                                               
                                             </div>
                                         </td>
                                         <td><?php echo "KSh ".number_format($fetch['withdrawal_fee'], 2)?></td>

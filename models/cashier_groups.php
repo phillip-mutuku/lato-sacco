@@ -187,18 +187,176 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
             margin-top: 0;
             width: 100%;
         }
+
+        /* Report Generation Styles */
+        .report-generation-section {
+            background: linear-gradient(135deg, #51087E 0%, #6B1FA0 100%);
+            border-radius: 12px;
+            padding: 25px 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 25px rgba(81, 8, 126, 0.15);
+            border: none;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .report-generation-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%);
+            pointer-events: none;
+        }
+
+        .report-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            position: relative;
+            z-index: 2;
+        }
+
+        .report-title-section {
+            display: flex;
+            align-items: center;
+        }
+
+        .report-icon {
+            color: #ffffff;
+            font-size: 1.8rem;
+            margin-right: 15px;
+            background: rgba(255,255,255,0.2);
+            padding: 12px;
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .report-title {
+            color: #ffffff;
+            font-size: 1.4rem;
+            font-weight: 600;
+            margin: 0;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .report-subtitle {
+            color: rgba(255,255,255,0.9);
+            font-size: 0.95rem;
+            margin: 0;
+            margin-top: 5px;
+        }
+
+        .generate-report-btn {
+            background: rgba(255,255,255,0.95);
+            border: 2px solid rgba(255,255,255,0.3);
+            color: #51087E;
+            font-weight: 600;
+            padding: 12px 25px;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+            position: relative;
+            z-index: 2;
+            min-width: 180px;
+        }
+
+        .generate-report-btn:hover {
+            background: #ffffff;
+            border-color: #ffffff;
+            color: #51087E;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+        }
+
+        .generate-report-btn:active {
+            transform: translateY(0);
+        }
+
+        .generate-report-btn i {
+            margin-right: 8px;
+        }
+
+        .report-description {
+            color: rgba(255,255,255,0.85);
+            font-size: 0.9rem;
+            margin: 0;
+            position: relative;
+            z-index: 2;
+        }
+
+        /* Loading state for report button */
+        .generate-report-btn.loading {
+            opacity: 0.8;
+            pointer-events: none;
+        }
+
+        .generate-report-btn.loading i {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Mobile responsiveness */
+        @media (max-width: 768px) {
+            .report-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+            
+            .generate-report-btn {
+                width: 100%;
+                text-align: center;
+            }
+            
+            .report-generation-section {
+                padding: 20px;
+                margin-bottom: 25px;
+            }
+        }
     </style>
 </head>
 
 <body id="page-top">
     <!-- Page Wrapper -->
     <div id="wrapper">
-        <!-- Include Sidebar and Header -->
+        <!-- Include Sidebar -->
         <?php include '../components/includes/cashier_sidebar.php'; ?>
-
-
                 <!-- Begin Page Content -->
                 <div class="container-fluid">
+                    <!-- Report Generation Section -->
+                    <div class="report-generation-section">
+                        <div class="report-header">
+                            <div class="report-title-section">
+                                <i class="fas fa-chart-line report-icon"></i>
+                                <div>
+                                    <h3 class="report-title">Groups Performance Report</h3>
+                                    <p class="report-subtitle">Generate comprehensive portfolio analysis</p>
+                                </div>
+                            </div>
+                            <button class="btn generate-report-btn" id="generateReportBtn">
+                                <i class="fas fa-file-pdf"></i> Generate Report
+                            </button>
+                        </div>
+                        <p class="report-description">
+                            Generate detailed performance reports including group analytics, loan portfolio status, 
+                            field officer performance metrics, and risk assessment with current filter settings.
+                        </p>
+                    </div>
+
                     <!-- Include Groups Statistics -->
                     <?php include '../components/groups/groups_stats.php'; ?>
 
@@ -285,11 +443,6 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                                                         </a>
                                                         <button type="button" class="dropdown-item edit-group" data-id="<?php echo $row['group_id']; ?>">
                                                             <i class="fas fa-edit fa-fw"></i> Edit
-                                                        </button>
-                                                        <button type="button" class="dropdown-item delete-group" 
-                                                                data-id="<?php echo $row['group_id']; ?>"
-                                                                data-name="<?php echo htmlspecialchars($row['group_name']); ?>">
-                                                            <i class="fas fa-trash fa-fw"></i> Delete
                                                         </button>
                                                     </div>
                                                 </div>
@@ -530,6 +683,54 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
             placeholder: 'Select Field Officer',
             width: '100%',
             dropdownParent: $('#editGroupModal')
+        });
+
+        // Report Generation Functionality
+        $('#generateReportBtn').click(function() {
+            const btn = $(this);
+            const originalHtml = btn.html();
+            
+            // Get current filter values
+            const selectedOfficer = $('select[name="field_officer"]').val() || '';
+            const fromDate = $('input[name="from_date"]').val() || '';
+            const toDate = $('input[name="to_date"]').val() || '';
+            
+            // Add loading state
+            btn.addClass('loading').html('<i class="fas fa-spinner fa-spin"></i> Generating Report...');
+            btn.prop('disabled', true);
+            
+            // Build URL with current filters
+            let reportUrl = '../controllers/groups_performance_report.php?';
+            const params = [];
+            
+            if (selectedOfficer) {
+                params.push('field_officer=' + encodeURIComponent(selectedOfficer));
+            }
+            if (fromDate) {
+                params.push('from_date=' + encodeURIComponent(fromDate));
+            }
+            if (toDate) {
+                params.push('to_date=' + encodeURIComponent(toDate));
+            }
+            
+            reportUrl += params.join('&');
+            
+            // Show success message
+            showAlert('info', 'Generating report with current filter settings. Download will start automatically.');
+            
+            // Create hidden iframe for PDF download
+            const iframe = $('<iframe>', {
+                src: reportUrl,
+                style: 'display: none;'
+            }).appendTo('body');
+            
+            // Reset button after 3 seconds
+            setTimeout(function() {
+                btn.removeClass('loading').html(originalHtml);
+                btn.prop('disabled', false);
+                iframe.remove();
+                showAlert('success', 'Report generated successfully!');
+            }, 3000);
         });
 
         // Search functionality
@@ -914,7 +1115,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
         // Helper Functions
         function showAlert(type, message) {
             const alertDiv = $('<div>')
-                .addClass('alert alert-' + (type === 'success' ? 'success' : 'danger') + ' alert-dismissible fade show')
+                .addClass('alert alert-' + (type === 'success' ? 'success' : (type === 'info' ? 'info' : (type === 'warning' ? 'warning' : 'danger'))) + ' alert-dismissible fade show')
                 .css({
                     'position': 'fixed',
                     'top': '20px',
@@ -967,6 +1168,11 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
             if (e.keyCode === 27 && $('#groupSearch').is(':focus')) {
                 $('#groupSearch').val('');
                 performSearch('');
+            }
+            // Ctrl+R or Cmd+R to generate report
+            if ((e.ctrlKey || e.metaKey) && e.keyCode === 82) {
+                e.preventDefault();
+                $('#generateReportBtn').click();
             }
         });
 

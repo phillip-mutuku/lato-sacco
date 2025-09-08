@@ -4,8 +4,8 @@ require_once '../helpers/session.php';
 require_once '../config/class.php'; 
 $db = new db_class(); 
 
-// Check if user is logged in 
-if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'manager')) {     
+// Check if user is logged in and is an officer
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'officer') {     
     echo json_encode(['error' => 'Unauthorized access']);     
     exit(); 
 }  
@@ -60,30 +60,21 @@ if ($loans) {
         // Status column         
         $status = '<span class="badge ' . $status_class . '">' . $status_text . '</span>';                  
         
-        // Actions column with role-based restrictions
+        // Actions column with restrictions for officers
         $actions = '<div class="dropdown">';         
         $actions .= '<button class="btn btn-secondary dropdown-toggle" type="button" data-toggle="dropdown">Action</button>';         
         $actions .= '<div class="dropdown-menu">';         
         $actions .= '<a class="dropdown-item view-details" href="javascript:void(0)" data-id="' . $row['loan_id'] . '">View Details</a>';         
         
+        // Only show Edit and Delete for pending (0) or denied (4) loans for officers
         $loanStatus = (int)$row['status'];
-        $userRole = $_SESSION['role'];
-        
-        // Role-based edit/delete permissions
-        if ($userRole === 'admin') {
-            // Admins can edit/delete all loans regardless of status
+        if ($loanStatus === 0 || $loanStatus === 4) {
             $actions .= '<a class="dropdown-item bg-warning text-white" href="#" data-toggle="modal" data-target="#updateloan' . $row['loan_id'] . '">Edit</a>';             
             $actions .= '<a class="dropdown-item bg-danger text-white" href="#" data-toggle="modal" data-target="#deleteloan' . $row['loan_id'] . '">Delete</a>';
-        } else if ($userRole === 'manager') {
-            // Managers can only edit/delete pending (0) or denied (4) loans
-            if ($loanStatus === 0 || $loanStatus === 4) {
-                $actions .= '<a class="dropdown-item bg-warning text-white" href="#" data-toggle="modal" data-target="#updateloan' . $row['loan_id'] . '">Reschedule</a>';             
-                $actions .= '<a class="dropdown-item bg-danger text-white" href="#" data-toggle="modal" data-target="#deleteloan' . $row['loan_id'] . '">Delete</a>';
-            } else {
-                // Show disabled options for approved/disbursed/completed loans
-                $actions .= '<a class="dropdown-item disabled text-muted" href="#" style="cursor: not-allowed;" title="Admin access required for this loan status">Reschedule (Admin Only)</a>';             
-                $actions .= '<a class="dropdown-item disabled text-muted" href="#" style="cursor: not-allowed;" title="Admin access required for this loan status">Delete (Admin Only)</a>';
-            }
+        } else {
+            // Show disabled options for approved/disbursed/completed loans
+            $actions .= '<a class="dropdown-item disabled text-muted" href="#" style="cursor: not-allowed;" title="Cannot edit approved/disbursed loans">Edit (Not Allowed)</a>';             
+            $actions .= '<a class="dropdown-item disabled text-muted" href="#" style="cursor: not-allowed;" title="Cannot delete approved/disbursed loans">Delete (Not Allowed)</a>';
         }
         
         

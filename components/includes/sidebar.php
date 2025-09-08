@@ -88,42 +88,6 @@ $is_admin = ($user_role === 'admin');
     white-space: nowrap;
 }
 
-/* Disabled state styles */
-.nav-item.disabled .nav-link {
-    color: rgba(255, 255, 255, 0.4) !important;
-    cursor: not-allowed !important;
-    opacity: 0.6;
-    pointer-events: none;
-}
-
-.nav-item.disabled .nav-link i {
-    color: rgba(255, 255, 255, 0.3) !important;
-}
-
-.collapse-item.disabled {
-    color: #999 !important;
-    cursor: not-allowed !important;
-    opacity: 0.6;
-    pointer-events: none;
-}
-
-.collapse-item.disabled:hover {
-    background-color: transparent !important;
-    color: #999 !important;
-}
-
-/* Disabled topbar items */
-.nav-item.disabled-topbar .nav-link {
-    color: #ccc !important;
-    cursor: not-allowed !important;
-    opacity: 0.5;
-    pointer-events: none;
-}
-
-.nav-item.disabled-topbar .notification-dot {
-    display: none;
-}
-
 /* Normal sidebar hover effects */
 .sidebar:not(.toggled) .nav-item .nav-link:hover {
     color: #fff;
@@ -527,12 +491,10 @@ body.sidebar-toggled .topbar {
         </a>
         <div id="collapseLoans" class="collapse" aria-labelledby="headingLoans" data-parent="#accordionSidebar">
             <div class="bg-white py-2 collapse-inner rounded">
-                <a class="collapse-item" href="../models/loan.php">New Loan</a>
+                <a class="collapse-item" href="../models/loan.php">Manage Loans</a>
                 <a class="collapse-item" href="../models/pending_approval.php">Pending Approval</a>
-                <!-- Disbursements - Admin Only -->
-                <a class="collapse-item <?php echo !$is_admin ? 'disabled' : ''; ?>" 
-                   href="<?php echo $is_admin ? '../models/disbursement.php' : '#'; ?>"
-                   <?php echo !$is_admin ? 'title="Admin access required"' : ''; ?>>
+                <a class="collapse-item" 
+                   href="../models/disbursement.php">
                     Disbursements
                 </a>
                 <a class="collapse-item" href="../models/arrears.php">Arrears</a>
@@ -549,18 +511,15 @@ body.sidebar-toggled .topbar {
         </a>
         <div id="collapseFinance" class="collapse" aria-labelledby="headingFinance" data-parent="#accordionSidebar">
             <div class="bg-white py-2 collapse-inner rounded">
-                <!-- Daily Reconciliation - Admin Only -->
-                <a class="collapse-item <?php echo !$is_admin ? 'disabled' : ''; ?>" 
-                   href="<?php echo $is_admin ? '../views/daily-reconciliation.php' : '#'; ?>"
-                   <?php echo !$is_admin ? 'title="Admin access required"' : ''; ?>>
+                <a class="collapse-item" href="../views/daily-reconciliation.php">
                     Daily Reconciliation
                 </a>
-                <!-- Expenses Tracking - Admin Only -->
-                <a class="collapse-item <?php echo !$is_admin ? 'disabled' : ''; ?>" 
-                   href="<?php echo $is_admin ? '../views/expenses_tracking.php' : '#'; ?>"
-                   <?php echo !$is_admin ? 'title="Admin access required"' : ''; ?>>
+                <!-- Expenses Tracking - Admin Only (Hidden for managers) -->
+                <?php if ($is_admin): ?>
+                <a class="collapse-item" href="../views/expenses_tracking.php">
                     Expenses Tracking
                 </a>
+                <?php endif; ?>
                 <a class="collapse-item" href="../views/manage_expenses.php">Manage Expenses</a>
                 <a class="collapse-item" href="../views/receipts.php">Receipts</a>
             </div>
@@ -608,7 +567,10 @@ body.sidebar-toggled .topbar {
         </a>
         <div id="collapseSystem" class="collapse" aria-labelledby="headingSystem" data-parent="#accordionSidebar">
             <div class="bg-white py-2 collapse-inner rounded">
+                <!-- Users - Admin Only (Hidden for managers) -->
+                <?php if ($is_admin): ?>
                 <a class="collapse-item" href="../models/user.php">Users</a>
+                <?php endif; ?>
                 <a class="collapse-item" href="../views/settings.php">Settings</a>
                 <a class="collapse-item" href="../views/backup.php">Backup</a>
             </div>
@@ -644,18 +606,14 @@ body.sidebar-toggled .topbar {
             <!-- Topbar Navbar -->
             <ul class="navbar-nav ml-auto">
                 <!-- Nav Item - Notifications (Admin Only) -->
-                <li class="nav-item dropdown no-arrow mx-1 <?php echo !$is_admin ? 'disabled-topbar' : ''; ?>">
-                    <?php if ($is_admin): ?>
-                        <a class="nav-link" href="../views/notifications.php" title="Notifications">
-                            <i class="fas fa-bell fa-fw"></i>
-                            <span class="notification-dot"></span>
-                        </a>
-                    <?php else: ?>
-                        <span class="nav-link" title="Admin access required">
-                            <i class="fas fa-bell fa-fw"></i>
-                        </span>
-                    <?php endif; ?>
+                <?php if ($is_admin): ?>
+                <li class="nav-item dropdown no-arrow mx-1">
+                    <a class="nav-link" href="../views/notifications.php" title="Notifications">
+                        <i class="fas fa-bell fa-fw"></i>
+                        <span class="notification-dot"></span>
+                    </a>
                 </li>
+                <?php endif; ?>
 
                 <!-- Nav Item - Announcements -->
                 <li class="nav-item dropdown no-arrow mx-1">
@@ -686,186 +644,3 @@ body.sidebar-toggled .topbar {
             </ul>
         </nav>
         <!-- End of Topbar -->
-
-<!-- MASTER SIDEBAR CONTROL SCRIPT - OVERRIDES ALL OTHER SCRIPTS -->
-<script>
-(function() {
-    'use strict';
-    
-    // Wait for DOM and override any existing handlers
-    function initializeMasterSidebar() {
-        // Remove any existing event listeners by cloning elements
-        function removeAllEventListeners(element) {
-            if (element) {
-                const clone = element.cloneNode(true);
-                element.parentNode.replaceChild(clone, element);
-                return clone;
-            }
-            return null;
-        }
-
-        // Master toggle function
-        function toggleSidebar() {
-            const body = document.body;
-            const sidebar = document.querySelector('.sidebar');
-            
-            if (!sidebar) return;
-            
-            body.classList.toggle('sidebar-toggled');
-            sidebar.classList.toggle('toggled');
-            
-            // Handle mobile special case
-            if (window.innerWidth <= 768) {
-                if (sidebar.classList.contains('toggled')) {
-                    sidebar.classList.add('mobile-expanded');
-                } else {
-                    sidebar.classList.remove('mobile-expanded');
-                }
-            }
-            
-            // Collapse any open accordions when toggling
-            if (sidebar.classList.contains('toggled')) {
-                const openCollapses = document.querySelectorAll('.sidebar .collapse.show');
-                openCollapses.forEach(collapse => {
-                    if (window.bootstrap && window.bootstrap.Collapse) {
-                        const bsCollapse = window.bootstrap.Collapse.getInstance(collapse);
-                        if (bsCollapse) bsCollapse.hide();
-                    } else if (window.jQuery) {
-                        window.jQuery(collapse).collapse('hide');
-                    } else {
-                        collapse.classList.remove('show');
-                    }
-                });
-            }
-        }
-
-        // Get toggle buttons and remove existing listeners
-        let sidebarToggle = removeAllEventListeners(document.querySelector('#sidebarToggle'));
-        let sidebarToggleTop = removeAllEventListeners(document.querySelector('#sidebarToggleTop'));
-
-        // Add our master event listeners
-        if (sidebarToggle) {
-            sidebarToggle.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopImmediatePropagation();
-                toggleSidebar();
-            });
-        }
-
-        if (sidebarToggleTop) {
-            sidebarToggleTop.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopImmediatePropagation();
-                toggleSidebar();
-            });
-        }
-
-        // Fullscreen toggle
-        const fullscreenToggle = document.querySelector('#fullscreenToggle');
-        if (fullscreenToggle) {
-            fullscreenToggle.addEventListener('click', function(e) {
-                e.preventDefault();
-                
-                if (!document.fullscreenElement) {
-                    document.documentElement.requestFullscreen().catch(err => {
-                        console.log('Fullscreen error:', err.message);
-                    });
-                    this.innerHTML = '<i class="fas fa-compress-arrows-alt fa-fw"></i>';
-                } else {
-                    document.exitFullscreen();
-                    this.innerHTML = '<i class="fas fa-expand-arrows-alt fa-fw"></i>';
-                }
-            });
-        }
-
-        // Prevent clicks on disabled items
-        const disabledItems = document.querySelectorAll('.disabled, .disabled-topbar');
-        disabledItems.forEach(item => {
-            item.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopImmediatePropagation();
-                return false;
-            });
-            
-            // Also prevent clicks on child elements
-            const links = item.querySelectorAll('a');
-            links.forEach(link => {
-                link.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    e.stopImmediatePropagation();
-                    return false;
-                });
-            });
-        });
-
-        // Responsive handler
-        function handleResize() {
-            const sidebar = document.querySelector('.sidebar');
-            if (!sidebar) return;
-            
-            if (window.innerWidth <= 768) {
-                document.body.classList.add('sidebar-toggled');
-                sidebar.classList.add('toggled');
-                sidebar.classList.remove('mobile-expanded');
-            } else {
-                sidebar.classList.remove('mobile-expanded');
-            }
-        }
-
-        // Enhanced dropdown animations
-        const dropdownToggles = document.querySelectorAll('.dropdown-toggle');
-        dropdownToggles.forEach(toggle => {
-            toggle.addEventListener('click', function() {
-                const dropdown = this.nextElementSibling;
-                if (dropdown && dropdown.classList.contains('dropdown-menu')) {
-                    dropdown.classList.add('animated--grow-in');
-                }
-            });
-        });
-
-        // Window resize handler
-        window.addEventListener('resize', handleResize);
-        handleResize(); // Initial call
-        
-        // Override any conflicting jQuery handlers
-        if (window.jQuery) {
-            window.jQuery(document).ready(function($) {
-                // Remove any existing handlers
-                $('#sidebarToggle, #sidebarToggleTop').off('click');
-                
-                // Ensure our handlers take precedence
-                $('#sidebarToggle, #sidebarToggleTop').on('click.masterSidebar', function(e) {
-                    e.preventDefault();
-                    e.stopImmediatePropagation();
-                    toggleSidebar();
-                    return false;
-                });
-            });
-        }
-
-        console.log('Master Sidebar Control: Initialized and active');
-    }
-
-    // Initialize immediately if DOM is ready, otherwise wait
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initializeMasterSidebar);
-    } else {
-        initializeMasterSidebar();
-    }
-    
-    // Also initialize after a short delay to override any late-loading scripts
-    setTimeout(initializeMasterSidebar, 500);
-    
-    // Make the toggle function globally available
-    window.masterToggleSidebar = function() {
-        const body = document.body;
-        const sidebar = document.querySelector('.sidebar');
-        
-        if (sidebar) {
-            body.classList.toggle('sidebar-toggled');
-            sidebar.classList.toggle('toggled');
-        }
-    };
-    
-})();
-</script>

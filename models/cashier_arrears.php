@@ -39,30 +39,131 @@
             $end_date = date('Y-m-t');
     }
 
-    // Calculate total defaulters - clients with overdue unpaid/partial loans
+    // Function to update loan schedules and calculate defaults properly
+    function updateLoanSchedules($db) {
+        // Get all active loans
+        $loans_query = "SELECT l.loan_id, l.amount, l.loan_term, l.meeting_date, l.date_created, lp.interest_rate
+                        FROM loan l
+                        JOIN loan_products lp ON l.loan_product_id = lp.id
+                        WHERE l.status IN (1, 2)"; // Active/disbursed loans
+        
+        $loans_result = $db->conn->query($loans_query);
+        
+        if ($loans_result && $loans_result->num_rows > 0) {
+            while ($loan = $loans_result->fetch_assoc()) {
+                $loan_id = $loan['loan_id'];
+                $total_amount = floatval($loan['amount']);
+                $term = intval($loan['loan_term']);
+                $interest_rate = floatval($loan['interest_rate']);
+                $monthly_principal = round($total_amount / $term, 2);
+
+                // Get existing repayments
+                $repayment_query = "SELECT due_date, repaid_amount, paid_date FROM loan_schedule WHERE loan_id = ?";
+                $repayment_stmt = $db->conn->prepare($repayment_query);
+                $repayment_stmt->bind_param("i", $loan_id);
+                $repayment_stmt->execute();
+                $repayment_result = $repayment_stmt->get_result();
+                $repayments = $repayment_result->fetch_all(MYSQLI_ASSOC);
+
+                // Start from meeting date or loan date
+                $payment_date = new DateTime($loan['meeting_date'] ?? $loan['date_created']);
+                $payment_date->modify('+1 month');
+
+                // Generate schedule
+                $remaining_principal = $total_amount;
+
+                for ($i = 0; $i < $term; $i++) {
+                    $interest = round($remaining_principal * ($interest_rate / 100), 2);
+                    $due_amount = $monthly_principal + $interest;
+                    $due_date = $payment_date->format('Y-m-d');
+
+                    // Check if this payment has been made
+                    $repaid_amount = 0;
+                    $paid_date = null;
+                    $status = 'unpaid';
+
+                    foreach ($repayments as $repayment) {
+                        if ($repayment['due_date'] == $due_date) {
+                            $repaid_amount = floatval($repayment['repaid_amount']);
+                            $paid_date = $repayment['paid_date'];
+                            $status = (abs($repaid_amount - $due_amount) <= 0.50) ? 'paid' : (($repaid_amount > 0) ? 'partial' : 'unpaid');
+                            break;
+                        }
+                    }
+
+                    // Calculate default amount - only if past due date
+                    $default_amount = 0;
+                    $today = new DateTime();
+                    if ($today > new DateTime($due_date) && $status !== 'paid') {
+                        $default_amount = max(0, $due_amount - $repaid_amount);
+                    }
+
+                    // Update or insert schedule entry
+                    $upsert_stmt = $db->conn->prepare("
+                        INSERT INTO loan_schedule 
+                        (loan_id, due_date, principal, interest, amount, repaid_amount, default_amount, status, paid_date) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON DUPLICATE KEY UPDATE 
+                        principal = VALUES(principal),
+                        interest = VALUES(interest),
+                        amount = VALUES(amount),
+                        default_amount = VALUES(default_amount),
+                        status = CASE 
+                            WHEN status = 'paid' THEN 'paid' 
+                            ELSE VALUES(status) 
+                        END
+                    ");
+                    
+                    $upsert_stmt->bind_param(
+                        "isddddss",
+                        $loan_id,
+                        $due_date,
+                        $monthly_principal,
+                        $interest,
+                        $due_amount,
+                        $repaid_amount,
+                        $default_amount,
+                        $status,
+                        $paid_date
+                    );
+                    
+                    $upsert_stmt->execute();
+
+                    // Update balances for next iteration
+                    $remaining_principal -= $monthly_principal;
+                    $payment_date->modify('+1 month');
+                }
+            }
+        }
+    }
+
+    // Update loan schedules before calculating statistics
+    try {
+        updateLoanSchedules($db);
+    } catch (Exception $e) {
+        error_log("Failed to update loan schedules: " . $e->getMessage());
+    }
+
+    // Calculate total defaulters - clients with overdue unpaid/partial loans (ANY overdue amount)
     $defaulters_query = "SELECT COUNT(DISTINCT l.account_id) as total_defaulters
     FROM loan_schedule ls
     JOIN loan l ON ls.loan_id = l.loan_id
     WHERE ls.due_date < CURDATE() 
     AND ls.status IN ('unpaid', 'partial')
-    AND l.status IN (1, 2)"; // Only active/disbursed loans
+    AND l.status IN (1, 2)
+    AND ls.default_amount > 0"; // Only count actual defaults
     
     $total_defaulters = $db->conn->query($defaulters_query)->fetch_assoc()['total_defaulters'];
 
-    // Calculate total defaulted amount - sum of all overdue amounts from unpaid/partial installments
+    // Calculate total defaulted amount - sum of all default_amount from loan_schedule
     $total_defaulted_query = "SELECT 
-        COALESCE(SUM(
-            CASE 
-                WHEN ls.status = 'unpaid' THEN ls.amount
-                WHEN ls.status = 'partial' THEN (ls.amount - COALESCE(ls.repaid_amount, 0))
-                ELSE 0
-            END
-        ), 0) as total_defaulted
+        COALESCE(SUM(ls.default_amount), 0) as total_defaulted
     FROM loan_schedule ls
     JOIN loan l ON ls.loan_id = l.loan_id
     WHERE ls.due_date < CURDATE() 
     AND ls.status IN ('unpaid', 'partial')
-    AND l.status IN (1, 2)"; // Only active/disbursed loans
+    AND l.status IN (1, 2)
+    AND ls.default_amount > 0"; // Only sum actual defaults
     
     $total_defaulted = $db->conn->query($total_defaulted_query)->fetch_assoc()['total_defaulted'];
 
@@ -72,25 +173,24 @@
                         CONCAT(ca.first_name, ' ', ca.last_name) as client_name,
                         ls.amount as expected_amount,
                         COALESCE(ls.repaid_amount, 0) as repaid_amount,
-                        CASE 
-                            WHEN ls.status = 'unpaid' THEN ls.amount
-                            WHEN ls.status = 'partial' THEN (ls.amount - COALESCE(ls.repaid_amount, 0))
-                            ELSE 0
-                        END as default_amount,
+                        ls.default_amount,
                         ls.due_date,
                         l.loan_id,
                         ls.status,
                         DATEDIFF(CURDATE(), ls.due_date) as days_overdue,
                         l.amount as loan_amount,
-                        ca.phone_number
+                        ca.phone_number,
+                        ls.principal,
+                        ls.interest
                     FROM loan_schedule ls
                     JOIN loan l ON ls.loan_id = l.loan_id
                     JOIN client_accounts ca ON l.account_id = ca.account_id
                     WHERE ls.due_date < CURDATE() 
                     AND ls.status IN ('unpaid', 'partial')
                     AND l.status IN (1, 2)
+                    AND ls.default_amount > 0
                     AND ls.due_date BETWEEN ? AND ?
-                    ORDER BY ls.due_date DESC";
+                    ORDER BY ls.due_date DESC, ls.default_amount DESC";
 
     $stmt = $db->conn->prepare($arrears_query);
     $stmt->bind_param("ss", $start_date, $end_date);
@@ -100,6 +200,25 @@
     }
 
     $arrears_result = $stmt->get_result();
+
+    // Calculate filtered period statistics
+    $filtered_defaulters_query = "SELECT 
+        COUNT(DISTINCT l.account_id) as filtered_defaulters,
+        COALESCE(SUM(ls.default_amount), 0) as filtered_defaulted
+    FROM loan_schedule ls
+    JOIN loan l ON ls.loan_id = l.loan_id
+    WHERE ls.due_date < CURDATE() 
+    AND ls.status IN ('unpaid', 'partial')
+    AND l.status IN (1, 2)
+    AND ls.default_amount > 0
+    AND ls.due_date BETWEEN ? AND ?";
+
+    $filtered_stmt = $db->conn->prepare($filtered_defaulters_query);
+    $filtered_stmt->bind_param("ss", $start_date, $end_date);
+    $filtered_stmt->execute();
+    $filtered_result = $filtered_stmt->get_result()->fetch_assoc();
+    $filtered_defaulters = $filtered_result['filtered_defaulters'];
+    $filtered_defaulted = $filtered_result['filtered_defaulted'];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -207,6 +326,14 @@
             background-color: #e9ecef;
             border-color: #51087E;
         }
+
+        .period-stats {
+            background: linear-gradient(45deg, #28a745, #20c997);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
     </style>
 </head>
 <body id="page-top">
@@ -226,7 +353,7 @@
                 </div>
             </div>
 
-            <!-- Statistics Cards -->
+            <!-- Overall Statistics Cards -->
             <div class="row mb-4">
                 <div class="col-xl-6 col-md-6">
                     <div class="stats-card" style="background: linear-gradient(45deg, #51087E, #1a237e);">
@@ -238,7 +365,7 @@
                             </div>
                             <div class="col-9 text-right">
                                 <div class="stats-number text-white"><?php echo number_format($total_defaulters); ?></div>
-                                <div class="stats-label text-white-50">Total Defaulters</div>
+                                <div class="stats-label text-white-50">Total Defaulters (All Time)</div>
                             </div>
                         </div>
                     </div>
@@ -253,7 +380,7 @@
                             </div>
                             <div class="col-9 text-right">
                                 <div class="stats-number text-white">KSh <?php echo number_format($total_defaulted, 2); ?></div>
-                                <div class="stats-label text-white-50">Total Amount in Arrears</div>
+                                <div class="stats-label text-white-50">Total Amount in Arrears (All Time)</div>
                             </div>
                         </div>
                     </div>
@@ -304,6 +431,18 @@
                 </form>
             </div>
 
+            <!-- Filtered Period Statistics -->
+            <div class="period-stats">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5><i class="fas fa-users"></i> Period Defaulters: <?php echo number_format($filtered_defaulters); ?></h5>
+                    </div>
+                    <div class="col-md-6 text-right">
+                        <h5><i class="fas fa-money-bill"></i> Period Arrears: KSh <?php echo number_format($filtered_defaulted, 2); ?></h5>
+                    </div>
+                </div>
+            </div>
+
             <!-- Arrears Table -->
             <div class="card mb-4">
                 <div class="card-header py-3">
@@ -320,6 +459,8 @@
                                     <th>Loan Reference</th>
                                     <th>Client Name</th>
                                     <th>Phone Number</th>
+                                    <th>Principal</th>
+                                    <th>Interest</th>
                                     <th>Expected Amount</th>
                                     <th>Repaid Amount</th>
                                     <th>Overdue Amount</th>
@@ -331,11 +472,13 @@
                             <tbody>
                                 <?php 
                                 if ($arrears_result && $arrears_result->num_rows > 0) {
+                                    $total_period_arrears = 0;
                                     while($row = $arrears_result->fetch_assoc()): 
                                         $statusClass = $row['status'] == 'unpaid' ? 'badge-danger' : 'badge-warning';
                                         $statusText = ucfirst($row['status']);
                                         $overdueClass = $row['days_overdue'] > 90 ? 'table-danger' : 
                                                        ($row['days_overdue'] > 30 ? 'table-warning' : '');
+                                        $total_period_arrears += $row['default_amount'];
                                 ?>
                                     <tr class="<?php echo $overdueClass; ?>">
                                         <td>
@@ -345,6 +488,8 @@
                                         </td>
                                         <td><?php echo htmlspecialchars($row['client_name']); ?></td>
                                         <td><?php echo htmlspecialchars($row['phone_number'] ?? 'N/A'); ?></td>
+                                        <td>KSh <?php echo number_format($row['principal'], 2); ?></td>
+                                        <td>KSh <?php echo number_format($row['interest'], 2); ?></td>
                                         <td>KSh <?php echo number_format($row['expected_amount'], 2); ?></td>
                                         <td>KSh <?php echo number_format($row['repaid_amount'], 2); ?></td>
                                         <td class="warning-amount">KSh <?php echo number_format($row['default_amount'], 2); ?></td>
@@ -365,7 +510,7 @@
                                 } else {
                                 ?>
                                     <tr>
-                                        <td colspan="9" class="text-center">
+                                        <td colspan="11" class="text-center">
                                             <div class="py-4">
                                                 <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
                                                 <h5 class="text-success">No Overdue Payments Found</h5>
@@ -377,6 +522,15 @@
                                 }
                                 ?>
                             </tbody>
+                            <?php if (isset($total_period_arrears) && $total_period_arrears > 0): ?>
+                            <tfoot>
+                                <tr class="table-info font-weight-bold">
+                                    <td colspan="7" class="text-right">Period Total:</td>
+                                    <td class="warning-amount">KSh <?php echo number_format($total_period_arrears, 2); ?></td>
+                                    <td colspan="3"></td>
+                                </tr>
+                            </tfoot>
+                            <?php endif; ?>
                         </table>
                     </div>
                 </div>
@@ -407,7 +561,7 @@
                     <button class="close" type="button" data-dismiss="modal" aria-label="Close">
                         <span aria-hidden="true">×</span>
                     </button>
-                </div>
+                    </div>
                 <div class="modal-body">Select "Logout" below if you are ready to end your current session.</div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" type="button" data-dismiss="modal">Cancel</button>
@@ -433,14 +587,14 @@
         $(document).ready(function() {
             // Initialize DataTable
             $('#arrearsTable').DataTable({
-                "order": [[6, "asc"]], // Order by due date ascending (oldest first)
+                "order": [[8, "asc"]], // Order by due date ascending (oldest first)
                 "pageLength": 25,
                 "responsive": true,
                 "language": {
                     "emptyTable": "No overdue payments found for the selected period"
                 },
                 "columnDefs": [
-                    { "orderable": false, "targets": [8] } // Make status column non-orderable
+                    { "orderable": false, "targets": [10] } // Make status column non-orderable
                 ]
             });
 
@@ -552,6 +706,49 @@
 
             // Initialize tooltips
             $('[data-toggle="tooltip"]').tooltip();
+
+            // Add refresh button functionality
+            $('#refreshData').click(function(e) {
+                e.preventDefault();
+                location.reload();
+            });
+
+            // Export functionality for filtered data
+            $('#exportData').click(function(e) {
+                e.preventDefault();
+                
+                var table = $('#arrearsTable').DataTable();
+                var data = table.rows({search: 'applied'}).data();
+                
+                if (data.length === 0) {
+                    alert('No data to export for the current filter');
+                    return;
+                }
+                
+                // Create CSV content
+                var csv = 'Loan Reference,Client Name,Phone Number,Principal,Interest,Expected Amount,Repaid Amount,Overdue Amount,Due Date,Days Overdue,Status\n';
+                
+                data.each(function(row) {
+                    // Clean the data for CSV export
+                    var cleanRow = [];
+                    $(row).each(function(index, cell) {
+                        var cleanCell = $(cell).text().replace(/,/g, ';').replace(/\n/g, ' ').trim();
+                        cleanRow.push('"' + cleanCell + '"');
+                    });
+                    csv += cleanRow.join(',') + '\n';
+                });
+                
+                // Download CSV
+                var blob = new Blob([csv], { type: 'text/csv' });
+                var url = window.URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = 'arrears_report_' + new Date().toISOString().split('T')[0] + '.csv';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+            });
         });
     </script>
 </body>

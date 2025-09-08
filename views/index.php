@@ -30,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     header("Location: cashier.php");
                     break;
                 case 'manager':
-                        header("Location: manager_home.php");
+                        header("Location: home.php");
                         break;
                 default:
                     header("Location: home.php");

@@ -403,7 +403,7 @@ body.sidebar-toggled .topbar {
 <ul class="navbar-nav sidebar sidebar-dark accordion" id="accordionSidebar">
     <!-- Back Button Section -->
     <div class="back-section">
-        <a href="../views/account.php" class="back-btn">
+        <a href="../views/cashier-account.php" class="back-btn">
             <i class="fas fa-arrow-left"></i>
             <span class="back-text">Back to Accounts</span>
         </a>

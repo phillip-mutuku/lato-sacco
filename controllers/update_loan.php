@@ -57,12 +57,22 @@ if(isset($_POST['update'])) {
     $loan_product = $db->get_loan_product($loan_product_id);
     $interest_rate = $loan_product['interest_rate'];
     
-    // Calculate loan details
-    $monthly_rate = $interest_rate / 100 / 12;
-    $monthly_payment = ($loan_amount * $monthly_rate * pow(1 + $monthly_rate, $loan_term)) / 
-                      (pow(1 + $monthly_rate, $loan_term) - 1);
-    $total_payable = $monthly_payment * $loan_term;
-    $total_interest = $total_payable - $loan_amount;
+    // FIXED: Use the same calculation method as get_loan_schedule.php
+    $monthly_principal = round($loan_amount / $loan_term, 2);
+    $total_interest = 0;
+    $remaining_principal = $loan_amount;
+    
+    // Calculate interest for each month using declining balance method
+    for ($month = 1; $month <= $loan_term; $month++) {
+        $monthly_interest = round($remaining_principal * ($interest_rate / 100), 2);
+        $total_interest += $monthly_interest;
+        $remaining_principal -= $monthly_principal;
+    }
+    
+    // Monthly payment is principal + average interest per month
+    $avg_monthly_interest = $total_interest / $loan_term;
+    $monthly_payment = $monthly_principal + $avg_monthly_interest;
+    $total_payable = $loan_amount + $total_interest;
     
     // Round the calculated values
     $monthly_payment = round($monthly_payment, 2);

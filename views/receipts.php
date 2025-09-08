@@ -7,11 +7,12 @@
     // Get the user's name
     $user_name = $db->user_acc($_SESSION['user_id']);
 
-    if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-        $_SESSION['error_msg'] = "Unauthorized access";
-        header('Location: index.php');
-        exit();
-    }
+   // Check if user is logged in and is either an admin or manager
+if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'manager')) {
+    $_SESSION['error_msg'] = "Unauthorized access";
+    header('Location: ../views/index.php');
+    exit();
+}
 
     // Handle delete action
     if (isset($_POST['delete_receipt'])) {

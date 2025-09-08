@@ -487,7 +487,7 @@ body.sidebar-toggled .topbar {
         </a>
         <div id="collapseLoans" class="collapse" aria-labelledby="headingLoans" data-parent="#accordionSidebar">
             <div class="bg-white py-2 collapse-inner rounded">
-                <a class="collapse-item" href="../models/officer_loan.php">New Loan</a>
+                <a class="collapse-item" href="../models/officer_loan.php">Manage Loans</a>
                 <a class="collapse-item" href="../models/officer_arrears.php">Arrears</a>
                 <a class="collapse-item" href="../models/officer_disbursement.php">Disbursements</a>
             </div>
@@ -503,6 +503,7 @@ body.sidebar-toggled .topbar {
         </a>
         <div id="collapseClients" class="collapse" aria-labelledby="headingClients" data-parent="#accordionSidebar">
             <div class="bg-white py-2 collapse-inner rounded">
+                <a class="collapse-item" href="../views/officer_account.php">Client Accounts</a>
                 <a class="collapse-item" href="../models/officer_groups.php">Wekeza Groups</a>
             </div>
         </div>

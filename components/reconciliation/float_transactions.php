@@ -43,6 +43,19 @@
     border-color: #51087E;
     box-shadow: 0 0 0 0.2rem rgba(81, 8, 126, 0.25);
 }
+
+.filter-info {
+    background-color: #e7f3ff;
+    border-left: 4px solid #51087E;
+    padding: 10px 15px;
+    margin-bottom: 20px;
+    border-radius: 4px;
+}
+
+.filter-info small {
+    color: #51087E;
+    font-weight: 500;
+}
 </style>
 
 <!-- Float Transactions Section -->
@@ -53,25 +66,33 @@
     <div class="card-body">
         <!-- Filter Section -->
         <div class="float-filter-section">
-            <form id="floatFilterForm" class="filter-form">
+            <form method="GET" id="floatFilterForm" class="filter-form">
+                <!-- Preserve other GET parameters -->
+                <?php if (isset($_GET['start_date'])): ?>
+                    <input type="hidden" name="start_date" value="<?= htmlspecialchars($_GET['start_date']) ?>">
+                <?php endif; ?>
+                <?php if (isset($_GET['end_date'])): ?>
+                    <input type="hidden" name="end_date" value="<?= htmlspecialchars($_GET['end_date']) ?>">
+                <?php endif; ?>
+                
                 <div class="row align-items-end">
                     <div class="col-md-3">
                         <label for="floatType" class="font-weight-bold">Float Type</label>
                         <select name="float_type" id="floatType" class="form-control">
-                            <option value="all">All Types</option>
-                            <option value="add">Add Float</option>
-                            <option value="offload">Offload Float</option>
+                            <option value="all" <?= isset($_GET['float_type']) && $_GET['float_type'] == 'all' ? 'selected' : '' ?>>All Types</option>
+                            <option value="add" <?= isset($_GET['float_type']) && $_GET['float_type'] == 'add' ? 'selected' : '' ?>>Add Float</option>
+                            <option value="offload" <?= isset($_GET['float_type']) && $_GET['float_type'] == 'offload' ? 'selected' : '' ?>>Offload Float</option>
                         </select>
                     </div>
                     <div class="col-md-3">
                         <label for="floatStartDate" class="font-weight-bold">Start Date</label>
-                        <input type="date" name="start_date" id="floatStartDate" class="form-control" 
-                               value="<?= date('Y-m-d') ?>">
+                        <input type="date" name="float_start_date" id="floatStartDate" class="form-control" 
+                               value="<?= isset($_GET['float_start_date']) ? $_GET['float_start_date'] : date('Y-m-d') ?>">
                     </div>
                     <div class="col-md-3">
                         <label for="floatEndDate" class="font-weight-bold">End Date</label>
-                        <input type="date" name="end_date" id="floatEndDate" class="form-control"
-                               value="<?= date('Y-m-d') ?>">
+                        <input type="date" name="float_end_date" id="floatEndDate" class="form-control"
+                               value="<?= isset($_GET['float_end_date']) ? $_GET['float_end_date'] : date('Y-m-d') ?>">
                     </div>
                     <div class="col-md-3">
                         <button type="submit" class="btn btn-primary btn-block" style="background-color: #51087E; border-color: #51087E;">
@@ -81,6 +102,30 @@
                 </div>
             </form>
         </div>
+
+        <!-- Current Filter Information -->
+        <?php if (isset($_GET['float_start_date']) || isset($_GET['float_end_date']) || (isset($_GET['float_type']) && $_GET['float_type'] != 'all')): ?>
+        <div class="filter-info">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <small>
+                        <i class="fas fa-filter"></i> 
+                        Current Filter: 
+                        <?php if (isset($_GET['float_start_date']) && isset($_GET['float_end_date'])): ?>
+                            <strong><?= date('M d, Y', strtotime($_GET['float_start_date'])) ?> - <?= date('M d, Y', strtotime($_GET['float_end_date'])) ?></strong>
+                        <?php endif; ?>
+                        <?php if (isset($_GET['float_type']) && $_GET['float_type'] != 'all'): ?>
+                            | Type: <strong><?= ucfirst($_GET['float_type']) ?> Float</strong>
+                        <?php endif; ?>
+                        | Total Transactions: <strong><?= $float_transactions ? $float_transactions->num_rows : 0 ?></strong>
+                    </small>
+                </div>
+                <a href="<?= $_SERVER['PHP_SELF'] ?><?= isset($_GET['start_date']) || isset($_GET['end_date']) ? '?start_date=' . ($_GET['start_date'] ?? '') . '&end_date=' . ($_GET['end_date'] ?? '') : '' ?>" class="btn btn-sm btn-outline-secondary">
+                    <i class="fas fa-times"></i> Clear Filter
+                </a>
+            </div>
+        </div>
+        <?php endif; ?>
 
         <!-- Transactions Table -->
         <div class="table-responsive">
@@ -134,16 +179,32 @@
                     </tr>
                     <?php 
                         endwhile; 
+                    else: 
+                    ?>
+                    <tr>
+                        <td colspan="7" class="text-center py-4">
+                            <i class="fas fa-inbox fa-2x text-muted mb-2"></i>
+                            <p class="text-muted mb-0">No float transactions found for the selected criteria</p>
+                        </td>
+                    </tr>
+                    <?php 
                     endif; 
                     ?>
                 </tbody>
+                <?php if ($float_transactions && $float_transactions->num_rows > 0): ?>
                 <tfoot>
                     <tr class="total-row">
                         <td colspan="3"><strong>TOTALS</strong></td>
                         <td><strong id="tableTotalAmount"><?= number_format($total_added_display + $total_offloaded_display, 2) ?></strong></td>
-                        <td colspan="3"></td>
+                        <td colspan="3">
+                            <small class="text-muted">
+                                Added: <?= number_format($total_added_display, 2) ?> | 
+                                Offloaded: <?= number_format($total_offloaded_display, 2) ?>
+                            </small>
+                        </td>
                     </tr>
                 </tfoot>
+                <?php endif; ?>
             </table>
         </div>
     </div>

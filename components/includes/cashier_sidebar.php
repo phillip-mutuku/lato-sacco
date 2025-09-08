@@ -524,6 +524,19 @@ body.sidebar-toggled .topbar {
         </div>
     </li>
 
+        <li class="nav-item">
+        <a class="nav-link collapsed" href="#" data-toggle="collapse" data-target="#collapseSystem"
+            aria-expanded="false" aria-controls="collapseSystem">
+            <i class="fas fa-fw fa-cog"></i>
+            <span>System</span>
+        </a>
+        <div id="collapseSystem" class="collapse" aria-labelledby="headingSystem" data-parent="#accordionSidebar">
+            <div class="bg-white py-2 collapse-inner rounded">
+                <a class="collapse-item" href="../views/cashier_backup.php">Backup</a>
+            </div>
+        </div>
+    </li>
+
     <!-- Sidebar Toggler (Sidebar) - Always visible -->
     <div class="text-center">
         <button class="rounded-circle border-0" id="sidebarToggle"></button>
