@@ -72,7 +72,7 @@ if ($loans) {
         // Role-based edit/delete permissions
         if ($userRole === 'admin') {
             // Admins can edit/delete all loans regardless of status
-            $actions .= '<a class="dropdown-item bg-warning text-white" href="#" data-toggle="modal" data-target="#updateloan' . $row['loan_id'] . '">Edit</a>';             
+            $actions .= '<a class="dropdown-item bg-warning text-white" href="#" data-toggle="modal" data-target="#updateloan' . $row['loan_id'] . '">Reschedule</a>';             
             $actions .= '<a class="dropdown-item bg-danger text-white" href="#" data-toggle="modal" data-target="#deleteloan' . $row['loan_id'] . '">Delete</a>';
         } else if ($userRole === 'manager') {
             // Managers can only edit/delete pending (0) or denied (4) loans
