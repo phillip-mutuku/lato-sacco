@@ -271,45 +271,102 @@ $where_conditions = [];
 $params = [];
 $param_types = '';
 
-// Apply date filters - filter both loan dates and disbursement dates
+// Handle date filters - FIXED LOGIC
 if ($quick_filter) {
     switch ($quick_filter) {
         case 'today':
-            $where_conditions[] = "(DATE(l.date_applied) = CURDATE() OR DATE(p.date_created) = CURDATE())";
+            // For status 1 (pending), filter by date_applied; for status 3+ (disbursed), filter by disbursement date
+            if ($status_filter == '1') {
+                $where_conditions[] = "DATE(l.date_applied) = CURDATE()";
+            } elseif ($status_filter == '3') {
+                $where_conditions[] = "DATE(p.date_created) = CURDATE()";
+            } else {
+                $where_conditions[] = "(DATE(l.date_applied) = CURDATE() OR DATE(p.date_created) = CURDATE())";
+            }
             break;
         case 'yesterday':
-            $where_conditions[] = "(DATE(l.date_applied) = DATE_SUB(CURDATE(), INTERVAL 1 DAY) OR DATE(p.date_created) = DATE_SUB(CURDATE(), INTERVAL 1 DAY))";
+            if ($status_filter == '1') {
+                $where_conditions[] = "DATE(l.date_applied) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)";
+            } elseif ($status_filter == '3') {
+                $where_conditions[] = "DATE(p.date_created) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)";
+            } else {
+                $where_conditions[] = "(DATE(l.date_applied) = DATE_SUB(CURDATE(), INTERVAL 1 DAY) OR DATE(p.date_created) = DATE_SUB(CURDATE(), INTERVAL 1 DAY))";
+            }
             break;
         case 'week':
-            $where_conditions[] = "(YEARWEEK(l.date_applied, 1) = YEARWEEK(CURDATE(), 1) OR YEARWEEK(p.date_created, 1) = YEARWEEK(CURDATE(), 1))";
+            if ($status_filter == '1') {
+                $where_conditions[] = "YEARWEEK(l.date_applied, 1) = YEARWEEK(CURDATE(), 1)";
+            } elseif ($status_filter == '3') {
+                $where_conditions[] = "YEARWEEK(p.date_created, 1) = YEARWEEK(CURDATE(), 1)";
+            } else {
+                $where_conditions[] = "(YEARWEEK(l.date_applied, 1) = YEARWEEK(CURDATE(), 1) OR YEARWEEK(p.date_created, 1) = YEARWEEK(CURDATE(), 1))";
+            }
             break;
         case 'month':
-            $where_conditions[] = "((YEAR(l.date_applied) = YEAR(CURDATE()) AND MONTH(l.date_applied) = MONTH(CURDATE())) OR (YEAR(p.date_created) = YEAR(CURDATE()) AND MONTH(p.date_created) = MONTH(CURDATE())))";
+            if ($status_filter == '1') {
+                $where_conditions[] = "YEAR(l.date_applied) = YEAR(CURDATE()) AND MONTH(l.date_applied) = MONTH(CURDATE())";
+            } elseif ($status_filter == '3') {
+                $where_conditions[] = "YEAR(p.date_created) = YEAR(CURDATE()) AND MONTH(p.date_created) = MONTH(CURDATE())";
+            } else {
+                $where_conditions[] = "((YEAR(l.date_applied) = YEAR(CURDATE()) AND MONTH(l.date_applied) = MONTH(CURDATE())) OR (YEAR(p.date_created) = YEAR(CURDATE()) AND MONTH(p.date_created) = MONTH(CURDATE())))";
+            }
             break;
         case 'custom':
             if ($start_date && $end_date) {
-                $where_conditions[] = "((DATE(l.date_applied) BETWEEN ? AND ?) OR (DATE(p.date_created) BETWEEN ? AND ?))";
-                $params[] = $start_date;
-                $params[] = $end_date;
-                $params[] = $start_date;
-                $params[] = $end_date;
-                $param_types .= 'ssss';
+                if ($status_filter == '1') {
+                    $where_conditions[] = "DATE(l.date_applied) BETWEEN ? AND ?";
+                    $params[] = $start_date;
+                    $params[] = $end_date;
+                    $param_types .= 'ss';
+                } elseif ($status_filter == '3') {
+                    $where_conditions[] = "DATE(p.date_created) BETWEEN ? AND ?";
+                    $params[] = $start_date;
+                    $params[] = $end_date;
+                    $param_types .= 'ss';
+                } else {
+                    $where_conditions[] = "(DATE(l.date_applied) BETWEEN ? AND ? OR DATE(p.date_created) BETWEEN ? AND ?)";
+                    $params[] = $start_date;
+                    $params[] = $end_date;
+                    $params[] = $start_date;
+                    $params[] = $end_date;
+                    $param_types .= 'ssss';
+                }
             } elseif ($start_date) {
-                $where_conditions[] = "(DATE(l.date_applied) >= ? OR DATE(p.date_created) >= ?)";
-                $params[] = $start_date;
-                $params[] = $start_date;
-                $param_types .= 'ss';
+                if ($status_filter == '1') {
+                    $where_conditions[] = "DATE(l.date_applied) >= ?";
+                    $params[] = $start_date;
+                    $param_types .= 's';
+                } elseif ($status_filter == '3') {
+                    $where_conditions[] = "DATE(p.date_created) >= ?";
+                    $params[] = $start_date;
+                    $param_types .= 's';
+                } else {
+                    $where_conditions[] = "(DATE(l.date_applied) >= ? OR DATE(p.date_created) >= ?)";
+                    $params[] = $start_date;
+                    $params[] = $start_date;
+                    $param_types .= 'ss';
+                }
             } elseif ($end_date) {
-                $where_conditions[] = "(DATE(l.date_applied) <= ? OR DATE(p.date_created) <= ?)";
-                $params[] = $end_date;
-                $params[] = $end_date;
-                $param_types .= 'ss';
+                if ($status_filter == '1') {
+                    $where_conditions[] = "DATE(l.date_applied) <= ?";
+                    $params[] = $end_date;
+                    $param_types .= 's';
+                } elseif ($status_filter == '3') {
+                    $where_conditions[] = "DATE(p.date_created) <= ?";
+                    $params[] = $end_date;
+                    $param_types .= 's';
+                } else {
+                    $where_conditions[] = "(DATE(l.date_applied) <= ? OR DATE(p.date_created) <= ?)";
+                    $params[] = $end_date;
+                    $params[] = $end_date;
+                    $param_types .= 'ss';
+                }
             }
             break;
     }
 }
 
-// Apply status filter
+// Apply status filter - FIXED LOGIC
 if ($status_filter !== '') {
     $where_conditions[] = "l.status = ?";
     $params[] = $status_filter;
@@ -318,28 +375,71 @@ if ($status_filter !== '') {
 
 $where_clause = !empty($where_conditions) ? 'WHERE ' . implode(' AND ', $where_conditions) : '';
 
-// Main query to get filtered loans with disbursement info
-$main_query = "SELECT 
-    l.ref_no,
-    CONCAT(c.first_name, ' ', c.last_name) as borrower_name,
-    l.status,
-    l.amount,
-    l.loan_term,
-    l.monthly_payment,
-    l.date_applied,
-    COALESCE(l.date_released, l.date_approved) as date_approved,
-    p.withdrawal_fee,
-    p.date_created as disbursement_date,
-    u.username as disbursed_by,
-    p.receipt_no
-    FROM loan l
-    INNER JOIN client_accounts c ON l.account_id = c.account_id
-    LEFT JOIN payment p ON l.loan_id = p.loan_id
-    LEFT JOIN user u ON p.user_id = u.user_id
-    $where_clause
-    ORDER BY 
-        CASE WHEN p.date_created IS NOT NULL THEN p.date_created ELSE l.date_applied END DESC, 
-        l.ref_no";
+// FIXED MAIN QUERY - Use appropriate JOIN based on status filter
+if ($status_filter == '1') {
+    // For pending loans, we don't need payment data
+    $main_query = "SELECT 
+        l.ref_no,
+        CONCAT(c.first_name, ' ', c.last_name) as borrower_name,
+        l.status,
+        l.amount,
+        l.loan_term,
+        l.monthly_payment,
+        l.date_applied,
+        COALESCE(l.date_released, l.date_approved) as date_approved,
+        NULL as withdrawal_fee,
+        NULL as disbursement_date,
+        NULL as disbursed_by,
+        NULL as receipt_no
+        FROM loan l
+        INNER JOIN client_accounts c ON l.account_id = c.account_id
+        $where_clause
+        ORDER BY l.date_applied DESC, l.ref_no";
+} elseif ($status_filter == '3') {
+    // For disbursed loans, we need payment data, so use INNER JOIN
+    $main_query = "SELECT 
+        l.ref_no,
+        CONCAT(c.first_name, ' ', c.last_name) as borrower_name,
+        l.status,
+        l.amount,
+        l.loan_term,
+        l.monthly_payment,
+        l.date_applied,
+        COALESCE(l.date_released, l.date_approved) as date_approved,
+        p.withdrawal_fee,
+        p.date_created as disbursement_date,
+        u.username as disbursed_by,
+        p.receipt_no
+        FROM loan l
+        INNER JOIN client_accounts c ON l.account_id = c.account_id
+        INNER JOIN payment p ON l.loan_id = p.loan_id
+        LEFT JOIN user u ON p.user_id = u.user_id
+        $where_clause
+        ORDER BY p.date_created DESC, l.ref_no";
+} else {
+    // For all statuses, use LEFT JOIN as in original
+    $main_query = "SELECT 
+        l.ref_no,
+        CONCAT(c.first_name, ' ', c.last_name) as borrower_name,
+        l.status,
+        l.amount,
+        l.loan_term,
+        l.monthly_payment,
+        l.date_applied,
+        COALESCE(l.date_released, l.date_approved) as date_approved,
+        p.withdrawal_fee,
+        p.date_created as disbursement_date,
+        u.username as disbursed_by,
+        p.receipt_no
+        FROM loan l
+        INNER JOIN client_accounts c ON l.account_id = c.account_id
+        LEFT JOIN payment p ON l.loan_id = p.loan_id
+        LEFT JOIN user u ON p.user_id = u.user_id
+        $where_clause
+        ORDER BY 
+            CASE WHEN p.date_created IS NOT NULL THEN p.date_created ELSE l.date_applied END DESC, 
+            l.ref_no";
+}
 
 $stmt = $db->conn->prepare($main_query);
 if (!empty($params)) {

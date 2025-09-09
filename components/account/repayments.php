@@ -516,150 +516,273 @@ $(document).ready(function() {
         }
     });
 
-    // Repay Loan Form
-    $('#repayLoanForm').submit(function(e) {
-    e.preventDefault();
-    const submitButton = $(this).find('button[type="submit"]');
-    const originalText = submitButton.html();
-    
-    submitButton.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Processing...');
-
-    // Validation
-    const missingFields = [];
-    if (!$('#loanSelect').val()) missingFields.push("Loan");
-    if (!$('#loanReceiptNumber').val()) missingFields.push("Receipt Number");
-    if (!$('#repayAmount').val()) missingFields.push("Repayment Amount");
-    if (!$('#repayPaymentMode').val()) missingFields.push("Payment Mode");
-
-    if (missingFields.length > 0) {
-        if (typeof showToast === 'function') {
-            showToast("Please fill in: " + missingFields.join(", "), 'warning');
-        } else {
-            alert("Please fill in: " + missingFields.join(", "));
+        // Repay Loan Form
+        $('#repayLoanForm').submit(function(e) {
+        e.preventDefault();
+        
+        const $form = $(this);
+        const submitButton = $form.find('button[type="submit"]');
+        const originalText = submitButton.html();
+        
+        // Prevent multiple submissions
+        if (submitButton.prop('disabled')) {
+            console.log('Loan repayment submission blocked - already processing');
+            return false;
         }
-        submitButton.prop('disabled', false).html(originalText);
-        return;
-    }
-
-    $.ajax({
-        url: '../controllers/accountController.php?action=repayLoan',
-        type: 'POST',
-        data: $(this).serialize(),
-        dataType: 'json',
-        success: function(response) {
-            if (response.status === 'success') {
-                if (typeof showToast === 'function') {
-                    showToast('Loan repayment successful!', 'success');
-                } else {
-                    alert('Loan repayment successful!');
-                }
-                $('#repayLoanModal').modal('hide');
-                
-                // REMOVED RECEIPT OPENING - Just reload the page
-                setTimeout(() => location.reload(), 1000);
-            } else {
-                if (typeof showToast === 'function') {
-                    showToast('Error: ' + response.message, 'error');
-                } else {
-                    alert('Error: ' + response.message);
-                }
-            }
-        },
-        error: function(xhr, status, error) {
-            try {
-                const response = JSON.parse(xhr.responseText);
-                if (typeof showToast === 'function') {
-                    showToast('Error: ' + response.message, 'error');
-                } else {
-                    alert('Error: ' + response.message);
-                }
-            } catch (e) {
-                if (typeof showToast === 'function') {
-                    showToast('An error occurred while repaying the loan.', 'error');
-                } else {
-                    alert('An error occurred while repaying the loan.');
+        
+        // Disable submit button immediately
+        submitButton.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Processing...');
+        
+        // Comprehensive validation
+        const validationErrors = [];
+        const loanId = $('#loanSelect').val();
+        const receiptNumber = $('#loanReceiptNumber').val()?.trim();
+        const repayAmount = parseFloat($('#repayAmount').val());
+        const paymentMode = $('#repayPaymentMode').val();
+        const accountId = $('input[name="accountId"]').val();
+        const servedBy = $('input[name="served_by"]').val();
+        
+        if (!loanId) validationErrors.push("Loan Selection");
+        if (!receiptNumber) validationErrors.push("Receipt Number");
+        if (!repayAmount || repayAmount <= 0) validationErrors.push("Valid Repayment Amount");
+        if (!paymentMode) validationErrors.push("Payment Mode");
+        
+        // Check for duplicate receipt number in repayments table
+        const existingRepaymentReceipts = [];
+        $('#repaymentTable tbody tr').each(function() {
+            const receiptCell = $(this).find('td:eq(1)').text().trim();
+            if (receiptCell) existingRepaymentReceipts.push(receiptCell);
+        });
+        
+        if (existingRepaymentReceipts.includes(receiptNumber)) {
+            validationErrors.push("Receipt Number already exists in repayments");
+        }
+        
+        // Validate repayment amount against outstanding balance
+        const outstandingText = $('#outstandingBalance').val();
+        if (outstandingText) {
+            const outstandingMatch = outstandingText.match(/[\d,]+\.?\d*/);
+            if (outstandingMatch) {
+                const outstandingAmount = parseFloat(outstandingMatch[0].replace(/,/g, ''));
+                if (repayAmount > outstandingAmount) {
+                    validationErrors.push("Repayment amount cannot exceed outstanding balance");
                 }
             }
-        },
-        complete: function() {
+        }
+        
+        if (validationErrors.length > 0) {
+            showToast("Please correct: " + validationErrors.join(", "), 'warning');
             submitButton.prop('disabled', false).html(originalText);
+            return false;
         }
+        
+        // Prepare form data
+        const formData = {
+            accountId: accountId,
+            loanId: loanId,
+            repayAmount: repayAmount,
+            paymentMode: paymentMode,
+            receiptNumber: receiptNumber,
+            served_by: servedBy
+        };
+        
+        console.log('Submitting loan repayment:', formData);
+        
+        $.ajax({
+            url: '../controllers/accountController.php?action=repayLoan',
+            type: 'POST',
+            data: formData,
+            dataType: 'json',
+            timeout: 20000, // Longer timeout for loan processing
+            cache: false,
+            success: function(response) {
+                console.log('Loan repayment success response:', response);
+                
+                if (response && response.status === 'success') {
+                    showToast('Loan repayment processed successfully!', 'success');
+                    $('#repayLoanModal').modal('hide');
+                    
+                    // Trigger custom events for dashboard updates
+                    $(document).trigger('loanRepaymentProcessed', [response]);
+                    
+                    // Optional: Print receipt if repayment details available
+                    if (response.repaymentDetails && typeof printLoanRepaymentReceipt === 'function') {
+                        setTimeout(() => {
+                            printLoanRepaymentReceipt(response.repaymentDetails);
+                        }, 500);
+                    }
+                    
+                    // Reload page after delay to show updated data
+                    setTimeout(() => {
+                        location.reload();
+                    }, 2000);
+                    
+                } else {
+                    throw new Error(response?.message || 'Invalid response from server');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Loan repayment AJAX Error:', {
+                    status: status,
+                    error: error,
+                    statusCode: xhr.status,
+                    responseText: xhr.responseText
+                });
+                
+                let errorMessage = 'Error processing loan repayment. Please try again.';
+                
+                if (status === 'timeout') {
+                    errorMessage = 'Request timed out. Loan processing takes time - please check your connection and try again.';
+                } else if (xhr.status === 400) {
+                    errorMessage = 'Invalid repayment data. Please check your inputs.';
+                } else if (xhr.status === 403) {
+                    errorMessage = 'Unauthorized. Please log in again.';
+                } else if (xhr.status === 404) {
+                    errorMessage = 'Loan not found. Please refresh and try again.';
+                } else if (xhr.status === 422) {
+                    errorMessage = 'Loan repayment validation failed. Please check loan status.';
+                } else if (xhr.status === 500) {
+                    errorMessage = 'Server error during loan processing. Please contact support.';
+                } else if (xhr.responseText) {
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        if (response.message) {
+                            errorMessage = response.message;
+                        }
+                    } catch (parseError) {
+                        console.error('Error parsing loan repayment error response:', parseError);
+                    }
+                }
+                
+                showToast(errorMessage, 'error');
+            },
+            complete: function(xhr, status) {
+                // Always reset button state
+                submitButton.prop('disabled', false).html(originalText);
+                console.log('Loan repayment request completed with status:', status);
+            }
+        });
     });
-});
+
+
 
 // Loan Select Change
 $('#loanSelect').change(function() {
     const loanId = $(this).val();
     
-    if (loanId) {
-        // Clear previous values
-        $('#refNo, #outstandingBalance, #nextDueAmount, #repayAmount').val('');
-        
-        $.ajax({
-            url: '../controllers/accountController.php',
-            type: 'GET',
-            data: { 
-                action: 'getLoanDetails',
-                loanId: loanId 
-            },
-            dataType: 'json',
-            success: function(response) {
-                if (response.status === 'success' && response.loan) {
-                    const loan = response.loan;
+    // Clear previous values
+    $('#refNo, #outstandingBalance, #nextDueAmount, #repayAmount').val('');
+    
+    if (!loanId) {
+        return;
+    }
+    
+    // Show loading state
+    $('#outstandingBalance').val('Loading...');
+    $('#nextDueAmount').val('Loading...');
+    
+    $.ajax({
+        url: '../controllers/accountController.php',
+        type: 'GET',
+        data: { 
+            action: 'getLoanDetails',
+            loanId: loanId 
+        },
+        dataType: 'json',
+        timeout: 10000,
+        success: function(response) {
+            if (response.status === 'success' && response.loan) {
+                const loan = response.loan;
+                
+                // Check if loan is disbursed
+                if (loan.status < 2) {
+                    showToast('This loan is not yet disbursed and cannot accept repayments.', 'warning');
+                    $('#loanSelect').val('');
+                    $('#outstandingBalance, #nextDueAmount').val('');
+                    return;
+                }
+                
+                // Populate loan details
+                $('#refNo').val(loan.ref_no || '');
+                
+                if (loan.outstanding_balance !== undefined) {
+                    $('#outstandingBalance').val('KSh ' + formatCurrency(loan.outstanding_balance));
+                }
+                
+                // Handle the next due amount properly
+                if (loan.next_due_amount && loan.next_due_amount > 0) {
+                    const dueAmount = parseFloat(loan.next_due_amount);
+                    let statusText = '';
+                    let displayText = '';
                     
-                    // CHECK IF LOAN IS DISBURSED
-                    if (loan.status < 2) {
-                        if (typeof showToast === 'function') {
-                            showToast('This loan is not yet disbursed and cannot accept repayments.', 'warning');
-                        } else {
-                            alert('This loan is not yet disbursed and cannot accept repayments.');
-                        }
-                        $('#loanSelect').val(''); // Clear selection
-                        return;
-                    }
-                    
-                    $('#refNo').val(loan.ref_no || '');
-                    
-                    if (loan.outstanding_balance !== undefined) {
-                        $('#outstandingBalance').val('KSh ' + formatCurrency(loan.outstanding_balance));
-                    }
-                    
-                    if (loan.next_due_amount && loan.next_due_amount > 0) {
-                        const dueAmount = parseFloat(loan.next_due_amount);
-                        const statusText = loan.is_overdue ? ' (Overdue)' : '';
+                    if (loan.is_overdue) {
+                        statusText = ' (Overdue + Accumulated)';
+                        displayText = `KSh ${formatCurrency(dueAmount)}${statusText}`;
                         
-                        $('#nextDueAmount').val('KSh ' + formatCurrency(dueAmount) + statusText);
-                        $('#repayAmount').val(dueAmount.toFixed(2)); // Keep decimals in form
+                        // Add helpful tooltip about accumulated defaults
+                        if (loan.accumulated_defaults && loan.accumulated_defaults > 0) {
+                            $('#nextDueAmount').attr('title', 
+                                `Total includes accumulated defaults: KSh ${formatCurrency(loan.accumulated_defaults)}`
+                            );
+                        }
+                    } else {
+                        statusText = ' (Current Due)';
+                        displayText = `KSh ${formatCurrency(dueAmount)}${statusText}`;
                         
                         if (loan.next_due_date) {
-                            $('#nextDueAmount').attr('title', 'Due on: ' + new Date(loan.next_due_date).toLocaleDateString());
+                            $('#nextDueAmount').attr('title', 
+                                `Due on: ${new Date(loan.next_due_date).toLocaleDateString()}`
+                            );
                         }
-                    } else {
-                        $('#nextDueAmount').val('No scheduled payment due');
                     }
+                    
+                    $('#nextDueAmount').val(displayText);
+                    $('#repayAmount').val(dueAmount.toFixed(2));
+                    
                 } else {
-                    if (typeof showToast === 'function') {
-                        showToast('Error: Could not retrieve loan details', 'error');
-                    } else {
-                        alert('Error: Could not retrieve loan details');
-                    }
+                    $('#nextDueAmount').val('No payment due / Loan fully paid');
+                    $('#repayAmount').val('');
                 }
-            },
-            error: function(xhr, status, error) {
-                if (typeof showToast === 'function') {
-                    showToast('Error fetching loan details', 'error');
+                
+                // Add visual indicators for overdue status
+                if (loan.is_overdue) {
+                    $('#nextDueAmount').addClass('text-danger font-weight-bold');
+                    $('#repayAmount').addClass('border-danger');
                 } else {
-                    alert('Error fetching loan details');
+                    $('#nextDueAmount').removeClass('text-danger font-weight-bold');
+                    $('#repayAmount').removeClass('border-danger');
                 }
-                console.error('AJAX Error:', xhr.responseText);
+                
+            } else {
+                showToast('Error: Could not retrieve loan details - ' + (response.message || 'Unknown error'), 'error');
+                $('#outstandingBalance, #nextDueAmount').val('Error loading');
             }
-        });
-    } else {
-        $('#refNo, #outstandingBalance, #nextDueAmount, #repayAmount').val('');
-    }
+        },
+        error: function(xhr, status, error) {
+            console.error('Loan details AJAX Error:', {
+                status: status,
+                error: error,
+                responseText: xhr.responseText
+            });
+            
+            showToast('Error fetching loan details. Please try again.', 'error');
+            $('#outstandingBalance, #nextDueAmount').val('Error');
+        }
+    });
 });
 
 
+// Reset form when modal is hidden
+$('#repayLoanModal').on('hidden.bs.modal', function () {
+    const $form = $('#repayLoanForm');
+    $form[0].reset();
+    $form.find('button[type="submit"]').prop('disabled', false).html('<i class="fas fa-credit-card"></i> Repay Loan');
+    $('#refNo, #outstandingBalance, #nextDueAmount, #repayAmount').val('');
+    
+    // Clear any validation errors
+    $form.find('.is-invalid').removeClass('is-invalid');
+    $form.find('.invalid-feedback').remove();
+});
 
 // Handle delete repayment button click
 $(document).on('click', '.delete-repayment', function() {
