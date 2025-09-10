@@ -122,47 +122,47 @@ class AccountController {
     /**
      * Add savings to an account
      */
-        public function addSavings($accountId, $amount, $paymentMode, $accountType, $receiptNumber, $servedBy) {
-        try {
-            // Start database transaction
-            $this->model->beginTransaction();
-            
-            // Double-check for duplicate receipt (database level)
-            $duplicateCheck = $this->model->checkDuplicateReceipt($receiptNumber, $accountId);
-            if ($duplicateCheck['exists']) {
-                throw new Exception("Receipt number already exists");
-            }
-            
-            // Process the savings
-            $result = $this->model->addSavings(
-                $accountId,
-                $amount,
-                $paymentMode,
-                $accountType,
-                $receiptNumber,
-                $servedBy
-            );
-            
-            if ($result['status'] !== 'success') {
-                throw new Exception($result['message']);
-            }
-            
-            // Commit the transaction
-            $this->model->commitTransaction();
-            
-            return $result;
-            
-        } catch (Exception $e) {
-            // Rollback on any error
-            $this->model->rollbackTransaction();
-            
-            error_log("Error in addSavings: " . $e->getMessage());
-            return [
-                'status' => 'error',
-                'message' => $e->getMessage()
-            ];
+       public function addSavings($accountId, $amount, $paymentMode, $accountType, $receiptNumber, $servedBy) {
+    try {
+        // Start database transaction
+        $this->model->beginTransaction();
+        
+        // Remove duplicate receipt check - receipts can be reused
+        // $duplicateCheck = $this->model->checkDuplicateReceipt($receiptNumber, $accountId);
+        // if ($duplicateCheck['exists']) {
+        //     throw new Exception("Receipt number already exists");
+        // }
+        
+        // Process the savings
+        $result = $this->model->addSavings(
+            $accountId,
+            $amount,
+            $paymentMode,
+            $accountType,
+            $receiptNumber,
+            $servedBy
+        );
+        
+        if ($result['status'] !== 'success') {
+            throw new Exception($result['message']);
         }
+        
+        // Commit the transaction
+        $this->model->commitTransaction();
+        
+        return $result;
+        
+    } catch (Exception $e) {
+        // Rollback on any error
+        $this->model->rollbackTransaction();
+        
+        error_log("Error in addSavings: " . $e->getMessage());
+        return [
+            'status' => 'error',
+            'message' => $e->getMessage()
+        ];
     }
+}
 
     /**
      * Process withdrawal from account
@@ -265,8 +265,43 @@ class AccountController {
      * Delete loan repayment
      */
     public function deleteRepayment($repaymentId, $loanId, $deletedAmount) {
-        return $this->model->deleteRepayment($repaymentId, $loanId, $deletedAmount);
+    try {
+        // Validate input parameters
+        if (empty($repaymentId) || empty($loanId) || empty($deletedAmount)) {
+            throw new Exception("Missing required parameters for repayment deletion");
+        }
+        
+        // Validate numeric values
+        $repaymentId = intval($repaymentId);
+        $loanId = intval($loanId);
+        $deletedAmount = floatval($deletedAmount);
+        
+        if ($repaymentId <= 0 || $loanId <= 0 || $deletedAmount <= 0) {
+            throw new Exception("Invalid parameter values for repayment deletion");
+        }
+        
+        // Call the simplified model method
+        $result = $this->model->deleteRepayment($repaymentId, $loanId, $deletedAmount);
+        
+        if ($result['status'] === 'success') {
+            error_log("Repayment deletion successful: " . json_encode($result['details']));
+            return [
+                'status' => 'success',
+                'message' => 'Repayment deleted successfully. Affected installments have been reset to unpaid status.',
+                'details' => $result['details'] ?? null
+            ];
+        } else {
+            throw new Exception($result['message'] ?? 'Unknown error during repayment deletion');
+        }
+        
+    } catch (Exception $e) {
+        error_log("Error in deleteRepayment controller: " . $e->getMessage());
+        return [
+            'status' => 'error',
+            'message' => $e->getMessage()
+        ];
     }
+}
 
     /**
      * Get account repayments (for table reload)
@@ -664,133 +699,128 @@ class AccountController {
         echo json_encode($result);
     }
 
-        private function handleAddSavings() {
-        try {
-            // Start session if not already started for user verification
-            if (session_status() == PHP_SESSION_NONE) {
-                session_start();
-            }
-            
-            // Security check - ensure user is logged in
-            if (!isset($_SESSION['user_id'])) {
-                throw new Exception("Unauthorized: User not logged in");
-            }
-            
-            // Log the request for debugging
-            error_log("AddSavings request from user " . $_SESSION['user_id'] . ": " . json_encode($_POST));
-            
-            // Extract and validate required parameters
-            $accountId = filter_var($_POST['accountId'] ?? null, FILTER_VALIDATE_INT);
-            $amount = filter_var($_POST['amount'] ?? null, FILTER_VALIDATE_FLOAT);
-            $paymentMode = trim($_POST['paymentMode'] ?? '');
-            $accountType = trim($_POST['accountType'] ?? '');
-            $receiptNumber = trim($_POST['receiptNumber'] ?? '');
-            $servedBy = $_SESSION['user_name'] ?? $_SESSION['username'] ?? 'Unknown';
-            
-            // Comprehensive validation
-            $errors = [];
-            
-            if (!$accountId || $accountId <= 0) {
-                $errors[] = "Valid Account ID is required";
-            }
-            
-            if (!$amount || $amount <= 0) {
-                $errors[] = "Valid amount is required";
-            }
-            
-            if (empty($paymentMode)) {
-                $errors[] = "Payment mode is required";
-            }
-            
-            if (empty($accountType)) {
-                $errors[] = "Account type is required";
-            }
-            
-            if (empty($receiptNumber)) {
-                $errors[] = "Receipt number is required";
-            }
-            
-            // Validate receipt number format (adjust regex as needed)
-            if (!empty($receiptNumber) && !preg_match('/^[A-Za-z0-9\-_]+$/', $receiptNumber)) {
-                $errors[] = "Receipt number contains invalid characters";
-            }
-            
-            // Check for reasonable amount limits (adjust as needed)
-            if ($amount && ($amount > 10000000 || $amount < 0.01)) {
-                $errors[] = "Amount must be between 0.01 and 10,000,000";
-            }
-            
-            if (!empty($errors)) {
-                throw new Exception("Validation failed: " . implode(", ", $errors));
-            }
-            
-            // Check for duplicate receipt number BEFORE processing
-            $duplicateCheck = $this->model->checkDuplicateReceipt($receiptNumber, $accountId);
-            if ($duplicateCheck['exists']) {
-                throw new Exception("Receipt number '{$receiptNumber}' already exists for this account");
-            }
-            
-            // Verify account exists and is active
-            $account = $this->model->getAccountById($accountId);
-            if (!$account) {
-                throw new Exception("Account not found with ID: {$accountId}");
-            }
-            
-            // Process the savings transaction
-            $result = $this->addSavings(
-                $accountId,
-                $amount,
-                $paymentMode,
-                $accountType,
-                $receiptNumber,
-                $servedBy
-            );
-            
-            // Verify the result
-            if (!$result || $result['status'] !== 'success') {
-                throw new Exception($result['message'] ?? 'Failed to process savings transaction');
-            }
-            
-            // Log successful transaction
-            error_log("Savings transaction successful: Receipt {$receiptNumber}, Amount {$amount}, Account {$accountId}");
-            
-            // Return proper JSON response
-            header('Content-Type: application/json; charset=utf-8');
-            header('Cache-Control: no-cache, must-revalidate');
-            http_response_code(200);
-            
-            echo json_encode([
-                'status' => 'success',
-                'message' => 'Savings added successfully',
-                'data' => [
-                    'savingsId' => $result['savingsId'] ?? null,
-                    'receiptNumber' => $receiptNumber,
-                    'amount' => $amount,
-                    'accountType' => $accountType,
+       private function handleAddSavings() {
+            try {
+                // Start session if not already started for user verification
+                if (session_status() == PHP_SESSION_NONE) {
+                    session_start();
+                }
+                
+                // Security check - ensure user is logged in
+                if (!isset($_SESSION['user_id'])) {
+                    throw new Exception("Unauthorized: User not logged in");
+                }
+                
+                // Log the request for debugging
+                error_log("AddSavings request from user " . $_SESSION['user_id'] . ": " . json_encode($_POST));
+                
+                // Extract and validate required parameters
+                $accountId = filter_var($_POST['accountId'] ?? null, FILTER_VALIDATE_INT);
+                $amount = filter_var($_POST['amount'] ?? null, FILTER_VALIDATE_FLOAT);
+                $paymentMode = trim($_POST['paymentMode'] ?? '');
+                $accountType = trim($_POST['accountType'] ?? '');
+                $receiptNumber = trim($_POST['receiptNumber'] ?? '');
+                $servedBy = $_SESSION['user_name'] ?? $_SESSION['username'] ?? 'Unknown';
+                
+                // Comprehensive validation
+                $errors = [];
+                
+                if (!$accountId || $accountId <= 0) {
+                    $errors[] = "Valid Account ID is required";
+                }
+                
+                if (!$amount || $amount <= 0) {
+                    $errors[] = "Valid amount is required";
+                }
+                
+                if (empty($paymentMode)) {
+                    $errors[] = "Payment mode is required";
+                }
+                
+                if (empty($accountType)) {
+                    $errors[] = "Account type is required";
+                }
+                
+                if (empty($receiptNumber)) {
+                    $errors[] = "Receipt number is required";
+                }
+                
+                // Validate receipt number format (adjust regex as needed)
+                if (!empty($receiptNumber) && !preg_match('/^[A-Za-z0-9\-_]+$/', $receiptNumber)) {
+                    $errors[] = "Receipt number contains invalid characters";
+                }
+                
+                // Check for reasonable amount limits (adjust as needed)
+                if ($amount && ($amount > 10000000 || $amount < 0.01)) {
+                    $errors[] = "Amount must be between 0.01 and 10,000,000";
+                }
+                
+                if (!empty($errors)) {
+                    throw new Exception("Validation failed: " . implode(", ", $errors));
+                }
+                
+                // Verify account exists and is active
+                $account = $this->model->getAccountById($accountId);
+                if (!$account) {
+                    throw new Exception("Account not found with ID: {$accountId}");
+                }
+                
+                // Process the savings transaction
+                $result = $this->addSavings(
+                    $accountId,
+                    $amount,
+                    $paymentMode,
+                    $accountType,
+                    $receiptNumber,
+                    $servedBy
+                );
+                
+                // Verify the result
+                if (!$result || $result['status'] !== 'success') {
+                    throw new Exception($result['message'] ?? 'Failed to process savings transaction');
+                }
+                
+                // Log successful transaction
+                error_log("Savings transaction successful: Receipt {$receiptNumber}, Amount {$amount}, Account {$accountId}");
+                
+                // Return proper JSON response
+                header('Content-Type: application/json; charset=utf-8');
+                header('Cache-Control: no-cache, must-revalidate');
+                http_response_code(200);
+                
+                echo json_encode([
+                    'status' => 'success',
+                    'message' => 'Savings added successfully',
+                    'data' => [
+                        'savingsId' => $result['savingsId'] ?? null,
+                        'receiptNumber' => $receiptNumber,
+                        'amount' => $amount,
+                        'accountType' => $accountType,
+                        'timestamp' => date('Y-m-d H:i:s')
+                    ]
+                ], JSON_UNESCAPED_UNICODE);
+                
+                exit; // Critical: prevent any additional output
+                
+            } catch (Exception $e) {
+                // Log the error with full context
+                error_log("AddSavings error: " . $e->getMessage() . " | POST data: " . json_encode($_POST) . " | User: " . ($_SESSION['user_id'] ?? 'unknown'));
+                
+                // Return proper error response
+                header('Content-Type: application/json; charset=utf-8');
+                header('Cache-Control: no-cache, must-revalidate');
+                http_response_code(400); // Bad Request
+                
+                echo json_encode([
+                    'status' => 'error',
+                    'message' => $e->getMessage(),
                     'timestamp' => date('Y-m-d H:i:s')
-                ]
-            ], JSON_UNESCAPED_UNICODE);
-            
-            exit; // Critical: prevent any additional output
-            
-        } catch (Exception $e) {
-            // Log the error with full context
-            error_log("AddSavings error: " . $e->getMessage() . " | POST data: " . json_encode($_POST) . " | User: " . ($_SESSION['user_id'] ?? 'unknown'));
-            
-            // Return proper error response
-            header('Content-Type: application/json; charset=utf-8');
-            header('Cache-Control: no-cache, must-revalidate');
-            http_response_code(400); // Bad Request
-            
-            echo json_encode([
-                'status' => 'error',
-                'message' => $e->getMessage(),
-                'timestamp' => date('Y-m-d H:i:s')
-            ], JSON_UNESCAPED_UNICODE);
-            
-            exit; // Critical: prevent any additional output
+                ], JSON_UNESCAPED_UNICODE);
+                
+                exit; // Critical: prevent any additional output
+            }
         }
-    }
+
 
     private function handleWithdraw() {
         try {
@@ -837,7 +867,7 @@ class AccountController {
     /**
      * Fixed handleRepayLoan method with duplicate prevention
      */
-    private function handleRepayLoan() {
+        private function handleRepayLoan() {
         try {
             // Start session if not already started
             if (session_status() == PHP_SESSION_NONE) {
@@ -895,12 +925,6 @@ class AccountController {
             
             if (!empty($errors)) {
                 throw new Exception("Validation failed: " . implode(", ", $errors));
-            }
-            
-            // Check for duplicate receipt number BEFORE processing
-            $duplicateCheck = $this->model->checkDuplicateReceipt($receiptNumber, $accountId);
-            if ($duplicateCheck['exists']) {
-                throw new Exception("Receipt number '{$receiptNumber}' already exists for this account");
             }
             
             // Verify loan exists and belongs to account
@@ -1103,26 +1127,108 @@ class AccountController {
         }
     }
 
-    private function handleDeleteRepayment() {
-        try {
-            $repaymentId = $_POST['repaymentId'] ?? null;
-            $loanId = $_POST['loanId'] ?? null;
-            $amount = $_POST['amount'] ?? null;
-            
-            if (!$repaymentId || !$loanId || !$amount) {
-                throw new Exception('Missing required parameters');
-            }
-            
-            $result = $this->deleteRepayment($repaymentId, $loanId, $amount);
-            echo json_encode($result);
-            
-        } catch (Exception $e) {
+   private function handleDeleteRepayment() {
+    try {
+        // Start session if not already started for authorization
+        if (session_status() == PHP_SESSION_NONE) {
+            session_start();
+        }
+        
+        // Check authorization - only admin and managers can delete repayments
+        if (!isset($_SESSION['user_id'])) {
+            throw new Exception("Unauthorized: User not logged in");
+        }
+        
+        if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['admin', 'manager'])) {
+            throw new Exception("Unauthorized: Only administrators and managers can delete repayments");
+        }
+        
+        // Extract and validate parameters
+        $repaymentId = filter_var($_POST['repaymentId'] ?? null, FILTER_VALIDATE_INT);
+        $loanId = filter_var($_POST['loanId'] ?? null, FILTER_VALIDATE_INT);
+        $amount = filter_var($_POST['amount'] ?? null, FILTER_VALIDATE_FLOAT);
+        
+        $errors = [];
+        
+        if (!$repaymentId || $repaymentId <= 0) {
+            $errors[] = "Valid repayment ID is required";
+        }
+        
+        if (!$loanId || $loanId <= 0) {
+            $errors[] = "Valid loan ID is required";
+        }
+        
+        if (!$amount || $amount <= 0) {
+            $errors[] = "Valid amount is required";
+        }
+        
+        if (!empty($errors)) {
+            throw new Exception("Validation failed: " . implode(", ", $errors));
+        }
+        
+        // Log the deletion request
+        error_log("Delete repayment request: RepaymentID=$repaymentId, LoanID=$loanId, Amount=$amount, User=" . $_SESSION['user_id']);
+        
+        // Verify that the repayment exists and belongs to the specified loan
+        $repaymentDetails = $this->model->getRepaymentDetails($repaymentId);
+        if ($repaymentDetails['status'] !== 'success' || !$repaymentDetails['repayment']) {
+            throw new Exception("Repayment record not found");
+        }
+        
+        $repayment = $repaymentDetails['repayment'];
+        if ($repayment['loan_id'] != $loanId) {
+            throw new Exception("Repayment does not belong to the specified loan");
+        }
+        
+        // Verify amount matches (with small tolerance for float precision)
+        if (abs(floatval($repayment['amount_repaid']) - $amount) > 0.01) {
+            throw new Exception("Amount mismatch. Expected: " . $repayment['amount_repaid'] . ", Received: " . $amount);
+        }
+        
+        // Perform the deletion
+        $result = $this->deleteRepayment($repaymentId, $loanId, $amount);
+        
+        // Return JSON response
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-cache, must-revalidate');
+        
+        if ($result['status'] === 'success') {
+            http_response_code(200);
+            echo json_encode([
+                'status' => 'success',
+                'message' => $result['message'],
+                'details' => $result['details'] ?? null,
+                'timestamp' => date('Y-m-d H:i:s')
+            ], JSON_UNESCAPED_UNICODE);
+        } else {
+            http_response_code(400);
             echo json_encode([
                 'status' => 'error',
-                'message' => $e->getMessage()
-            ]);
+                'message' => $result['message'],
+                'timestamp' => date('Y-m-d H:i:s')
+            ], JSON_UNESCAPED_UNICODE);
         }
+        
+        exit;
+        
+    } catch (Exception $e) {
+        // Log the error with full context
+        error_log("Delete repayment error: " . $e->getMessage() . " | POST data: " . json_encode($_POST) . " | User: " . ($_SESSION['user_id'] ?? 'unknown'));
+        
+        // Return error response
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-cache, must-revalidate');
+        http_response_code(400);
+        
+        echo json_encode([
+            'status' => 'error',
+            'message' => $e->getMessage(),
+            'timestamp' => date('Y-m-d H:i:s')
+        ], JSON_UNESCAPED_UNICODE);
+        
+        exit;
     }
+}
 
     private function handleGetNextShareholderNo() {
         try {

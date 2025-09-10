@@ -694,214 +694,315 @@ $(document).ready(function() {
     // =====================================
     
     // Add Savings Form - Fixed to match controller expectations
-    $('#addSavingsForm').submit(function(e) {
-        e.preventDefault();
-        const submitButton = $(this).find('button[type="submit"]');
-        const originalText = submitButton.html();
-        
-        // Prevent multiple submissions
-        if (submitButton.prop('disabled')) {
-            return false;
-        }
-        
-        submitButton.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Processing...');
-        
-        // Validation
-        const missingFields = [];
-        if (!$('#receiptNumber').val()) missingFields.push("Receipt Number");
-        if (!$('#accountType').val()) missingFields.push("Account Type");
-        if (!$('#amount').val()) missingFields.push("Amount");
-        if (!$('#paymentMode').val()) missingFields.push("Payment Mode");
-
-        if (missingFields.length > 0) {
-            showToast("Please fill in: " + missingFields.join(", "), 'warning');
-            submitButton.prop('disabled', false).html(originalText);
-            return false;
-        }
-        
-        $.ajax({
-            url: '../controllers/accountController.php?action=addSavings',
-            type: 'POST',
-            data: $(this).serialize(),
-            dataType: 'json',
-            timeout: 10000,
-            success: function(response) {
-                if (response && response.status === 'success') {
-                    showToast('Savings added successfully!', 'success');
-                    $('#addSavingsModal').modal('hide');
-                    $(document).trigger('savingsProcessed', [response]);
-                    setTimeout(() => location.reload(), 1500);
-                } else {
-                    showToast('Error: ' + (response.message || 'Unknown error occurred'), 'error');
-                }
-            },
-            error: function(xhr, status, error) {
-                let errorMessage = 'Error adding savings. Please try again.';
+   $('#addSavingsForm').submit(function(e) {
+    e.preventDefault();
+    
+    const $form = $(this);
+    const submitButton = $form.find('button[type="submit"]');
+    const originalText = submitButton.html();
+    
+    // Prevent multiple submissions
+    if (submitButton.prop('disabled')) {
+        console.log('Savings form submission blocked - already processing');
+        return false;
+    }
+    
+    // Disable submit button immediately
+    submitButton.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Processing...');
+    
+    // Comprehensive validation
+    const validationErrors = [];
+    const receiptNumber = $('#receiptNumber').val()?.trim();
+    const accountType = $('#accountType').val();
+    const amount = parseFloat($('#amount').val());
+    const paymentMode = $('#paymentMode').val();
+    
+    if (!receiptNumber) validationErrors.push("Receipt Number");
+    if (!accountType) validationErrors.push("Account Type");
+    if (!amount || amount <= 0) validationErrors.push("Valid Amount");
+    if (!paymentMode) validationErrors.push("Payment Mode");
+    
+    if (validationErrors.length > 0) {
+        showToast("Please correct: " + validationErrors.join(", "), 'warning');
+        submitButton.prop('disabled', false).html(originalText);
+        return false;
+    }
+    
+    // Prepare form data
+    const formData = {
+        accountId: $('input[name="accountId"]').val(),
+        amount: amount,
+        paymentMode: paymentMode,
+        accountType: accountType,
+        receiptNumber: receiptNumber
+    };
+    
+    console.log('Submitting savings:', formData);
+    
+    $.ajax({
+        url: '../controllers/accountController.php?action=addSavings',
+        type: 'POST',
+        data: formData,
+        dataType: 'json',
+        timeout: 15000,
+        cache: false,
+        success: function(response) {
+            console.log('Savings success response:', response);
+            
+            if (response && response.status === 'success') {
+                let message = 'Savings added successfully!';
+                let toastType = 'success';
                 
-                if (status === 'timeout') {
-                    errorMessage = 'Request timed out. Please try again.';
-                } else if (xhr.status === 500) {
-                    errorMessage = 'Server error. Please contact support.';
-                } else if (xhr.responseText) {
-                    try {
-                        const response = JSON.parse(xhr.responseText);
-                        errorMessage = response.message || errorMessage;
-                    } catch (e) {
-                        // Keep default error message
+                // Handle receipt reuse warning
+                if (response.warning) {
+                    toastType = 'warning';
+                    message = 'Savings added successfully, but please note:\n\n' + response.warning;
+                    
+                    if (response.receiptInfo) {
+                        const info = response.receiptInfo;
+                        if (info.usage_count > 0) {
+                            message += `\n\nReceipt Details:`;
+                            message += `\n• Previously used: ${info.usage_count} time(s)`;
+                            message += `\n• Used for: ${info.used_types}`;
+                            if (info.last_used) {
+                                message += `\n• Last used: ${new Date(info.last_used).toLocaleDateString('en-KE')}`;
+                            }
+                            
+                            // Show additional confirmation for frequently used receipts
+                            if (info.usage_count >= 3) {
+                                message += `\n\n⚠️ This receipt has been used ${info.usage_count} times. Please verify this is correct.`;
+                            }
+                        }
                     }
                 }
                 
-                showToast(errorMessage, 'error');
-            },
-            complete: function() {
-                submitButton.prop('disabled', false).html(originalText);
+                showToast(message, toastType);
+                $('#addSavingsModal').modal('hide');
+                
+                // Trigger custom events for dashboard updates
+                $(document).trigger('savingsProcessed', [response]);
+                
+                // Optional: Print receipt if details available
+                if (response.data && response.data.savingsId && typeof printSavingsReceipt === 'function') {
+                    setTimeout(() => {
+                        // Fetch and print receipt
+                        $.ajax({
+                            url: '../controllers/accountController.php',
+                            type: 'GET',
+                            data: {
+                                action: 'getSavingsDetails',
+                                savingsId: response.data.savingsId
+                            },
+                            success: function(receiptResponse) {
+                                if (receiptResponse.status === 'success') {
+                                    printSavingsReceipt(receiptResponse.details, 'Savings');
+                                }
+                            }
+                        });
+                    }, 500);
+                }
+                
+                // Reload page after delay
+                setTimeout(() => {
+                    location.reload();
+                }, 2000);
+                
+            } else {
+                throw new Error(response?.message || 'Invalid response from server');
             }
-        });
+        },
+        error: function(xhr, status, error) {
+            console.error('Savings AJAX Error:', {
+                status: status,
+                error: error,
+                statusCode: xhr.status,
+                responseText: xhr.responseText
+            });
+            
+            let errorMessage = 'Error adding savings. Please try again.';
+            
+            if (status === 'timeout') {
+                errorMessage = 'Request timed out. Please check your connection and try again.';
+            } else if (xhr.status === 400) {
+                errorMessage = 'Invalid savings data. Please check your inputs.';
+            } else if (xhr.status === 403) {
+                errorMessage = 'Unauthorized. Please log in again.';
+            } else if (xhr.status === 500) {
+                errorMessage = 'Server error. Please contact support if this persists.';
+            } else if (xhr.responseText) {
+                try {
+                    const response = JSON.parse(xhr.responseText);
+                    if (response.message) {
+                        errorMessage = response.message;
+                    }
+                } catch (parseError) {
+                    console.error('Error parsing error response:', parseError);
+                }
+            }
+            
+            showToast(errorMessage, 'error');
+        },
+        complete: function(xhr, status) {
+            // Always reset button state
+            submitButton.prop('disabled', false).html(originalText);
+            console.log('Savings request completed with status:', status);
+        }
     });
+});
 
     // Withdraw Form - matches controller pattern
-        $('#withdrawForm').submit(function(e) {
-            e.preventDefault();
+       $('#withdrawForm').submit(function(e) {
+    e.preventDefault();
+    
+    const $form = $(this);
+    const submitButton = $form.find('button[type="submit"]');
+    const originalText = submitButton.html();
+    
+    // Prevent multiple submissions
+    if (submitButton.prop('disabled')) {
+        console.log('Withdrawal submission blocked - already processing');
+        return false;
+    }
+    
+    submitButton.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Processing...');
+    
+    // Comprehensive validation
+    const validationErrors = [];
+    const receiptNumber = $('#withdrawReceiptNumber').val()?.trim();
+    const accountType = $('#withdrawAccountType').val();
+    const amount = parseFloat($('#withdrawAmount').val());
+    const withdrawalFee = parseFloat($('#withdrawalFee').val()) || 0;
+    const paymentMode = $('#withdrawPaymentMode').val();
+    
+    if (!receiptNumber) validationErrors.push("Receipt Number");
+    if (!accountType) validationErrors.push("Account Type");
+    if (!amount || amount <= 0) validationErrors.push("Valid Amount");
+    if (!paymentMode) validationErrors.push("Payment Mode");
+    
+    if (validationErrors.length > 0) {
+        showToast("Please correct: " + validationErrors.join(", "), 'warning');
+        submitButton.prop('disabled', false).html(originalText);
+        return false;
+    }
+    
+    // Prepare form data
+    const formData = {
+        accountId: $('input[name="accountId"]').val(),
+        amount: amount,
+        withdrawalFee: withdrawalFee,
+        accountType: accountType,
+        receiptNumber: receiptNumber,
+        paymentMode: paymentMode,
+        served_by: $('input[name="served_by"]').val()
+    };
+    
+    console.log('Submitting withdrawal:', formData);
+    
+    $.ajax({
+        url: '../controllers/accountController.php?action=withdraw',
+        type: 'POST',
+        data: formData,
+        dataType: 'json',
+        timeout: 15000,
+        cache: false,
+        success: function(response) {
+            console.log('Withdrawal success response:', response);
             
-            const $form = $(this);
-            const submitButton = $form.find('button[type="submit"]');
-            const originalText = submitButton.html();
-            
-            // Prevent multiple submissions
-            if (submitButton.prop('disabled')) {
-                console.log('Form submission blocked - already processing');
-                return false;
-            }
-            
-            // Disable submit button immediately
-            submitButton.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Processing...');
-            
-            // Comprehensive validation
-            const validationErrors = [];
-            const receiptNumber = $('#withdrawReceiptNumber').val()?.trim();
-            const accountType = $('#withdrawAccountType').val();
-            const amount = parseFloat($('#withdrawAmount').val());
-            const withdrawalFee = parseFloat($('#withdrawalFee').val()) || 0;
-            const paymentMode = $('#withdrawPaymentMode').val();
-            
-            if (!receiptNumber) validationErrors.push("Receipt Number");
-            if (!accountType) validationErrors.push("Account Type");
-            if (!amount || amount <= 0) validationErrors.push("Valid Amount");
-            if (!paymentMode) validationErrors.push("Payment Mode");
-            
-            // Check for duplicate receipt number (client-side prevention)
-            const existingReceipts = [];
-            $('#savingsTable tbody tr').each(function() {
-                const receiptCell = $(this).find('td:eq(2)').text().trim();
-                if (receiptCell) existingReceipts.push(receiptCell);
-            });
-            
-            if (existingReceipts.includes(receiptNumber)) {
-                validationErrors.push("Receipt Number already exists");
-            }
-            
-            if (validationErrors.length > 0) {
-                showToast("Please correct: " + validationErrors.join(", "), 'warning');
-                submitButton.prop('disabled', false).html(originalText);
-                return false;
-            }
-            
-            // Prepare form data
-            const formData = {
-                accountId: $('input[name="accountId"]').val(),
-                amount: amount,
-                withdrawalFee: withdrawalFee,
-                accountType: accountType,
-                receiptNumber: receiptNumber,
-                paymentMode: paymentMode,
-                served_by: $('input[name="served_by"]').val()
-            };
-            
-            console.log('Submitting withdrawal:', formData);
-            
-            $.ajax({
-                url: '../controllers/accountController.php?action=withdraw',
-                type: 'POST',
-                data: formData,
-                dataType: 'json',
-                timeout: 15000,
-                cache: false,
-                success: function(response) {
-                    console.log('Withdrawal success response:', response);
+            if (response && response.status === 'success') {
+                let message = 'Withdrawal processed successfully!';
+                let toastType = 'success';
+                
+                // Handle receipt reuse warning (if applicable)
+                if (response.warning) {
+                    toastType = 'warning';
+                    message = 'Withdrawal processed successfully, but please note:\n\n' + response.warning;
                     
-                    if (response && response.status === 'success') {
-                        showToast('Withdrawal processed successfully!', 'success');
-                        $('#withdrawModal').modal('hide');
-                        
-                        // Trigger custom events for dashboard updates
-                        $(document).trigger('withdrawalProcessed', [response]);
-                        
-                        // Optional: Print receipt if details available
-                        if (response.details && typeof printWithdrawalReceipt === 'function') {
-                            setTimeout(() => {
-                                printWithdrawalReceipt(response.details);
-                            }, 500);
-                        }
-                        
-                        // Reload page after delay
-                        setTimeout(() => {
-                            location.reload();
-                        }, 1500);
-                        
-                    } else {
-                        throw new Error(response?.message || 'Invalid response from server');
-                    }
-                },
-                error: function(xhr, status, error) {
-                    console.error('Withdrawal AJAX Error:', {
-                        status: status,
-                        error: error,
-                        statusCode: xhr.status,
-                        responseText: xhr.responseText
-                    });
-                    
-                    let errorMessage = 'Error processing withdrawal. Please try again.';
-                    
-                    if (status === 'timeout') {
-                        errorMessage = 'Request timed out. Please check your connection and try again.';
-                    } else if (xhr.status === 400) {
-                        errorMessage = 'Invalid withdrawal data. Please check your inputs.';
-                    } else if (xhr.status === 403) {
-                        errorMessage = 'Unauthorized. Please log in again.';
-                    } else if (xhr.status === 500) {
-                        errorMessage = 'Server error. Please contact support if this persists.';
-                    } else if (xhr.responseText) {
-                        try {
-                            const response = JSON.parse(xhr.responseText);
-                            if (response.message) {
-                                errorMessage = response.message;
+                    if (response.receiptInfo) {
+                        const info = response.receiptInfo;
+                        if (info.usage_count > 0) {
+                            message += `\n\nReceipt Details:`;
+                            message += `\n• Previously used: ${info.usage_count} time(s)`;
+                            message += `\n• Used for: ${info.used_types}`;
+                            if (info.last_used) {
+                                message += `\n• Last used: ${new Date(info.last_used).toLocaleDateString('en-KE')}`;
                             }
-                        } catch (parseError) {
-                            console.error('Error parsing error response:', parseError);
                         }
                     }
-                    
-                    showToast(errorMessage, 'error');
-                },
-                complete: function(xhr, status) {
-                    // Always reset button state
-                    submitButton.prop('disabled', false).html(originalText);
-                    console.log('Withdrawal request completed with status:', status);
                 }
+                
+                showToast(message, toastType);
+                $('#withdrawModal').modal('hide');
+                
+                // Trigger custom events for dashboard updates
+                $(document).trigger('withdrawalProcessed', [response]);
+                
+                // Optional: Print receipt if details available
+                if (response.details && typeof printWithdrawalReceipt === 'function') {
+                    setTimeout(() => {
+                        printWithdrawalReceipt(response.details);
+                    }, 500);
+                }
+                
+                // Reload page after delay
+                setTimeout(() => {
+                    location.reload();
+                }, 1500);
+                
+            } else {
+                throw new Error(response?.message || 'Invalid response from server');
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('Withdrawal AJAX Error:', {
+                status: status,
+                error: error,
+                statusCode: xhr.status,
+                responseText: xhr.responseText
             });
-        });
+            
+            let errorMessage = 'Error processing withdrawal. Please try again.';
+            
+            if (status === 'timeout') {
+                errorMessage = 'Request timed out. Please check your connection and try again.';
+            } else if (xhr.status === 400) {
+                errorMessage = 'Invalid withdrawal data. Please check your inputs.';
+            } else if (xhr.status === 403) {
+                errorMessage = 'Unauthorized. Please log in again.';
+            } else if (xhr.status === 500) {
+                errorMessage = 'Server error. Please contact support if this persists.';
+            } else if (xhr.responseText) {
+                try {
+                    const response = JSON.parse(xhr.responseText);
+                    if (response.message) {
+                        errorMessage = response.message;
+                    }
+                } catch (parseError) {
+                    console.error('Error parsing error response:', parseError);
+                }
+            }
+            
+            showToast(errorMessage, 'error');
+        },
+        complete: function(xhr, status) {
+            // Always reset button state
+            submitButton.prop('disabled', false).html(originalText);
+            console.log('Withdrawal request completed with status:', status);
+        }
+    });
+});
+
 
         // Reset form when modal is hidden
         $('#withdrawModal').on('hidden.bs.modal', function () {
-            const $form = $('#withdrawForm');
-            $form[0].reset();
-            $form.find('button[type="submit"]').prop('disabled', false).html('<i class="fas fa-minus"></i> Withdraw');
-            $('#withdrawAvailableBalance, #totalWithdrawal').val('');
-            
-            // Clear any validation errors
-            $form.find('.is-invalid').removeClass('is-invalid');
-            $form.find('.invalid-feedback').remove();
-        });
+        const $form = $('#withdrawForm');
+        $form[0].reset();
+        $form.find('button[type="submit"]').prop('disabled', false).html('<i class="fas fa-minus"></i> Withdraw');
+        $('#withdrawAvailableBalance, #totalWithdrawal').val('');
+        
+        // Clear any validation errors
+        $form.find('.is-invalid').removeClass('is-invalid');
+        $form.find('.invalid-feedback').remove();
+    });
 
     // =====================================
     // DELETE SAVINGS/WITHDRAWAL FUNCTIONALITY
@@ -1039,9 +1140,15 @@ $(document).ready(function() {
     });
 
     // Reset forms when modals are hidden
-    $('#addSavingsModal, #withdrawModal, #repayLoanModal').on('hidden.bs.modal', function() {
-        $(this).find('form')[0].reset();
-        $(this).find('button[type="submit"]').prop('disabled', false);
+    $('#addSavingsModal').on('hidden.bs.modal', function () {
+    const $form = $('#addSavingsForm');
+    $form[0].reset();
+    $form.find('button[type="submit"]').prop('disabled', false).html('<i class="fas fa-plus"></i> Add Savings');
+    $('#availableBalance').val('');
+    
+        // Clear any validation errors
+        $form.find('.is-invalid').removeClass('is-invalid');
+        $form.find('.invalid-feedback').remove();
     });
 
     // Print savings receipt

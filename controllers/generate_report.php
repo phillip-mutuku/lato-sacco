@@ -395,7 +395,7 @@ if ($status_filter == '1') {
         INNER JOIN client_accounts c ON l.account_id = c.account_id
         $where_clause
         ORDER BY l.date_applied DESC, l.ref_no";
-} elseif ($status_filter == '3') {
+} elseif ($status_filter !== '' && $status_filter != '1') {
     // For disbursed loans, we need payment data, so use INNER JOIN
     $main_query = "SELECT 
         l.ref_no,

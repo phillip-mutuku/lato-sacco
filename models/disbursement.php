@@ -11,44 +11,45 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
     exit();
 }
 
-    // Initialize filter conditions
-    $loan_where_clause = "1=1";
-    $payment_where_clause = "1=1";
+    // Initialize filter conditions - SEPARATE LOAN AND PAYMENT CONDITIONS
+    $loan_where_conditions = [];
+    $payment_where_conditions = [];
     $loan_params = array();
     $payment_params = array();
     $loan_types = "";
     $payment_types = "";
 
+    // Handle date filters - FIXED LOGIC
     if (isset($_GET['quick_filter'])) {
         switch ($_GET['quick_filter']) {
             case 'today':
-                $loan_where_clause .= " AND DATE(l.date_applied) = CURDATE()";
-                $payment_where_clause .= " AND DATE(p.date_created) = CURDATE()";
+                $loan_where_conditions[] = "DATE(l.date_applied) = CURDATE()";
+                $payment_where_conditions[] = "DATE(p.date_created) = CURDATE()";
                 break;
             case 'yesterday':
-                $loan_where_clause .= " AND DATE(l.date_applied) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)";
-                $payment_where_clause .= " AND DATE(p.date_created) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)";
+                $loan_where_conditions[] = "DATE(l.date_applied) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)";
+                $payment_where_conditions[] = "DATE(p.date_created) = DATE_SUB(CURDATE(), INTERVAL 1 DAY)";
                 break;
             case 'week':
-                $loan_where_clause .= " AND YEARWEEK(l.date_applied, 1) = YEARWEEK(CURDATE(), 1)";
-                $payment_where_clause .= " AND YEARWEEK(p.date_created, 1) = YEARWEEK(CURDATE(), 1)";
+                $loan_where_conditions[] = "YEARWEEK(l.date_applied, 1) = YEARWEEK(CURDATE(), 1)";
+                $payment_where_conditions[] = "YEARWEEK(p.date_created, 1) = YEARWEEK(CURDATE(), 1)";
                 break;
             case 'month':
-                $loan_where_clause .= " AND YEAR(l.date_applied) = YEAR(CURDATE()) AND MONTH(l.date_applied) = MONTH(CURDATE())";
-                $payment_where_clause .= " AND YEAR(p.date_created) = YEAR(CURDATE()) AND MONTH(p.date_created) = MONTH(CURDATE())";
+                $loan_where_conditions[] = "YEAR(l.date_applied) = YEAR(CURDATE()) AND MONTH(l.date_applied) = MONTH(CURDATE())";
+                $payment_where_conditions[] = "YEAR(p.date_created) = YEAR(CURDATE()) AND MONTH(p.date_created) = MONTH(CURDATE())";
                 break;
             case 'custom':
                 if (!empty($_GET['start_date'])) {
-                    $loan_where_clause .= " AND DATE(l.date_applied) >= ?";
-                    $payment_where_clause .= " AND DATE(p.date_created) >= ?";
+                    $loan_where_conditions[] = "DATE(l.date_applied) >= ?";
+                    $payment_where_conditions[] = "DATE(p.date_created) >= ?";
                     $loan_params[] = $_GET['start_date'];
                     $payment_params[] = $_GET['start_date'];
                     $loan_types .= "s";
                     $payment_types .= "s";
                 }
                 if (!empty($_GET['end_date'])) {
-                    $loan_where_clause .= " AND DATE(l.date_applied) <= ?";
-                    $payment_where_clause .= " AND DATE(p.date_created) <= ?";
+                    $loan_where_conditions[] = "DATE(l.date_applied) <= ?";
+                    $payment_where_conditions[] = "DATE(p.date_created) <= ?";
                     $loan_params[] = $_GET['end_date'];
                     $payment_params[] = $_GET['end_date'];
                     $loan_types .= "s";
@@ -58,48 +59,82 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
         }
     }
 
+    // Add status filter to loan conditions
     if (isset($_GET['status']) && $_GET['status'] !== '') {
-        $loan_where_clause .= " AND l.status = ?";
+        $loan_where_conditions[] = "l.status = ?";
         $loan_params[] = $_GET['status'];
         $loan_types .= "i";
     }
 
-    // Calculate total pending disbursements with filters
+    // Build WHERE clauses
+    $loan_where_clause = !empty($loan_where_conditions) ? implode(' AND ', $loan_where_conditions) : "1=1";
+    $payment_where_clause = !empty($payment_where_conditions) ? implode(' AND ', $payment_where_conditions) : "1=1";
+
+    // Calculate total pending disbursements with filters - FIXED QUERY
     $total_pending_query = "SELECT COALESCE(SUM(l.amount), 0) as total 
                            FROM loan l 
                            WHERE l.status = 1";
-    if ($loan_where_clause !== "1=1") {
-        $total_pending_query .= " AND " . str_replace("l.", "", $loan_where_clause);
+    
+    // Add date filters for pending loans if they apply
+    if (!empty($loan_where_conditions) && (!isset($_GET['status']) || $_GET['status'] == '1' || $_GET['status'] === '')) {
+        $pending_date_conditions = [];
+        $pending_params = [];
+        $pending_types = "";
+        
+        // Only add date conditions, not status conditions
+        foreach ($loan_where_conditions as $condition) {
+            if (strpos($condition, 'l.status') === false) {
+                $pending_date_conditions[] = $condition;
+            }
+        }
+        
+        // Add corresponding parameters for date conditions
+        if (!empty($pending_date_conditions)) {
+            $total_pending_query .= " AND " . implode(' AND ', $pending_date_conditions);
+            
+            // Add only date-related parameters
+            if (isset($_GET['quick_filter']) && $_GET['quick_filter'] == 'custom') {
+                if (!empty($_GET['start_date'])) {
+                    $pending_params[] = $_GET['start_date'];
+                    $pending_types .= "s";
+                }
+                if (!empty($_GET['end_date'])) {
+                    $pending_params[] = $_GET['end_date'];
+                    $pending_types .= "s";
+                }
+            }
+        }
+        
+        $stmt = $db->conn->prepare($total_pending_query);
+        if (!empty($pending_params)) {
+            $stmt->bind_param($pending_types, ...$pending_params);
+        }
+    } else {
+        $stmt = $db->conn->prepare($total_pending_query);
     }
-    $stmt = $db->conn->prepare($total_pending_query);
-    if (!empty($loan_params)) {
-        $stmt->bind_param($loan_types, ...$loan_params);
-    }
+    
     $stmt->execute();
     $total_pending = $stmt->get_result()->fetch_assoc()['total'] ?? 0;
 
-    // Calculate total disbursements today with filters
+    // Calculate total disbursements today - FIXED QUERY  
     $total_disbursements_query = "SELECT COALESCE(SUM(p.pay_amount), 0) as total 
                                  FROM payment p 
                                  WHERE DATE(p.date_created) = CURDATE()";
-    if ($payment_where_clause !== "1=1") {
-        $total_disbursements_query .= " AND " . str_replace("p.", "", $payment_where_clause);
-    }
+    
+    // Don't add loan-specific filters to payment query
     $stmt = $db->conn->prepare($total_disbursements_query);
-    if (!empty($payment_params)) {
-        $stmt->bind_param($payment_types, ...$payment_params);
-    }
     $stmt->execute();
     $total_disbursements_today = $stmt->get_result()->fetch_assoc()['total'] ?? 0;
 
-    // Calculate filtered totals
+    // Calculate filtered totals - FIXED QUERY
     $filtered_totals_query = "SELECT 
         COUNT(*) as total_loans,
         COALESCE(SUM(CASE WHEN l.status = 1 THEN l.amount ELSE 0 END), 0) as pending_amount,
-        COALESCE(SUM(CASE WHEN l.status = 3 THEN l.amount ELSE 0 END), 0) as disbursed_amount,
+        COALESCE(SUM(CASE WHEN l.status != 1 THEN l.amount ELSE 0 END), 0) as disbursed_amount,
         COALESCE(SUM(l.amount), 0) as total_amount
         FROM loan l 
-        WHERE " . str_replace("l.", "", $loan_where_clause);
+        WHERE " . $loan_where_clause;
+        
     $stmt = $db->conn->prepare($filtered_totals_query);
     if (!empty($loan_params)) {
         $stmt->bind_param($loan_types, ...$loan_params);
@@ -107,41 +142,109 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
     $stmt->execute();
     $filtered_totals = $stmt->get_result()->fetch_assoc();
 
-    // Get pending loans with filters
+    // Get pending loans with filters - SIMPLE APPROACH
     $pending_loans_query = "SELECT l.*, c.first_name, c.last_name,
                            COALESCE(l.date_released, l.date_applied) as approval_date
                            FROM loan l 
                            INNER JOIN client_accounts c ON l.account_id = c.account_id 
                            WHERE l.status = 1";
-    if ($loan_where_clause !== "1=1") {
-        $pending_loans_query .= " AND " . $loan_where_clause;
+    
+    // Separate parameters for pending loans
+    $pending_loan_params = [];
+    $pending_loan_types = "";
+    
+    // Add date conditions for pending loans if not filtering for disbursed only
+    if (!isset($_GET['status']) || $_GET['status'] === '' || $_GET['status'] == '1') {
+        if (!empty($loan_where_conditions)) {
+            $pending_date_conditions = [];
+            foreach ($loan_where_conditions as $condition) {
+                if (strpos($condition, 'l.status') === false) {
+                    $pending_date_conditions[] = $condition;
+                }
+            }
+            if (!empty($pending_date_conditions)) {
+                $pending_loans_query .= " AND " . implode(' AND ', $pending_date_conditions);
+                
+                // Add date parameters for pending loans
+                if (isset($_GET['quick_filter']) && $_GET['quick_filter'] == 'custom') {
+                    if (!empty($_GET['start_date'])) {
+                        $pending_loan_params[] = $_GET['start_date'];
+                        $pending_loan_types .= "s";
+                    }
+                    if (!empty($_GET['end_date'])) {
+                        $pending_loan_params[] = $_GET['end_date'];
+                        $pending_loan_types .= "s";
+                    }
+                }
+            }
+        }
+    } else {
+        // If filtering for disbursed only, add impossible condition
+        $pending_loans_query .= " AND 1=0";
     }
+    
     $pending_loans_query .= " ORDER BY l.loan_id DESC";
     $stmt = $db->conn->prepare($pending_loans_query);
-    if (!empty($loan_params)) {
-        $stmt->bind_param($loan_types, ...$loan_params);
+    
+    if (!empty($pending_loan_params)) {
+        $stmt->bind_param($pending_loan_types, ...$pending_loan_params);
     }
+    
     $stmt->execute();
     $pending_loans = $stmt->get_result();
 
-    // Get all disbursed loans with filters
+    // Get disbursed loans with filters - SIMPLE APPROACH
     $disbursed_loans_query = "SELECT p.*, l.ref_no, l.status, l.loan_term, l.monthly_payment, u.username as disbursed_by 
                              FROM payment p 
                              INNER JOIN loan l ON p.loan_id = l.loan_id 
                              LEFT JOIN user u ON p.user_id = u.user_id
                              WHERE 1=1";
-    if ($payment_where_clause !== "1=1") {
-        $disbursed_loans_query .= " AND " . $payment_where_clause;
+    
+    // Separate parameters for disbursed loans                         
+    $disbursed_loan_params = [];
+    $disbursed_loan_types = "";
+    
+    // If filtering for pending only, add impossible condition
+    if (isset($_GET['status']) && $_GET['status'] == '1') {
+        $disbursed_loans_query .= " AND 1=0";
+    } else {
+        // Add status filter for disbursed loans
+        if (isset($_GET['status']) && $_GET['status'] !== '' && $_GET['status'] != '1') {
+            $disbursed_loans_query .= " AND l.status = ?";
+            $disbursed_loan_params[] = $_GET['status'];
+            $disbursed_loan_types .= "i";
+        }
+        
+        // Add date conditions for disbursed loans
+        if (!empty($payment_where_conditions)) {
+            $disbursed_loans_query .= " AND " . implode(' AND ', $payment_where_conditions);
+            
+            // Add date parameters for disbursed loans
+            if (isset($_GET['quick_filter']) && $_GET['quick_filter'] == 'custom') {
+                if (!empty($_GET['start_date'])) {
+                    $disbursed_loan_params[] = $_GET['start_date'];
+                    $disbursed_loan_types .= "s";
+                }
+                if (!empty($_GET['end_date'])) {
+                    $disbursed_loan_params[] = $_GET['end_date'];
+                    $disbursed_loan_types .= "s";
+                }
+            }
+        }
     }
+    
     $disbursed_loans_query .= " ORDER BY p.date_created DESC";
     $stmt = $db->conn->prepare($disbursed_loans_query);
-    if (!empty($payment_params)) {
-        $stmt->bind_param($payment_types, ...$payment_params);
+    
+    if (!empty($disbursed_loan_params)) {
+        $stmt->bind_param($disbursed_loan_types, ...$disbursed_loan_params);
     }
+    
     $stmt->execute();
     $tbl_payment = $stmt->get_result();
 
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 

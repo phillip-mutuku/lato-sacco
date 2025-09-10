@@ -493,176 +493,187 @@
 $(document).ready(function() {
     // Initialize DataTable for repayments when section becomes active
     $(document).on('sectionChanged', function(event, section) {
-        if (section === 'repayments') {
-            setTimeout(() => {
-                if (!$.fn.DataTable.isDataTable('#repaymentTable')) {
-                    $('#repaymentTable').DataTable({
-                        responsive: true,
-                        pageLength: 10,
-                        order: [[3, 'desc']], // Order by date paid
-                        scrollX: true,
-                        autoWidth: false,
-                        language: {
-                            search: "Search:",
-                            lengthMenu: "Show _MENU_ entries",
-                            info: "Showing _START_ to _END_ of _TOTAL_ entries"
+    if (section === 'repayments') {
+        setTimeout(() => {
+            if (!$.fn.DataTable.isDataTable('#repaymentTable')) {
+                $('#repaymentTable').DataTable({
+                    responsive: true,
+                    pageLength: 10,
+                    order: [[3, 'desc']], // Order by date paid (newest first)
+                    scrollX: true,
+                    autoWidth: false,
+                    language: {
+                        search: "Search repayments:",
+                        lengthMenu: "Show _MENU_ repayments",
+                        info: "Showing _START_ to _END_ of _TOTAL_ repayments",
+                        emptyTable: "No loan repayments found",
+                        zeroRecords: "No matching repayments found"
+                    },
+                    columnDefs: [
+                        { 
+                            targets: '_all', 
+                            className: 'text-nowrap' 
                         },
-                        columnDefs: [
-                            { targets: '_all', className: 'text-nowrap' }
-                        ]
-                    });
-                }
-            }, 100);
-        }
-    });
+                        {
+                            targets: [2], // Amount column
+                            render: function(data, type, row) {
+                                if (type === 'display') {
+                                    // Format currency display
+                                    const amount = parseFloat(data.replace(/[^\d.-]/g, ''));
+                                    return 'KSh ' + formatCurrency(amount);
+                                }
+                                return data;
+                            }
+                        },
+                        {
+                            targets: [6], // Action column
+                            orderable: false,
+                            searchable: false
+                        }
+                    ],
+                    drawCallback: function() {
+                        // Reinitialize tooltips after table redraw
+                        $('[data-toggle="tooltip"]').tooltip();
+                    }
+                });
+            }
+        }, 100);
+    }
+});
 
         // Repay Loan Form
-        $('#repayLoanForm').submit(function(e) {
-        e.preventDefault();
-        
-        const $form = $(this);
-        const submitButton = $form.find('button[type="submit"]');
-        const originalText = submitButton.html();
-        
-        // Prevent multiple submissions
-        if (submitButton.prop('disabled')) {
-            console.log('Loan repayment submission blocked - already processing');
-            return false;
-        }
-        
-        // Disable submit button immediately
-        submitButton.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Processing...');
-        
-        // Comprehensive validation
-        const validationErrors = [];
-        const loanId = $('#loanSelect').val();
-        const receiptNumber = $('#loanReceiptNumber').val()?.trim();
-        const repayAmount = parseFloat($('#repayAmount').val());
-        const paymentMode = $('#repayPaymentMode').val();
-        const accountId = $('input[name="accountId"]').val();
-        const servedBy = $('input[name="served_by"]').val();
-        
-        if (!loanId) validationErrors.push("Loan Selection");
-        if (!receiptNumber) validationErrors.push("Receipt Number");
-        if (!repayAmount || repayAmount <= 0) validationErrors.push("Valid Repayment Amount");
-        if (!paymentMode) validationErrors.push("Payment Mode");
-        
-        // Check for duplicate receipt number in repayments table
-        const existingRepaymentReceipts = [];
-        $('#repaymentTable tbody tr').each(function() {
-            const receiptCell = $(this).find('td:eq(1)').text().trim();
-            if (receiptCell) existingRepaymentReceipts.push(receiptCell);
-        });
-        
-        if (existingRepaymentReceipts.includes(receiptNumber)) {
-            validationErrors.push("Receipt Number already exists in repayments");
-        }
-        
-        // Validate repayment amount against outstanding balance
-        const outstandingText = $('#outstandingBalance').val();
-        if (outstandingText) {
-            const outstandingMatch = outstandingText.match(/[\d,]+\.?\d*/);
-            if (outstandingMatch) {
-                const outstandingAmount = parseFloat(outstandingMatch[0].replace(/,/g, ''));
-                if (repayAmount > outstandingAmount) {
-                    validationErrors.push("Repayment amount cannot exceed outstanding balance");
+       $('#repayLoanForm').submit(function(e) {
+    e.preventDefault();
+    
+    const $form = $(this);
+    const submitButton = $form.find('button[type="submit"]');
+    const originalText = submitButton.html();
+    
+    // Prevent multiple submissions
+    if (submitButton.prop('disabled')) {
+        console.log('Loan repayment submission blocked - already processing');
+        return false;
+    }
+    
+    // Disable submit button immediately
+    submitButton.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Processing...');
+    
+    // Comprehensive validation
+    const validationErrors = [];
+    const loanId = $('#loanSelect').val();
+    const receiptNumber = $('#loanReceiptNumber').val()?.trim();
+    const repayAmount = parseFloat($('#repayAmount').val());
+    const paymentMode = $('#repayPaymentMode').val();
+    const accountId = $('input[name="accountId"]').val();
+    const servedBy = $('input[name="served_by"]').val();
+    
+    if (!loanId) validationErrors.push("Loan Selection");
+    if (!receiptNumber) validationErrors.push("Receipt Number");
+    if (!repayAmount || repayAmount <= 0) validationErrors.push("Valid Repayment Amount");
+    if (!paymentMode) validationErrors.push("Payment Mode");
+    
+    // Check if loan is fully paid
+    const nextDueText = $('#nextDueAmount').val();
+    if (nextDueText && nextDueText.includes('Fully Paid')) {
+        validationErrors.push("This loan is already fully paid");
+    }
+    
+    // ADDED: Check against maximum reasonable repayment amount
+    // This prevents accidentally large payments
+    if (repayAmount > 1000000) { // 1 million KSh limit
+        validationErrors.push("Repayment amount seems unusually large. Please verify.");
+    }
+    
+    if (validationErrors.length > 0) {
+        showToast("Please correct: " + validationErrors.join(", "), 'warning');
+        submitButton.prop('disabled', false).html(originalText);
+        return false;
+    }
+    
+    // Prepare form data
+    const formData = {
+        accountId: accountId,
+        loanId: loanId,
+        repayAmount: repayAmount,
+        paymentMode: paymentMode,
+        receiptNumber: receiptNumber,
+        served_by: servedBy
+    };
+    
+    console.log('Submitting loan repayment:', formData);
+    
+    $.ajax({
+        url: '../controllers/accountController.php?action=repayLoan',
+        type: 'POST',
+        data: formData,
+        dataType: 'json',
+        timeout: 20000,
+        cache: false,
+        success: function(response) {
+            console.log('Loan repayment success response:', response);
+            
+            if (response && response.status === 'success') {
+                let message = 'Loan repayment processed successfully!';
+                let toastType = 'success';
+                
+                showToast(message, toastType);
+                $('#repayLoanModal').modal('hide');
+                
+                // Trigger custom events for dashboard updates
+                $(document).trigger('loanRepaymentProcessed', [response]);
+                
+                // Reload page to show updated loan schedule and repayments
+                setTimeout(() => {
+                    location.reload();
+                }, 1500);
+                
+            } else {
+                throw new Error(response?.message || 'Invalid response from server');
+            }
+        },
+        error: function(xhr, status, error) {
+            console.error('Loan repayment AJAX Error:', {
+                status: status,
+                error: error,
+                statusCode: xhr.status,
+                responseText: xhr.responseText
+            });
+            
+            let errorMessage = 'Error processing loan repayment. Please try again.';
+            
+            if (status === 'timeout') {
+                errorMessage = 'Request timed out. Please check your connection and try again.';
+            } else if (xhr.status === 400) {
+                errorMessage = 'Invalid repayment data. Please check your inputs.';
+            } else if (xhr.status === 403) {
+                errorMessage = 'Unauthorized. Please log in again.';
+            } else if (xhr.status === 404) {
+                errorMessage = 'Loan not found. Please refresh and try again.';
+            } else if (xhr.status === 422) {
+                errorMessage = 'Loan repayment validation failed. Please check loan status.';
+            } else if (xhr.status === 500) {
+                errorMessage = 'Server error during loan processing. Please contact support.';
+            } else if (xhr.responseText) {
+                try {
+                    const response = JSON.parse(xhr.responseText);
+                    if (response.message) {
+                        errorMessage = response.message;
+                    }
+                } catch (parseError) {
+                    console.error('Error parsing loan repayment error response:', parseError);
                 }
             }
-        }
-        
-        if (validationErrors.length > 0) {
-            showToast("Please correct: " + validationErrors.join(", "), 'warning');
+            
+            showToast(errorMessage, 'error');
+        },
+        complete: function(xhr, status) {
+            // Always reset button state
             submitButton.prop('disabled', false).html(originalText);
-            return false;
+            console.log('Loan repayment request completed with status:', status);
         }
-        
-        // Prepare form data
-        const formData = {
-            accountId: accountId,
-            loanId: loanId,
-            repayAmount: repayAmount,
-            paymentMode: paymentMode,
-            receiptNumber: receiptNumber,
-            served_by: servedBy
-        };
-        
-        console.log('Submitting loan repayment:', formData);
-        
-        $.ajax({
-            url: '../controllers/accountController.php?action=repayLoan',
-            type: 'POST',
-            data: formData,
-            dataType: 'json',
-            timeout: 20000, // Longer timeout for loan processing
-            cache: false,
-            success: function(response) {
-                console.log('Loan repayment success response:', response);
-                
-                if (response && response.status === 'success') {
-                    showToast('Loan repayment processed successfully!', 'success');
-                    $('#repayLoanModal').modal('hide');
-                    
-                    // Trigger custom events for dashboard updates
-                    $(document).trigger('loanRepaymentProcessed', [response]);
-                    
-                    // Optional: Print receipt if repayment details available
-                    if (response.repaymentDetails && typeof printLoanRepaymentReceipt === 'function') {
-                        setTimeout(() => {
-                            printLoanRepaymentReceipt(response.repaymentDetails);
-                        }, 500);
-                    }
-                    
-                    // Reload page after delay to show updated data
-                    setTimeout(() => {
-                        location.reload();
-                    }, 2000);
-                    
-                } else {
-                    throw new Error(response?.message || 'Invalid response from server');
-                }
-            },
-            error: function(xhr, status, error) {
-                console.error('Loan repayment AJAX Error:', {
-                    status: status,
-                    error: error,
-                    statusCode: xhr.status,
-                    responseText: xhr.responseText
-                });
-                
-                let errorMessage = 'Error processing loan repayment. Please try again.';
-                
-                if (status === 'timeout') {
-                    errorMessage = 'Request timed out. Loan processing takes time - please check your connection and try again.';
-                } else if (xhr.status === 400) {
-                    errorMessage = 'Invalid repayment data. Please check your inputs.';
-                } else if (xhr.status === 403) {
-                    errorMessage = 'Unauthorized. Please log in again.';
-                } else if (xhr.status === 404) {
-                    errorMessage = 'Loan not found. Please refresh and try again.';
-                } else if (xhr.status === 422) {
-                    errorMessage = 'Loan repayment validation failed. Please check loan status.';
-                } else if (xhr.status === 500) {
-                    errorMessage = 'Server error during loan processing. Please contact support.';
-                } else if (xhr.responseText) {
-                    try {
-                        const response = JSON.parse(xhr.responseText);
-                        if (response.message) {
-                            errorMessage = response.message;
-                        }
-                    } catch (parseError) {
-                        console.error('Error parsing loan repayment error response:', parseError);
-                    }
-                }
-                
-                showToast(errorMessage, 'error');
-            },
-            complete: function(xhr, status) {
-                // Always reset button state
-                submitButton.prop('disabled', false).html(originalText);
-                console.log('Loan repayment request completed with status:', status);
-            }
-        });
     });
+});
+
 
 
 
@@ -705,52 +716,67 @@ $('#loanSelect').change(function() {
                 // Populate loan details
                 $('#refNo').val(loan.ref_no || '');
                 
+                // FIXED: Show outstanding balance clearly labeled as "Principal Only"
                 if (loan.outstanding_balance !== undefined) {
-                    $('#outstandingBalance').val('KSh ' + formatCurrency(loan.outstanding_balance));
+                    $('#outstandingBalance').val('KSh ' + formatCurrency(loan.outstanding_balance) + ' (Principal Only)');
                 }
                 
-                // Handle the next due amount properly
-                if (loan.next_due_amount && loan.next_due_amount > 0) {
-                    const dueAmount = parseFloat(loan.next_due_amount);
-                    let statusText = '';
-                    let displayText = '';
+                // Handle current due amount from loan schedule
+                if (loan.current_due_amount && loan.current_due_amount > 0) {
+                    const currentDueAmount = parseFloat(loan.current_due_amount);
                     
+                    let currentStatusText = '';
+                    
+                    // Current due amount (what needs to be paid now)
                     if (loan.is_overdue) {
-                        statusText = ' (Overdue + Accumulated)';
-                        displayText = `KSh ${formatCurrency(dueAmount)}${statusText}`;
+                        currentStatusText = ' (Overdue - Pay Now!)';
+                        $('#nextDueAmount').addClass('text-danger font-weight-bold');
+                        $('#repayAmount').addClass('border-warning'); // Changed from border-danger
                         
-                        // Add helpful tooltip about accumulated defaults
                         if (loan.accumulated_defaults && loan.accumulated_defaults > 0) {
                             $('#nextDueAmount').attr('title', 
-                                `Total includes accumulated defaults: KSh ${formatCurrency(loan.accumulated_defaults)}`
+                                `This includes accumulated overdue amounts. Total overdue: KSh ${formatCurrency(loan.accumulated_defaults)}`
                             );
                         }
                     } else {
-                        statusText = ' (Current Due)';
-                        displayText = `KSh ${formatCurrency(dueAmount)}${statusText}`;
+                        currentStatusText = ' (Current Due - Principal + Interest)';
+                        $('#nextDueAmount').removeClass('text-danger font-weight-bold');
+                        $('#repayAmount').removeClass('border-warning');
                         
-                        if (loan.next_due_date) {
+                        if (loan.current_due_date) {
                             $('#nextDueAmount').attr('title', 
-                                `Due on: ${new Date(loan.next_due_date).toLocaleDateString()}`
+                                `Due on: ${new Date(loan.current_due_date).toLocaleDateString()} | Includes principal and interest`
                             );
                         }
                     }
                     
-                    $('#nextDueAmount').val(displayText);
-                    $('#repayAmount').val(dueAmount.toFixed(2));
+                    // Show current installment amount (principal + interest)
+                    const currentDueText = `KSh ${formatCurrency(currentDueAmount)}${currentStatusText}`;
+                    $('#nextDueAmount').val(currentDueText);
+                    
+                    // Auto-fill the current due amount as repayment amount
+                    $('#repayAmount').val(currentDueAmount.toFixed(2));
+                    
+                    // Log detailed installment info for debugging
+                    if (loan.current_installment_details) {
+                        console.log('Current Installment Details:', {
+                            fullAmount: loan.current_installment_details.full_amount,
+                            alreadyPaid: loan.current_installment_details.already_paid,
+                            remainingAmount: loan.current_installment_details.remaining_amount,
+                            principal: loan.current_installment_details.principal,
+                            interest: loan.current_installment_details.interest
+                        });
+                    }
                     
                 } else {
-                    $('#nextDueAmount').val('No payment due / Loan fully paid');
-                    $('#repayAmount').val('');
-                }
-                
-                // Add visual indicators for overdue status
-                if (loan.is_overdue) {
-                    $('#nextDueAmount').addClass('text-danger font-weight-bold');
-                    $('#repayAmount').addClass('border-danger');
-                } else {
-                    $('#nextDueAmount').removeClass('text-danger font-weight-bold');
-                    $('#repayAmount').removeClass('border-danger');
+                    // No payment due - loan is fully paid
+                    $('#nextDueAmount').val('Loan Fully Paid - KSh 0.00');
+                    $('#repayAmount').val('0.00');
+                    $('#outstandingBalance').val('KSh 0.00 (Fully Paid)');
+                    
+                    // Disable repayment for fully paid loans
+                    $('#repayAmount').prop('readonly', true);
+                    showToast('This loan is fully paid. No repayment needed.', 'info');
                 }
                 
             } else {
@@ -776,12 +802,19 @@ $('#loanSelect').change(function() {
 $('#repayLoanModal').on('hidden.bs.modal', function () {
     const $form = $('#repayLoanForm');
     $form[0].reset();
-    $form.find('button[type="submit"]').prop('disabled', false).html('<i class="fas fa-credit-card"></i> Repay Loan');
+    $form.find('button[type="submit"]').prop('disabled', false).html('Repay Loan');
     $('#refNo, #outstandingBalance, #nextDueAmount, #repayAmount').val('');
+    
+    // Clear visual indicators
+    $('#nextDueAmount').removeClass('text-danger font-weight-bold');
+    $('#repayAmount').removeClass('border-danger').prop('readonly', false);
     
     // Clear any validation errors
     $form.find('.is-invalid').removeClass('is-invalid');
     $form.find('.invalid-feedback').remove();
+    
+    // Clear tooltips
+    $('#nextDueAmount').removeAttr('title');
 });
 
 // Handle delete repayment button click
@@ -825,40 +858,50 @@ $(document).on('click', '#confirmDeleteRepayment', function() {
             amount: amount
         },
         dataType: 'json',
+        timeout: 15000, // Longer timeout for delete operations
         success: function(response) {
             if (response.status === 'success') {
-                if (typeof showToast === 'function') {
-                    showToast('Repayment deleted successfully!', 'success');
-                } else {
-                    alert('Repayment deleted successfully!');
-                }
+                showToast('Repayment deleted and loan schedule updated successfully!', 'success');
                 modal.modal('hide');
                 
-                // Reload the page to refresh the repayments table
-                setTimeout(() => location.reload(), 1000);
+                // FIXED: Reload page to show updated loan schedule
+                setTimeout(() => {
+                    location.reload();
+                }, 1000);
             } else {
-                if (typeof showToast === 'function') {
-                    showToast('Error: ' + response.message, 'error');
-                } else {
-                    alert('Error: ' + response.message);
-                }
+                showToast('Error: ' + response.message, 'error');
             }
         },
         error: function(xhr, status, error) {
-            try {
-                const response = JSON.parse(xhr.responseText);
-                if (typeof showToast === 'function') {
-                    showToast('Error: ' + response.message, 'error');
-                } else {
-                    alert('Error: ' + response.message);
-                }
-            } catch (e) {
-                if (typeof showToast === 'function') {
-                    showToast('An error occurred while deleting the repayment.', 'error');
-                } else {
-                    alert('An error occurred while deleting the repayment.');
+            console.error('Delete repayment AJAX Error:', {
+                status: status,
+                error: error,
+                statusCode: xhr.status,
+                responseText: xhr.responseText
+            });
+            
+            let errorMessage = 'An error occurred while deleting the repayment.';
+            
+            if (status === 'timeout') {
+                errorMessage = 'Delete operation timed out. Please try again.';
+            } else if (xhr.status === 403) {
+                errorMessage = 'Unauthorized. You may not have permission to delete repayments.';
+            } else if (xhr.status === 404) {
+                errorMessage = 'Repayment record not found.';
+            } else if (xhr.status === 500) {
+                errorMessage = 'Server error during deletion. Please contact support.';
+            } else if (xhr.responseText) {
+                try {
+                    const response = JSON.parse(xhr.responseText);
+                    if (response.message) {
+                        errorMessage = response.message;
+                    }
+                } catch (parseError) {
+                    console.error('Error parsing delete response:', parseError);
                 }
             }
+            
+            showToast(errorMessage, 'error');
         },
         complete: function() {
             submitButton.prop('disabled', false).html(originalText);
@@ -868,41 +911,156 @@ $(document).on('click', '#confirmDeleteRepayment', function() {
 
 
 
+// Add validation for repayment amount input
+$('#repayAmount').on('input', function() {
+    const amount = parseFloat($(this).val());
+    
+    // Only check for negative amounts and reasonable limits
+    if (amount < 0) {
+        $(this).addClass('is-invalid');
+        if (!$(this).next('.invalid-feedback').length) {
+            $(this).after('<div class="invalid-feedback">Amount must be positive</div>');
+        }
+    } else if (amount > 1000000) {
+        $(this).addClass('is-invalid');
+        if (!$(this).next('.invalid-feedback').length) {
+            $(this).after('<div class="invalid-feedback">Amount seems unusually large. Please verify.</div>');
+        }
+    } else {
+        $(this).removeClass('is-invalid');
+        $(this).next('.invalid-feedback').remove();
+    }
+});
+
+// Add receipt number validation
+$('#loanReceiptNumber').on('input', function() {
+    const receiptNumber = $(this).val().trim();
+    
+    // Basic validation for receipt number format
+    if (receiptNumber && !/^[A-Za-z0-9\-_]+$/.test(receiptNumber)) {
+        $(this).addClass('is-invalid');
+        if (!$(this).next('.invalid-feedback').length) {
+            $(this).after('<div class="invalid-feedback">Receipt number can only contain letters, numbers, hyphens, and underscores</div>');
+        }
+    } else {
+        $(this).removeClass('is-invalid');
+        $(this).next('.invalid-feedback').remove();
+    }
+});
+
+
+
+
 
     // Print repayment receipt
-    $(document).on('click', '.print-repayment-receipt', function() {
-        const repaymentId = $(this).data('repayment-id');
-        $.ajax({
-            url: '../controllers/accountController.php',
-            type: 'GET',
-            data: {
-                action: 'getRepaymentDetails',
-                repaymentId: repaymentId
-            },
-            dataType: 'json',
-            success: function(response) {
-                if (response.status === 'success') {
+ $(document).on('click', '.print-repayment-receipt', function() {
+    const repaymentId = $(this).data('repayment-id');
+    const $button = $(this);
+    const originalText = $button.html();
+    
+    $button.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Loading...');
+    
+    $.ajax({
+        url: '../controllers/accountController.php',
+        type: 'GET',
+        data: {
+            action: 'getRepaymentDetails',
+            repaymentId: repaymentId
+        },
+        dataType: 'json',
+        timeout: 10000,
+        success: function(response) {
+            if (response.status === 'success' && response.repayment) {
+                if (typeof printLoanRepaymentReceipt === 'function') {
                     printLoanRepaymentReceipt(response.repayment);
                 } else {
-                    if (typeof showToast === 'function') {
-                        showToast('Error fetching repayment details', 'error');
-                    } else {
-                        alert('Error fetching repayment details');
-                    }
+                    showToast('Print function not available', 'warning');
                 }
-            },
-            error: function() {
-                if (typeof showToast === 'function') {
-                    showToast('Error generating receipt', 'error');
-                } else {
-                    alert('Error generating receipt');
-                }
+            } else {
+                showToast('Error fetching repayment details: ' + (response.message || 'Unknown error'), 'error');
             }
-        });
+        },
+        error: function(xhr, status, error) {
+            console.error('Print receipt error:', { status, error, responseText: xhr.responseText });
+            
+            let errorMessage = 'Error generating receipt';
+            if (status === 'timeout') {
+                errorMessage = 'Request timed out while fetching receipt details';
+            } else if (xhr.status === 404) {
+                errorMessage = 'Repayment record not found';
+            }
+            
+            showToast(errorMessage, 'error');
+        },
+        complete: function() {
+            $button.prop('disabled', false).html(originalText);
+        }
     });
+});
+
+
+// Add confirmation before navigation if form has unsaved changes
+let formChanged = false;
+
+$('#repayLoanForm input, #repayLoanForm select').on('change input', function() {
+    formChanged = true;
+});
+
+$('#repayLoanForm').on('submit', function() {
+    formChanged = false; // Reset flag on form submission
+});
+
+$('#repayLoanModal').on('hidden.bs.modal', function() {
+    if (formChanged) {
+        formChanged = false;
+        // Could add confirmation here if needed
+    }
+});
+
+// Auto-refresh loan data every 30 seconds when modal is open
+let refreshInterval;
+
+$('#repayLoanModal').on('shown.bs.modal', function() {
+    // Start auto-refresh if a loan is selected
+    refreshInterval = setInterval(function() {
+        const selectedLoanId = $('#loanSelect').val();
+        if (selectedLoanId) {
+            // Trigger change event to refresh loan details
+            $('#loanSelect').trigger('change');
+        }
+    }, 30000); // 30 seconds
+});
+
+$('#repayLoanModal').on('hidden.bs.modal', function() {
+    // Stop auto-refresh
+    if (refreshInterval) {
+        clearInterval(refreshInterval);
+        refreshInterval = null;
+    }
+});
+
+// Add keyboard shortcuts for common actions
+$(document).on('keydown', function(e) {
+    // Ctrl/Cmd + R to open repay loan modal (when not in input field)
+    if ((e.ctrlKey || e.metaKey) && e.key === 'r' && !$(e.target).is('input, textarea, select')) {
+        e.preventDefault();
+        if ($('#repayLoanModal').is(':visible')) {
+            $('#repayLoanModal').modal('hide');
+        } else {
+            $('#repayLoanModal').modal('show');
+        }
+    }
+    
+    // ESC to close modals
+    if (e.key === 'Escape') {
+        $('.modal').modal('hide');
+    }
+});
+
 
     // FUNCTION TO FORMAT WHOLE NUMBERS
 function formatCurrency(amount) {
+    if (isNaN(amount)) return '0.00';
     return parseFloat(amount).toLocaleString('en-KE', {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
