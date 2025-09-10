@@ -11,6 +11,9 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
     exit();
 }
 
+// Check if user is admin for edit/delete permissions
+$isAdmin = ($_SESSION['role'] === 'admin');
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -128,7 +131,8 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
 
             <!-- Content Row -->
             <div class="row">
-                <!-- Loan Product Form -->
+                <!-- Loan Product Form - Only show for admins -->
+                <?php if ($isAdmin): ?>
                 <div class="col-xl-4 col-md-6 mb-4">
                     <div class="card">
                         <div class="card-body">
@@ -155,9 +159,10 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                         </div>
                     </div>
                 </div>
+                <?php endif; ?>
                 
                 <!-- Loan Products Table -->
-                <div class="col-xl-8 mb-4">
+                <div class="<?php echo $isAdmin ? 'col-xl-8' : 'col-xl-12'; ?> mb-4">
                     <div class="card">
                         <div class="card-body">
                             <div class="table-responsive">
@@ -166,7 +171,9 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                                         <tr>
                                             <th>Loan Product</th>
                                             <th>Interest Rate (%)</th>
+                                            <?php if ($isAdmin): ?>
                                             <th>Action</th>
+                                            <?php endif; ?>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -177,6 +184,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                                         <tr>
                                             <td><?php echo $product['loan_type']?></td>
                                             <td><?php echo $product['interest_rate']?></td>
+                                            <?php if ($isAdmin): ?>
                                             <td>
                                                 <div class="dropdown">
                                                     <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
@@ -188,9 +196,11 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                                                     </div>
                                                 </div>
                                             </td>
+                                            <?php endif; ?>
                                         </tr>
                                         
-                                        <!-- Update Loan Product Modal -->
+                                        <!-- Update Loan Product Modal - Only for admins -->
+                                        <?php if ($isAdmin): ?>
                                         <div class="modal fade" id="updateProduct<?php echo $product['id']?>" tabindex="-1" aria-hidden="true">
                                             <div class="modal-dialog">
                                                 <form method="POST" action="../controllers/update_loan_product.php">
@@ -228,6 +238,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                                                 </form>
                                             </div>
                                         </div>
+                                        <?php endif; ?>
                                         
                                         <?php
                                             }
@@ -347,7 +358,8 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
             }
         }
 
-        // Delete confirmation with toast
+        <?php if ($isAdmin): ?>
+        // Delete confirmation with toast - Only for admins
         function confirmDelete(productId, productName) {
             // Create confirmation toast
             const confirmToast = document.createElement('div');
@@ -379,6 +391,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
             hideToast('confirmToast');
             window.location.href = '../controllers/delete_loan_product.php?id=' + productId;
         }
+        <?php endif; ?>
 
         // Function to calculate reducing balance
         function calculateReducingBalance(principal, interestRate, term) {
