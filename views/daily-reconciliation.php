@@ -11,6 +11,11 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
     exit();
 }
 
+    // Define filter variables FIRST before any processing
+    $float_start_date = isset($_GET['float_start_date']) ? $_GET['float_start_date'] . " 00:00:00" : date('Y-m-d 00:00:00');
+    $float_end_date = isset($_GET['float_end_date']) ? $_GET['float_end_date'] . " 23:59:59" : date('Y-m-d 23:59:59');
+    $float_type = isset($_GET['float_type']) ? $_GET['float_type'] : 'all';
+
     // Initialize all variables
     $total_group_savings = 0;
     $total_group_withdrawals = 0;
@@ -29,6 +34,111 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
     $payments_data = [];
     $repayments_data = [];
     $expenses_data = [];
+
+    // Fixed Function to calculate current closing float
+    function calculateCurrentClosingFloat($db) {
+        // Get current day float data
+        $today_start = date('Y-m-d 00:00:00');
+        $today_end = date('Y-m-d 23:59:59');
+        
+        $float_query = "SELECT 
+                    COALESCE(SUM(CASE WHEN type = 'add' THEN amount 
+                                     WHEN type = 'reset_add' THEN amount 
+                                     ELSE 0 END), 0) as total_added,
+                    COALESCE(SUM(CASE WHEN type = 'offload' THEN amount 
+                                     WHEN type = 'reset_off' THEN amount 
+                                     ELSE 0 END), 0) as total_offloaded
+                  FROM float_management 
+                  WHERE date_created BETWEEN ? AND ?";
+        $stmt = $db->conn->prepare($float_query);
+        $stmt->bind_param("ss", $today_start, $today_end);
+        $stmt->execute();
+        $float_result = $stmt->get_result()->fetch_assoc();
+        
+        $opening = $float_result['total_added'];
+        $offloaded = $float_result['total_offloaded'];
+        
+        // Get today's transaction totals
+        $total_money_in = 0;
+        $total_money_out = 0;
+        $total_fees = 0;
+        
+        // Group savings
+        $query = "SELECT COALESCE(SUM(amount), 0) as total FROM group_savings WHERE date_saved BETWEEN ? AND ?";
+        $stmt = $db->conn->prepare($query);
+        $stmt->bind_param("ss", $today_start, $today_end);
+        $stmt->execute();
+        $total_money_in += $stmt->get_result()->fetch_assoc()['total'];
+        
+        // Business savings
+        $query = "SELECT COALESCE(SUM(amount), 0) as total FROM business_group_transactions WHERE type = 'Savings' AND date BETWEEN ? AND ?";
+        $stmt = $db->conn->prepare($query);
+        $stmt->bind_param("ss", $today_start, $today_end);
+        $stmt->execute();
+        $total_money_in += $stmt->get_result()->fetch_assoc()['total'];
+        
+        // Individual savings
+        $query = "SELECT COALESCE(SUM(amount), 0) as total FROM savings WHERE type = 'Savings' AND date BETWEEN ? AND ?";
+        $stmt = $db->conn->prepare($query);
+        $stmt->bind_param("ss", $today_start, $today_end);
+        $stmt->execute();
+        $total_money_in += $stmt->get_result()->fetch_assoc()['total'];
+        
+        // Loan repayments
+        $query = "SELECT COALESCE(SUM(amount_repaid), 0) as total FROM loan_repayments WHERE date_paid BETWEEN ? AND ?";
+        $stmt = $db->conn->prepare($query);
+        $stmt->bind_param("ss", $today_start, $today_end);
+        $stmt->execute();
+        $total_money_in += $stmt->get_result()->fetch_assoc()['total'];
+        
+        // Calculate withdrawal fees from business transactions (Withdrawal Fee type)
+        $query = "SELECT COALESCE(SUM(amount), 0) as total FROM business_group_transactions WHERE type = 'Withdrawal Fee' AND date BETWEEN ? AND ?";
+        $stmt = $db->conn->prepare($query);
+        $stmt->bind_param("ss", $today_start, $today_end);
+        $stmt->execute();
+        $total_fees += $stmt->get_result()->fetch_assoc()['total'];
+        
+        // Add fees to money in (since fees are profit)
+        $total_money_in += $total_fees;
+        
+        // Calculate money out - Group withdrawals
+        $query = "SELECT COALESCE(SUM(amount), 0) as total FROM group_withdrawals WHERE date_withdrawn BETWEEN ? AND ?";
+        $stmt = $db->conn->prepare($query);
+        $stmt->bind_param("ss", $today_start, $today_end);
+        $stmt->execute();
+        $total_money_out += $stmt->get_result()->fetch_assoc()['total'];
+        
+        // Business withdrawals (only withdrawal amounts, not fees)
+        $query = "SELECT COALESCE(SUM(amount), 0) as total FROM business_group_transactions WHERE type = 'Withdrawal' AND date BETWEEN ? AND ?";
+        $stmt = $db->conn->prepare($query);
+        $stmt->bind_param("ss", $today_start, $today_end);
+        $stmt->execute();
+        $total_money_out += $stmt->get_result()->fetch_assoc()['total'];
+        
+        // Individual withdrawals
+        $query = "SELECT COALESCE(SUM(amount), 0) as total FROM savings WHERE type = 'Withdrawal' AND date BETWEEN ? AND ?";
+        $stmt = $db->conn->prepare($query);
+        $stmt->bind_param("ss", $today_start, $today_end);
+        $stmt->execute();
+        $total_money_out += $stmt->get_result()->fetch_assoc()['total'];
+        
+        // Loan disbursements (payments)
+        $query = "SELECT COALESCE(SUM(pay_amount), 0) as total FROM payment WHERE date_created BETWEEN ? AND ?";
+        $stmt = $db->conn->prepare($query);
+        $stmt->bind_param("ss", $today_start, $today_end);
+        $stmt->execute();
+        $total_money_out += $stmt->get_result()->fetch_assoc()['total'];
+        
+        // Expenses
+        $query = "SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE date BETWEEN ? AND ?";
+        $stmt = $db->conn->prepare($query);
+        $stmt->bind_param("ss", $today_start, $today_end);
+        $stmt->execute();
+        $total_money_out += $stmt->get_result()->fetch_assoc()['total'];
+        
+        // Return calculated closing float
+        return $opening + $total_money_in - $total_money_out - $offloaded;
+    }
 
     // Handle float management
     if (isset($_POST['add_float'])) {
@@ -63,7 +173,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
         exit();
     }
 
-    // Handle float reset
+    // Handle float reset - FIXED VERSION with shorter type names
     if (isset($_POST['reset_float'])) {
         $user_id = $_SESSION['user_id'];
         $current_datetime = date('Y-m-d H:i:s');
@@ -71,27 +181,113 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
         // Calculate current closing float before reset
         $closing_float = calculateCurrentClosingFloat($db);
         
-        // Insert into float history with unique timestamp
-        $history_query = "INSERT INTO float_history (date, closing_float, reset_by, created_at) 
-                         VALUES (?, ?, ?, ?)";
+        // Get current totals
+        $query = "SELECT 
+                    COALESCE(SUM(CASE WHEN type = 'add' THEN amount 
+                                     WHEN type = 'reset_add' THEN amount 
+                                     ELSE 0 END), 0) as total_added,
+                    COALESCE(SUM(CASE WHEN type = 'offload' THEN amount 
+                                     WHEN type = 'reset_off' THEN amount 
+                                     ELSE 0 END), 0) as total_offloaded
+                  FROM float_management";
+        $stmt = $db->conn->prepare($query);
+        $stmt->execute();
+        $current_totals = $stmt->get_result()->fetch_assoc();
+        
+        // Get today's transaction data for history
+        $today_start = date('Y-m-d 00:00:00');
+        $today_end = date('Y-m-d 23:59:59');
+        
+        // Calculate transaction totals for history record
+        $total_money_in = 0;
+        $total_money_out = 0;
+        $total_fees = 0;
+        
+        // Money in calculations (simplified)
+        $money_in_queries = [
+            "SELECT COALESCE(SUM(amount), 0) as total FROM group_savings WHERE date_saved BETWEEN ? AND ?",
+            "SELECT COALESCE(SUM(amount), 0) as total FROM business_group_transactions WHERE type = 'Savings' AND date BETWEEN ? AND ?",
+            "SELECT COALESCE(SUM(amount), 0) as total FROM savings WHERE type = 'Savings' AND date BETWEEN ? AND ?",
+            "SELECT COALESCE(SUM(amount_repaid), 0) as total FROM loan_repayments WHERE date_paid BETWEEN ? AND ?"
+        ];
+        
+        foreach ($money_in_queries as $query) {
+            $stmt = $db->conn->prepare($query);
+            $stmt->bind_param("ss", $today_start, $today_end);
+            $stmt->execute();
+            $total_money_in += $stmt->get_result()->fetch_assoc()['total'];
+        }
+        
+        // Fees calculation
+        $fees_query = "SELECT COALESCE(SUM(amount), 0) as total FROM business_group_transactions WHERE type = 'Withdrawal Fee' AND date BETWEEN ? AND ?";
+        $stmt = $db->conn->prepare($fees_query);
+        $stmt->bind_param("ss", $today_start, $today_end);
+        $stmt->execute();
+        $total_fees = $stmt->get_result()->fetch_assoc()['total'];
+        
+        // Money out calculations
+        $money_out_queries = [
+            "SELECT COALESCE(SUM(amount), 0) as total FROM group_withdrawals WHERE date_withdrawn BETWEEN ? AND ?",
+            "SELECT COALESCE(SUM(amount), 0) as total FROM business_group_transactions WHERE type = 'Withdrawal' AND date BETWEEN ? AND ?",
+            "SELECT COALESCE(SUM(amount), 0) as total FROM savings WHERE type = 'Withdrawal' AND date BETWEEN ? AND ?",
+            "SELECT COALESCE(SUM(pay_amount), 0) as total FROM payment WHERE date_created BETWEEN ? AND ?",
+            "SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE date BETWEEN ? AND ?"
+        ];
+        
+        foreach ($money_out_queries as $query) {
+            $stmt = $db->conn->prepare($query);
+            $stmt->bind_param("ss", $today_start, $today_end);
+            $stmt->execute();
+            $total_money_out += $stmt->get_result()->fetch_assoc()['total'];
+        }
+        
+        // Save to history
+        $history_query = "INSERT INTO float_history (
+            date, closing_float, opening_float, total_money_in, total_money_out, 
+            total_withdrawal_fees, total_offloaded, reset_by, reset_reason, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Manual Reset', ?)";
+        
         $stmt = $db->conn->prepare($history_query);
         $current_date = date('Y-m-d');
-        $stmt->bind_param("sdis", $current_date, $closing_float, $user_id, $current_datetime);
+        $stmt->bind_param("sdddddsis", 
+            $current_date, 
+            $closing_float, 
+            $current_totals['total_added'],
+            $total_money_in,
+            $total_money_out,
+            $total_fees,
+            $current_totals['total_offloaded'],
+            $user_id,
+            $current_datetime
+        );
         $stmt->execute();
         
-        // Clear ALL float management records
-        $reset_query = "DELETE FROM float_management";
-        $db->conn->query($reset_query);
+        // FIXED: Use shorter type names that fit in the database column
+        // Add negative entries to neutralize current totals
+        if ($current_totals['total_added'] > 0) {
+            $neutralize_add = "INSERT INTO float_management (receipt_no, amount, type, user_id, date_created) 
+                              VALUES (?, ?, 'reset_add', ?, ?)";
+            $stmt = $db->conn->prepare($neutralize_add);
+            $reset_receipt_add = 'RESET_ADD_' . date('YmdHis');
+            $negative_amount = -$current_totals['total_added'];
+            $stmt->bind_param("sdis", $reset_receipt_add, $negative_amount, $user_id, $current_datetime);
+            $stmt->execute();
+        }
         
-        $_SESSION['success_msg'] = "Float has been reset successfully! Closing amount of KSh " . number_format($closing_float, 2) . " saved to history.";
+        if ($current_totals['total_offloaded'] > 0) {
+            $neutralize_offload = "INSERT INTO float_management (receipt_no, amount, type, user_id, date_created) 
+                                  VALUES (?, ?, 'reset_off', ?, ?)";
+            $stmt = $db->conn->prepare($neutralize_offload);
+            $reset_receipt_offload = 'RESET_OFF_' . date('YmdHis');
+            $negative_amount = -$current_totals['total_offloaded'];
+            $stmt->bind_param("sdis", $reset_receipt_offload, $negative_amount, $user_id, $current_datetime);
+            $stmt->execute();
+        }
+        
+        $_SESSION['success_msg'] = "Float has been reset successfully! Closing amount of KSh " . number_format($closing_float, 2) . " saved to history. All transaction records preserved for audit and filtering.";
         header('Location: ' . $_SERVER['PHP_SELF']);
         exit();
     }
-
-    // Handle float transaction filtering
-    $float_start_date = isset($_GET['float_start_date']) ? $_GET['float_start_date'] . " 00:00:00" : date('Y-m-d 00:00:00');
-    $float_end_date = isset($_GET['float_end_date']) ? $_GET['float_end_date'] . " 23:59:59" : date('Y-m-d 23:59:59');
-    $float_type = isset($_GET['float_type']) ? $_GET['float_type'] : 'all';
 
     // Get float totals for the filtered period (for float transactions display)
     $float_query = "SELECT 
@@ -116,14 +312,22 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
     $filtered_opening_float = $float_result['total_added'];
     $filtered_total_offloaded = $float_result['total_offloaded'];
 
-    // Get float transactions with filtering
-    $float_transactions_query = "SELECT f.*, u.username as served_by 
+    // Get float transactions with filtering and updated display
+    $float_transactions_query = "SELECT f.*, u.username as served_by,
+                                CASE 
+                                    WHEN f.type = 'reset_add' THEN 'RESET (Add)'
+                                    WHEN f.type = 'reset_off' THEN 'RESET (Offload)'
+                                    WHEN f.type = 'add' THEN 'Add Float'
+                                    WHEN f.type = 'offload' THEN 'Offload Float'
+                                    ELSE UPPER(f.type)
+                                END as display_type
               FROM float_management f 
               LEFT JOIN user u ON f.user_id = u.user_id 
               WHERE f.date_created BETWEEN ? AND ?";
     
     if ($float_type !== 'all') {
-        $float_transactions_query .= " AND f.type = ?";
+        // For filtering, include reset entries
+        $float_transactions_query .= " AND (f.type = ? OR f.type IN ('reset_add', 'reset_off'))";
     }
     
     $float_transactions_query .= " ORDER BY f.date_created DESC";
@@ -137,13 +341,18 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
     $stmt->execute();
     $float_transactions = $stmt->get_result();
 
+    // Update the card calculation queries to include neutralizing entries
     // For current day float totals (this is what shows in the cards)
     $today_start = date('Y-m-d 00:00:00');
     $today_end = date('Y-m-d 23:59:59');
     
     $query = "SELECT 
-                COALESCE(SUM(CASE WHEN type = 'add' THEN amount ELSE 0 END), 0) as total_added,
-                COALESCE(SUM(CASE WHEN type = 'offload' THEN amount ELSE 0 END), 0) as total_offloaded
+                COALESCE(SUM(CASE WHEN type = 'add' THEN amount 
+                                 WHEN type = 'reset_add' THEN amount 
+                                 ELSE 0 END), 0) as total_added,
+                COALESCE(SUM(CASE WHEN type = 'offload' THEN amount 
+                                 WHEN type = 'reset_off' THEN amount 
+                                 ELSE 0 END), 0) as total_offloaded
               FROM float_management 
               WHERE date_created BETWEEN ? AND ?";
     $stmt = $db->conn->prepare($query);
@@ -353,107 +562,6 @@ while ($row = $result->fetch_assoc()) {
     
     // Recalculate net position
     $net_position = $total_inflows - $total_outflows;
-
-    // Function to calculate current closing float
-        function calculateCurrentClosingFloat($db) {
-        // Get current day float data
-        $today_start = date('Y-m-d 00:00:00');
-        $today_end = date('Y-m-d 23:59:59');
-        
-        $float_query = "SELECT 
-                    COALESCE(SUM(CASE WHEN type = 'add' THEN amount ELSE 0 END), 0) as total_added,
-                    COALESCE(SUM(CASE WHEN type = 'offload' THEN amount ELSE 0 END), 0) as total_offloaded
-                  FROM float_management 
-                  WHERE date_created BETWEEN ? AND ?";
-        $stmt = $db->conn->prepare($float_query);
-        $stmt->bind_param("ss", $today_start, $today_end);
-        $stmt->execute();
-        $float_result = $stmt->get_result()->fetch_assoc();
-        
-        $opening = $float_result['total_added'];
-        $offloaded = $float_result['total_offloaded'];
-        
-        // Get today's transaction totals
-        $total_money_in = 0;
-        $total_money_out = 0;
-        $total_fees = 0;
-        
-        // Group savings
-        $query = "SELECT COALESCE(SUM(amount), 0) as total FROM group_savings WHERE date_saved BETWEEN ? AND ?";
-        $stmt = $db->conn->prepare($query);
-        $stmt->bind_param("ss", $today_start, $today_end);
-        $stmt->execute();
-        $total_money_in += $stmt->get_result()->fetch_assoc()['total'];
-        
-        // Business savings
-        $query = "SELECT COALESCE(SUM(amount), 0) as total FROM business_group_transactions WHERE type = 'Savings' AND date BETWEEN ? AND ?";
-        $stmt = $db->conn->prepare($query);
-        $stmt->bind_param("ss", $today_start, $today_end);
-        $stmt->execute();
-        $total_money_in += $stmt->get_result()->fetch_assoc()['total'];
-        
-        // Individual savings
-        $query = "SELECT COALESCE(SUM(amount), 0) as total FROM savings WHERE type = 'Savings' AND date BETWEEN ? AND ?";
-        $stmt = $db->conn->prepare($query);
-        $stmt->bind_param("ss", $today_start, $today_end);
-        $stmt->execute();
-        $total_money_in += $stmt->get_result()->fetch_assoc()['total'];
-        
-        // Loan repayments
-        $query = "SELECT COALESCE(SUM(amount_repaid), 0) as total FROM loan_repayments WHERE date_paid BETWEEN ? AND ?";
-        $stmt = $db->conn->prepare($query);
-        $stmt->bind_param("ss", $today_start, $today_end);
-        $stmt->execute();
-        $total_money_in += $stmt->get_result()->fetch_assoc()['total'];
-        
-        // Calculate withdrawal fees from business transactions (Withdrawal Fee type)
-        $query = "SELECT COALESCE(SUM(amount), 0) as total FROM business_group_transactions WHERE type = 'Withdrawal Fee' AND date BETWEEN ? AND ?";
-        $stmt = $db->conn->prepare($query);
-        $stmt->bind_param("ss", $today_start, $today_end);
-        $stmt->execute();
-        $total_fees += $stmt->get_result()->fetch_assoc()['total'];
-        
-        // Add fees to money in (since fees are profit)
-        $total_money_in += $total_fees;
-        
-        // Calculate money out - Group withdrawals
-        $query = "SELECT COALESCE(SUM(amount), 0) as total FROM group_withdrawals WHERE date_withdrawn BETWEEN ? AND ?";
-        $stmt = $db->conn->prepare($query);
-        $stmt->bind_param("ss", $today_start, $today_end);
-        $stmt->execute();
-        $total_money_out += $stmt->get_result()->fetch_assoc()['total'];
-        
-        // Business withdrawals (only withdrawal amounts, not fees)
-        $query = "SELECT COALESCE(SUM(amount), 0) as total FROM business_group_transactions WHERE type = 'Withdrawal' AND date BETWEEN ? AND ?";
-        $stmt = $db->conn->prepare($query);
-        $stmt->bind_param("ss", $today_start, $today_end);
-        $stmt->execute();
-        $total_money_out += $stmt->get_result()->fetch_assoc()['total'];
-        
-        // Individual withdrawals
-        $query = "SELECT COALESCE(SUM(amount), 0) as total FROM savings WHERE type = 'Withdrawal' AND date BETWEEN ? AND ?";
-        $stmt = $db->conn->prepare($query);
-        $stmt->bind_param("ss", $today_start, $today_end);
-        $stmt->execute();
-        $total_money_out += $stmt->get_result()->fetch_assoc()['total'];
-        
-        // Loan disbursements (payments)
-        $query = "SELECT COALESCE(SUM(pay_amount), 0) as total FROM payment WHERE date_created BETWEEN ? AND ?";
-        $stmt = $db->conn->prepare($query);
-        $stmt->bind_param("ss", $today_start, $today_end);
-        $stmt->execute();
-        $total_money_out += $stmt->get_result()->fetch_assoc()['total'];
-        
-        // Expenses
-        $query = "SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE date BETWEEN ? AND ?";
-        $stmt = $db->conn->prepare($query);
-        $stmt->bind_param("ss", $today_start, $today_end);
-        $stmt->execute();
-        $total_money_out += $stmt->get_result()->fetch_assoc()['total'];
-        
-        // Return calculated closing float
-        return $opening + $total_money_in - $total_money_out - $offloaded;
-    }
 ?>
 
 <!DOCTYPE html>
@@ -620,7 +728,6 @@ while ($row = $result->fetch_assoc()) {
                                 </small>
                             </div>
                         </div>
-                        <div
                         <div class="col-md-3">
                             <div class="float-card">
                                 <div class="float-title">Closing Float</div>
@@ -688,12 +795,12 @@ while ($row = $result->fetch_assoc()) {
                         <strong>Warning!</strong> This action will:
                         <ul class="mt-2 mb-0">
                             <li>Save current closing float (KSh <?= number_format($closing_float, 2) ?>) to history</li>
-                            <li>Reset ALL float transactions to start fresh</li>
-                            <li>Set Opening Float, Total Offloaded, and Closing Float to 0</li>
+                            <li>Reset float cards to 0 (Opening Float, Total Offloaded, Closing Float)</li>
+                            <li><strong>Preserve all transaction records for audit and filtering</strong></li>
                             <li>This action cannot be undone</li>
                         </ul>
                     </div>
-                    <p><strong>Note:</strong> Float values persist until reset, allowing multi-day tracking if needed.</p>
+                    <p><strong>Note:</strong> Float transaction records will remain available for filtering and reporting purposes.</p>
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" type="button" data-dismiss="modal">Cancel</button>
@@ -780,7 +887,7 @@ while ($row = $result->fetch_assoc()) {
         </div>
     </div>
 
-    <!-- Offload Float Modal -->
+    <!-- Fixed Offload Float Modal -->
     <div class="modal fade" id="offloadFloatModal" tabindex="-1" role="dialog" aria-hidden="true">
         <div class="modal-dialog" role="document">
             <div class="modal-content">
@@ -794,7 +901,7 @@ while ($row = $result->fetch_assoc()) {
                     <div class="modal-body">
                         <div class="alert alert-warning">
                             <i class="fas fa-exclamation-triangle"></i> 
-                            Offloading reduces the available float amount.
+                            Offloading reduces the available float amount. This action removes money from your current cash holdings.
                         </div>
                         <div class="form-group">
                             <label>Receipt Number</label>
@@ -808,9 +915,48 @@ while ($row = $result->fetch_assoc()) {
                                     <span class="input-group-text">KSh</span>
                                 </div>
                                 <input type="number" step="0.01" name="amount" class="form-control" required 
-                                       placeholder="0.00" min="0.01" max="<?= $opening_float ?>">
+                                       placeholder="0.00" min="0.01" max="<?= $closing_float ?>">
                             </div>
-                            <small class="text-muted">Available to offload: KSh <?= number_format($opening_float - $total_offloaded, 2) ?></small>
+                            <small class="text-muted">
+                                <strong>Available to offload: KSh <?= number_format($closing_float, 2) ?></strong>
+                                <br>
+                                <span class="text-info">
+                                    <i class="fas fa-info-circle"></i> 
+                                    Based on current closing float (Opening + Money In - Money Out - Already Offloaded)
+                                </span>
+                            </small>
+                        </div>
+                        
+                        <!-- Current Float Breakdown for Reference -->
+                        <div class="card bg-light mt-3">
+                            <div class="card-body p-3">
+                                <h6 class="card-title mb-2">Current Float Breakdown:</h6>
+                                <div class="row text-sm">
+                                    <div class="col-6">
+                                        <small>Opening Float:</small><br>
+                                        <strong>KSh <?= number_format($opening_float, 2) ?></strong>
+                                    </div>
+                                    <div class="col-6">
+                                        <small>Money In Today:</small><br>
+                                        <strong class="text-success">+KSh <?= number_format($total_inflows, 2) ?></strong>
+                                    </div>
+                                </div>
+                                <div class="row text-sm mt-2">
+                                    <div class="col-6">
+                                        <small>Money Out Today:</small><br>
+                                        <strong class="text-danger">-KSh <?= number_format($total_outflows, 2) ?></strong>
+                                    </div>
+                                    <div class="col-6">
+                                        <small>Already Offloaded:</small><br>
+                                        <strong class="text-warning">-KSh <?= number_format($total_offloaded, 2) ?></strong>
+                                    </div>
+                                </div>
+                                <hr class="my-2">
+                                <div class="text-center">
+                                    <small>Available Cash:</small><br>
+                                    <strong class="text-primary">KSh <?= number_format($closing_float, 2) ?></strong>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -962,19 +1108,66 @@ while ($row = $result->fetch_assoc()) {
             $('#floatReceiptModal').modal('show');
         });
 
-        // Validation for offload amount
+        // FIXED: Validation for offload amount - now uses closing float
         $('#offloadFloatForm input[name="amount"]').on('input', function() {
-            const maxAmount = parseFloat($(this).attr('max'));
+            const maxAmount = parseFloat($(this).attr('max')); // This is now closing float
             const currentAmount = parseFloat($(this).val());
+            const submitBtn = $('#offloadFloatForm button[name="offload_float"]');
             
-            if (currentAmount > maxAmount) {
+            // Remove existing validation messages
+            $(this).removeClass('is-invalid is-valid');
+            $(this).siblings('.invalid-feedback, .valid-feedback').remove();
+            
+            if (isNaN(currentAmount) || currentAmount <= 0) {
                 $(this).addClass('is-invalid');
-                $(this).siblings('.invalid-feedback').remove();
-                $(this).after('<div class="invalid-feedback">Amount cannot exceed available float</div>');
+                $(this).after('<div class="invalid-feedback">Please enter a valid amount greater than 0</div>');
+                submitBtn.prop('disabled', true);
+            } else if (currentAmount > maxAmount) {
+                $(this).addClass('is-invalid');
+                $(this).after(`<div class="invalid-feedback">Amount cannot exceed available cash (KSh ${maxAmount.toLocaleString('en-US', {minimumFractionDigits: 2})})</div>`);
+                submitBtn.prop('disabled', true);
             } else {
-                $(this).removeClass('is-invalid');
-                $(this).siblings('.invalid-feedback').remove();
+                $(this).addClass('is-valid');
+                $(this).after('<div class="valid-feedback">Amount is valid</div>');
+                submitBtn.prop('disabled', false);
             }
+        });
+
+        // Reset validation when modal opens
+        $('#offloadFloatModal').on('show.bs.modal', function() {
+            const form = $('#offloadFloatForm');
+            form[0].reset();
+            form.find('.is-invalid, .is-valid').removeClass('is-invalid is-valid');
+            form.find('.invalid-feedback, .valid-feedback').remove();
+            form.find('button[name="offload_float"]').prop('disabled', false);
+        });
+
+        // Add validation to add float form as well
+        $('#addFloatForm input[name="amount"]').on('input', function() {
+            const currentAmount = parseFloat($(this).val());
+            const submitBtn = $('#addFloatForm button[name="add_float"]');
+            
+            $(this).removeClass('is-invalid is-valid');
+            $(this).siblings('.invalid-feedback, .valid-feedback').remove();
+            
+            if (isNaN(currentAmount) || currentAmount <= 0) {
+                $(this).addClass('is-invalid');
+                $(this).after('<div class="invalid-feedback">Please enter a valid amount greater than 0</div>');
+                submitBtn.prop('disabled', true);
+            } else {
+                $(this).addClass('is-valid');
+                $(this).after('<div class="valid-feedback">Amount is valid</div>');
+                submitBtn.prop('disabled', false);
+            }
+        });
+
+        // Reset add float validation when modal opens
+        $('#addFloatModal').on('show.bs.modal', function() {
+            const form = $('#addFloatForm');
+            form[0].reset();
+            form.find('.is-invalid, .is-valid').removeClass('is-invalid is-valid');
+            form.find('.invalid-feedback, .valid-feedback').remove();
+            form.find('button[name="add_float"]').prop('disabled', false);
         });
     }
 
@@ -1007,12 +1200,26 @@ while ($row = $result->fetch_assoc()) {
     }
 
     function displayFloatHistory(data, summary) {
-        if (data.length === 0) {
-            $('#historyContent').html('<div class="alert alert-info">No float history found.</div>');
-            return;
-        }
+    if (data.length === 0) {
+        $('#historyContent').html('<div class="alert alert-info">No float history found.</div>');
+        return;
+    }
+
+    // Pagination variables
+    const itemsPerPage = 10;
+    let currentPage = 1;
+    const totalPages = Math.ceil(data.length / itemsPerPage);
+
+    function renderPage(page) {
+        const startIndex = (page - 1) * itemsPerPage;
+        const endIndex = startIndex + itemsPerPage;
+        const pageData = data.slice(startIndex, endIndex);
 
         let historyHtml = `
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="mb-0">Float History Records (${data.length} total)</h6>
+                <small class="text-muted">Page ${page} of ${totalPages}</small>
+            </div>
             <div class="table-responsive">
                 <table class="table table-striped table-bordered">
                     <thead style="background-color: #51087E; color: white;">
@@ -1025,7 +1232,7 @@ while ($row = $result->fetch_assoc()) {
                     </thead>
                     <tbody>`;
 
-        data.forEach(function(record) {
+        pageData.forEach(function(record) {
             historyHtml += `
                 <tr>
                     <td>${record.formatted_date}</td>
@@ -1037,32 +1244,97 @@ while ($row = $result->fetch_assoc()) {
 
         historyHtml += `</tbody></table></div>`;
 
-        // Add summary statistics
+        // Add pagination controls
+        if (totalPages > 1) {
+            historyHtml += `
+                <div class="d-flex justify-content-between align-items-center mt-3">
+                    <div>
+                        <small class="text-muted">
+                            Showing ${startIndex + 1} to ${Math.min(endIndex, data.length)} of ${data.length} entries
+                        </small>
+                    </div>
+                    <nav aria-label="Float history pagination">
+                        <ul class="pagination pagination-sm mb-0">`;
+            
+            // Previous button
+            historyHtml += `
+                <li class="page-item ${page === 1 ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="navigateFloatHistory(${page - 1}); return false;">
+                        <i class="fas fa-chevron-left"></i> Previous
+                    </a>
+                </li>`;
+            
+            // Page numbers
+            let startPage = Math.max(1, page - 2);
+            let endPage = Math.min(totalPages, page + 2);
+            
+            if (startPage > 1) {
+                historyHtml += `
+                    <li class="page-item">
+                        <a class="page-link" href="#" onclick="navigateFloatHistory(1); return false;">1</a>
+                    </li>`;
+                if (startPage > 2) {
+                    historyHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+                }
+            }
+            
+            for (let i = startPage; i <= endPage; i++) {
+                historyHtml += `
+                    <li class="page-item ${i === page ? 'active' : ''}">
+                        <a class="page-link" href="#" onclick="navigateFloatHistory(${i}); return false;" 
+                           style="${i === page ? 'background-color: #51087E; border-color: #51087E;' : ''}">${i}</a>
+                    </li>`;
+            }
+            
+            if (endPage < totalPages) {
+                if (endPage < totalPages - 1) {
+                    historyHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+                }
+                historyHtml += `
+                    <li class="page-item">
+                        <a class="page-link" href="#" onclick="navigateFloatHistory(${totalPages}); return false;">${totalPages}</a>
+                    </li>`;
+            }
+            
+            // Next button
+            historyHtml += `
+                <li class="page-item ${page === totalPages ? 'disabled' : ''}">
+                    <a class="page-link" href="#" onclick="navigateFloatHistory(${page + 1}); return false;">
+                        Next <i class="fas fa-chevron-right"></i>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+    </div>`;
+        }
+
+        // Add summary statistics if available
         if (summary && summary.total_resets > 0) {
             historyHtml += `
-                <div class="mt-3">
+                <div class="mt-4">
+                    <h6 class="mb-3">Summary Statistics</h6>
                     <div class="row">
                         <div class="col-md-4">
                             <div class="card bg-info text-white">
-                                <div class="card-body text-center">
-                                    <h6>Total Resets</h6>
-                                    <h4>${summary.total_resets}</h4>
+                                <div class="card-body text-center py-3">
+                                    <h6 class="mb-1">Total Resets</h6>
+                                    <h4 class="mb-0">${summary.total_resets}</h4>
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-4">
                             <div class="card bg-success text-white">
-                                <div class="card-body text-center">
-                                    <h6>Average Closing</h6>
-                                    <h4>KSh ${summary.average_closing.toLocaleString('en-US', {minimumFractionDigits: 2})}</h4>
+                                <div class="card-body text-center py-3">
+                                    <h6 class="mb-1">Average Closing</h6>
+                                    <h4 class="mb-0">KSh ${summary.average_closing.toLocaleString('en-US', {minimumFractionDigits: 2})}</h4>
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-4">
                             <div class="card bg-warning text-white">
-                                <div class="card-body text-center">
-                                    <h6>Days Tracked</h6>
-                                    <h4>${summary.unique_days}</h4>
+                                <div class="card-body text-center py-3">
+                                    <h6 class="mb-1">Days Tracked</h6>
+                                    <h4 class="mb-0">${summary.unique_days}</h4>
                                 </div>
                             </div>
                         </div>
@@ -1070,17 +1342,17 @@ while ($row = $result->fetch_assoc()) {
                     <div class="row mt-3">
                         <div class="col-md-6">
                             <div class="card bg-primary text-white">
-                                <div class="card-body text-center">
-                                    <h6>Highest Closing</h6>
-                                    <h4>KSh ${summary.highest_closing.toLocaleString('en-US', {minimumFractionDigits: 2})}</h4>
+                                <div class="card-body text-center py-3">
+                                    <h6 class="mb-1">Highest Closing</h6>
+                                    <h4 class="mb-0">KSh ${summary.highest_closing.toLocaleString('en-US', {minimumFractionDigits: 2})}</h4>
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="card bg-secondary text-white">
-                                <div class="card-body text-center">
-                                    <h6>Lowest Closing</h6>
-                                    <h4>KSh ${summary.lowest_closing.toLocaleString('en-US', {minimumFractionDigits: 2})}</h4>
+                                <div class="card-body text-center py-3">
+                                    <h6 class="mb-1">Lowest Closing</h6>
+                                    <h4 class="mb-0">KSh ${summary.lowest_closing.toLocaleString('en-US', {minimumFractionDigits: 2})}</h4>
                                 </div>
                             </div>
                         </div>
@@ -1090,6 +1362,22 @@ while ($row = $result->fetch_assoc()) {
 
         $('#historyContent').html(historyHtml);
     }
+
+    // Global function for navigation
+    window.navigateFloatHistory = function(page) {
+        if (page >= 1 && page <= totalPages) {
+            currentPage = page;
+            renderPage(currentPage);
+        }
+    };
+
+    // Store data globally for navigation
+    window.floatHistoryData = data;
+    window.floatHistorySummary = summary;
+
+    // Render first page
+    renderPage(currentPage);
+}
 
     function exportFloatHistory() {
         window.open('../controllers/export_float_history.php', '_blank');
@@ -1155,7 +1443,6 @@ while ($row = $result->fetch_assoc()) {
         } else {
             table.search('');
         }
-        
         table.draw();
         
         if (transactionType) {
@@ -1239,6 +1526,141 @@ while ($row = $result->fetch_assoc()) {
         
         $('#floatReceiptModal').modal('hide');
     }
+
+    // Additional utility functions for enhanced user experience
+    function validateFloatDates() {
+        var startDate = new Date($('#floatStartDate').val());
+        var endDate = new Date($('#floatEndDate').val());
+        
+        if (startDate > endDate) {
+            alert('Start date cannot be later than end date');
+            return false;
+        }
+        return true;
+    }
+
+    // Auto-refresh functionality for real-time updates
+    function enableAutoRefresh() {
+        if (typeof window.autoRefreshTimer !== 'undefined') {
+            clearInterval(window.autoRefreshTimer);
+        }
+        
+        // Refresh every 5 minutes
+        window.autoRefreshTimer = setInterval(function() {
+            if (!$('.modal').hasClass('show')) { // Don't refresh if modal is open
+                location.reload();
+            }
+        }, 300000);
+    }
+
+    // Call auto-refresh on page load
+    enableAutoRefresh();
+
+    // Disable auto-refresh when user is interacting with modals
+    $('.modal').on('show.bs.modal', function() {
+        if (typeof window.autoRefreshTimer !== 'undefined') {
+            clearInterval(window.autoRefreshTimer);
+        }
+    });
+
+    $('.modal').on('hidden.bs.modal', function() {
+        enableAutoRefresh();
+    });
+
+    // Enhanced error handling for AJAX requests
+    $(document).ajaxError(function(event, xhr, settings, thrownError) {
+        console.error('AJAX Error:', {
+            url: settings.url,
+            status: xhr.status,
+            error: thrownError
+        });
+        
+        if (xhr.status === 403) {
+            alert('Session expired. Please log in again.');
+            window.location.href = '../views/login.php';
+        } else if (xhr.status === 500) {
+            alert('Server error occurred. Please try again or contact support.');
+        }
+    });
+
+    // Keyboard shortcuts for common actions
+    $(document).keydown(function(e) {
+        // Ctrl+A for Add Float
+        if (e.ctrlKey && e.key === 'a') {
+            e.preventDefault();
+            $('#addFloatModal').modal('show');
+        }
+        
+        // Ctrl+O for Offload Float
+        if (e.ctrlKey && e.key === 'o') {
+            e.preventDefault();
+            $('#offloadFloatModal').modal('show');
+        }
+        
+        // Ctrl+R for Reset (with confirmation)
+        if (e.ctrlKey && e.key === 'r') {
+            e.preventDefault();
+            confirmResetFloat();
+        }
+        
+        // Ctrl+H for History
+        if (e.ctrlKey && e.key === 'h') {
+            e.preventDefault();
+            showClosingFloatHistory();
+        }
+    });
+
+    // Add tooltips for better user guidance
+    $(function () {
+        $('[data-toggle="tooltip"]').tooltip();
+    });
+
+    // Confirmation before leaving page with unsaved changes
+    var hasUnsavedChanges = false;
+    
+    $('form input, form select, form textarea').on('input change', function() {
+        hasUnsavedChanges = true;
+    });
+    
+    $('form').on('submit', function() {
+        hasUnsavedChanges = false;
+    });
+    
+    $(window).on('beforeunload', function() {
+        if (hasUnsavedChanges) {
+            return 'You have unsaved changes. Are you sure you want to leave?';
+        }
+    });
+
+    // Enhanced number formatting for better readability
+    function formatCurrency(amount) {
+        return new Intl.NumberFormat('en-KE', {
+            style: 'currency',
+            currency: 'KES',
+            minimumFractionDigits: 2
+        }).format(amount);
+    }
+
+    // Real-time calculation display
+    function updateCalculations() {
+        const openingFloat = parseFloat($('.float-card').eq(0).find('.float-amount').text().replace(/[^\d.-]/g, '')) || 0;
+        const totalOffloaded = parseFloat($('.float-card').eq(1).find('.float-amount').text().replace(/[^\d.-]/g, '')) || 0;
+        const netPosition = parseFloat($('.float-card').eq(2).find('.float-amount').text().replace(/[^\d.-]/g, '')) || 0;
+        
+        const calculatedClosing = openingFloat + netPosition - totalOffloaded;
+        
+        // Update closing float with animation if changed
+        const currentClosing = parseFloat($('#closingFloatAmount').text().replace(/[^\d.-]/g, '')) || 0;
+        if (Math.abs(calculatedClosing - currentClosing) > 0.01) {
+            $('#closingFloatAmount').fadeOut(200, function() {
+                $(this).text('KSh ' + calculatedClosing.toLocaleString('en-US', {minimumFractionDigits: 2})).fadeIn(200);
+            });
+        }
+    }
+
+    // Call calculation update periodically
+    setInterval(updateCalculations, 5000);
+
 </script>
 
 </body>
