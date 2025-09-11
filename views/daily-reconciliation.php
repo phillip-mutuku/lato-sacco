@@ -355,7 +355,7 @@ while ($row = $result->fetch_assoc()) {
     $net_position = $total_inflows - $total_outflows;
 
     // Function to calculate current closing float
-    function calculateCurrentClosingFloat($db) {
+        function calculateCurrentClosingFloat($db) {
         // Get current day float data
         $today_start = date('Y-m-d 00:00:00');
         $today_end = date('Y-m-d 23:59:59');
@@ -406,64 +406,52 @@ while ($row = $result->fetch_assoc()) {
         $stmt->execute();
         $total_money_in += $stmt->get_result()->fetch_assoc()['total'];
         
-        // Calculate all withdrawal fees (treated as money in)
-        $query = "SELECT COALESCE(SUM(withdrawal_fee), 0) as total FROM group_withdrawals WHERE date_withdrawn BETWEEN ? AND ?";
-        $stmt = $db->conn->prepare($query);
-        $stmt->bind_param("ss", $today_start, $today_end);
-        $stmt->execute();
-        $total_fees += $stmt->get_result()->fetch_assoc()['total'];
-        
+        // Calculate withdrawal fees from business transactions (Withdrawal Fee type)
         $query = "SELECT COALESCE(SUM(amount), 0) as total FROM business_group_transactions WHERE type = 'Withdrawal Fee' AND date BETWEEN ? AND ?";
         $stmt = $db->conn->prepare($query);
         $stmt->bind_param("ss", $today_start, $today_end);
         $stmt->execute();
         $total_fees += $stmt->get_result()->fetch_assoc()['total'];
         
-        $query = "SELECT COALESCE(SUM(withdrawal_fee), 0) as total FROM savings WHERE type = 'Withdrawal' AND date BETWEEN ? AND ?";
-        $stmt = $db->conn->prepare($query);
-        $stmt->bind_param("ss", $today_start, $today_end);
-        $stmt->execute();
-        $total_fees += $stmt->get_result()->fetch_assoc()['total'];
-        
-        $query = "SELECT COALESCE(SUM(withdrawal_fee), 0) as total FROM payment WHERE date_created BETWEEN ? AND ?";
-        $stmt = $db->conn->prepare($query);
-        $stmt->bind_param("ss", $today_start, $today_end);
-        $stmt->execute();
-        $total_fees += $stmt->get_result()->fetch_assoc()['total'];
-        
+        // Add fees to money in (since fees are profit)
         $total_money_in += $total_fees;
         
-        // Calculate money out
+        // Calculate money out - Group withdrawals
         $query = "SELECT COALESCE(SUM(amount), 0) as total FROM group_withdrawals WHERE date_withdrawn BETWEEN ? AND ?";
         $stmt = $db->conn->prepare($query);
         $stmt->bind_param("ss", $today_start, $today_end);
         $stmt->execute();
         $total_money_out += $stmt->get_result()->fetch_assoc()['total'];
         
+        // Business withdrawals (only withdrawal amounts, not fees)
         $query = "SELECT COALESCE(SUM(amount), 0) as total FROM business_group_transactions WHERE type = 'Withdrawal' AND date BETWEEN ? AND ?";
         $stmt = $db->conn->prepare($query);
         $stmt->bind_param("ss", $today_start, $today_end);
         $stmt->execute();
         $total_money_out += $stmt->get_result()->fetch_assoc()['total'];
         
+        // Individual withdrawals
         $query = "SELECT COALESCE(SUM(amount), 0) as total FROM savings WHERE type = 'Withdrawal' AND date BETWEEN ? AND ?";
         $stmt = $db->conn->prepare($query);
         $stmt->bind_param("ss", $today_start, $today_end);
         $stmt->execute();
         $total_money_out += $stmt->get_result()->fetch_assoc()['total'];
         
+        // Loan disbursements (payments)
         $query = "SELECT COALESCE(SUM(pay_amount), 0) as total FROM payment WHERE date_created BETWEEN ? AND ?";
         $stmt = $db->conn->prepare($query);
         $stmt->bind_param("ss", $today_start, $today_end);
         $stmt->execute();
         $total_money_out += $stmt->get_result()->fetch_assoc()['total'];
         
+        // Expenses
         $query = "SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE date BETWEEN ? AND ?";
         $stmt = $db->conn->prepare($query);
         $stmt->bind_param("ss", $today_start, $today_end);
         $stmt->execute();
         $total_money_out += $stmt->get_result()->fetch_assoc()['total'];
         
+        // Return calculated closing float
         return $opening + $total_money_in - $total_money_out - $offloaded;
     }
 ?>
