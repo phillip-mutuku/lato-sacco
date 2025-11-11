@@ -11,6 +11,9 @@
         exit();
     }
 
+    // Check if user is admin for delete functionality
+    $is_admin = ($_SESSION['role'] === 'admin');
+
     // Get filter parameters
     $filter_type = isset($_GET['filter_type']) ? $_GET['filter_type'] : 'month';
     $custom_start = isset($_GET['start_date']) ? $_GET['start_date'] : '';
@@ -336,6 +339,129 @@
             border-radius: 8px;
             margin-bottom: 20px;
         }
+        
+        .btn-delete-arrear {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+        }
+        
+        /* Toast Container Styles */
+        #toast-container {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            z-index: 9999;
+            max-width: 400px;
+        }
+        
+        .toast-notification {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            margin-bottom: 10px;
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            animation: slideInRight 0.3s ease-out;
+            border-left: 4px solid;
+        }
+        
+        .toast-notification.success {
+            border-left-color: #28a745;
+        }
+        
+        .toast-notification.error {
+            border-left-color: #dc3545;
+        }
+        
+        .toast-notification.warning {
+            border-left-color: #ffc107;
+        }
+        
+        .toast-notification.info {
+            border-left-color: #17a2b8;
+        }
+        
+        .toast-icon {
+            font-size: 24px;
+            margin-right: 12px;
+            flex-shrink: 0;
+        }
+        
+        .toast-notification.success .toast-icon {
+            color: #28a745;
+        }
+        
+        .toast-notification.error .toast-icon {
+            color: #dc3545;
+        }
+        
+        .toast-notification.warning .toast-icon {
+            color: #ffc107;
+        }
+        
+        .toast-notification.info .toast-icon {
+            color: #17a2b8;
+        }
+        
+        .toast-content {
+            flex-grow: 1;
+        }
+        
+        .toast-title {
+            font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 4px;
+            color: #333;
+        }
+        
+        .toast-message {
+            font-size: 13px;
+            color: #666;
+            margin: 0;
+        }
+        
+        .toast-close {
+            background: none;
+            border: none;
+            font-size: 20px;
+            color: #999;
+            cursor: pointer;
+            padding: 0;
+            margin-left: 12px;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+        
+        .toast-close:hover {
+            color: #333;
+        }
+        
+        @keyframes slideInRight {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes slideOutRight {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+        }
+        
+        .toast-notification.removing {
+            animation: slideOutRight 0.3s ease-out forwards;
+        }
     </style>
 </head>
 <body id="page-top">
@@ -349,6 +475,9 @@
             <div class="d-sm-flex align-items-center justify-content-between mb-4">
                 <h1 class="h3 mb-0 text-gray-800">Arrears Management</h1>
                 <div>
+                    <a href="#" id="exportExcelBtn" class="d-none d-sm-inline-block btn btn-sm btn-success shadow-sm mr-2">
+                        <i class="fas fa-file-excel fa-sm text-white-50"></i> Export to Excel
+                    </a>
                     <a href="#" id="generateReportBtn" class="d-none d-sm-inline-block btn btn-sm btn-warning shadow-sm">
                         <i class="fas fa-download fa-sm text-white-50"></i> Generate Report
                     </a>
@@ -469,6 +598,9 @@
                                     <th>Due Date</th>
                                     <th>Days Overdue</th>
                                     <th>Status</th>
+                                    <?php if ($is_admin): ?>
+                                    <th>Action</th>
+                                    <?php endif; ?>
                                 </tr>
                             </thead>
                             <tbody>
@@ -506,13 +638,25 @@
                                                 <?php echo $statusText; ?>
                                             </span>
                                         </td>
+                                        <?php if ($is_admin): ?>
+                                        <td>
+                                            <button class="btn btn-danger btn-sm btn-delete-arrear" 
+                                                    data-loan-id="<?php echo $row['loan_id']; ?>"
+                                                    data-due-date="<?php echo $row['due_date']; ?>"
+                                                    data-ref-no="<?php echo htmlspecialchars($row['ref_no']); ?>"
+                                                    data-client-name="<?php echo htmlspecialchars($row['client_name']); ?>"
+                                                    title="Delete this arrear">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </td>
+                                        <?php endif; ?>
                                     </tr>
                                 <?php 
                                     endwhile;
                                 } else {
                                 ?>
                                     <tr>
-                                        <td colspan="11" class="text-center">
+                                        <td colspan="<?php echo $is_admin ? '12' : '11'; ?>" class="text-center">
                                             <div class="py-4">
                                                 <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
                                                 <h5 class="text-success">No Overdue Payments Found</h5>
@@ -529,7 +673,7 @@
                                 <tr class="table-info font-weight-bold">
                                     <td colspan="7" class="text-right">Period Total:</td>
                                     <td class="warning-amount">KSh <?php echo number_format($total_period_arrears, 2); ?></td>
-                                    <td colspan="3"></td>
+                                    <td colspan="<?php echo $is_admin ? '4' : '3'; ?>"></td>
                                 </tr>
                             </tfoot>
                             <?php endif; ?>
@@ -548,6 +692,9 @@
             </div>
         </footer>
     </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
 
     <!-- Scroll to Top Button-->
     <a class="scroll-to-top rounded" href="#page-top">
@@ -572,6 +719,34 @@
             </div>
         </div>
     </div>
+    
+    <!-- Delete Confirmation Modal -->
+    <div class="modal fade" id="deleteArrearModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger">
+                    <h5 class="modal-title text-white">Confirm Delete Arrear</h5>
+                    <button class="close" type="button" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">×</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to delete this arrear?</p>
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <strong>Warning:</strong> This will mark the payment as paid and remove it from the arrears list.
+                    </div>
+                    <p><strong>Loan Reference:</strong> <span id="delete-loan-ref"></span></p>
+                    <p><strong>Client:</strong> <span id="delete-client-name"></span></p>
+                    <p><strong>Due Date:</strong> <span id="delete-due-date"></span></p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" type="button" data-dismiss="modal">Cancel</button>
+                    <button class="btn btn-danger" id="confirmDeleteArrear">Delete Arrear</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Bootstrap core JavaScript -->
     <script src="../public/js/jquery.js"></script>
@@ -586,9 +761,105 @@
 
     <!-- Custom scripts -->
     <script>
+        // Toast Notification System
+        function showToast(type, title, message, duration = 5000) {
+            const toastContainer = $('#toast-container');
+            
+            // Icon selection based on type
+            const icons = {
+                'success': 'fa-check-circle',
+                'error': 'fa-exclamation-circle',
+                'warning': 'fa-exclamation-triangle',
+                'info': 'fa-info-circle'
+            };
+            
+            const icon = icons[type] || icons['info'];
+            
+            // Create toast element
+            const toastId = 'toast-' + Date.now();
+            const toast = $(`
+                <div id="${toastId}" class="toast-notification ${type}">
+                    <div class="toast-icon">
+                        <i class="fas ${icon}"></i>
+                    </div>
+                    <div class="toast-content">
+                        <div class="toast-title">${title}</div>
+                        <p class="toast-message">${message}</p>
+                    </div>
+                    <button class="toast-close" aria-label="Close">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            `);
+            
+            // Add to container
+            toastContainer.append(toast);
+            
+            // Close button handler
+            toast.find('.toast-close').click(function() {
+                removeToast(toastId);
+            });
+            
+            // Auto-remove after duration
+            if (duration > 0) {
+                setTimeout(function() {
+                    removeToast(toastId);
+                }, duration);
+            }
+            
+            return toastId;
+        }
+        
+        function removeToast(toastId) {
+            const toast = $('#' + toastId);
+            if (toast.length) {
+                toast.addClass('removing');
+                setTimeout(function() {
+                    toast.remove();
+                }, 300); // Match animation duration
+            }
+        }
+        
+        function showSuccessToast(message, duration) {
+            return showToast('success', 'Success!', message, duration);
+        }
+        
+        function showErrorToast(message, duration) {
+            return showToast('error', 'Error!', message, duration);
+        }
+        
+        function showWarningToast(message, duration) {
+            return showToast('warning', 'Warning!', message, duration);
+        }
+        
+        function showInfoToast(message, duration) {
+            return showToast('info', 'Information', message, duration);
+        }
+
         $(document).ready(function() {
+            // Check for PHP session messages and display as toasts
+            <?php if (isset($_SESSION['success_msg'])): ?>
+                showSuccessToast('<?php echo addslashes($_SESSION['success_msg']); ?>', 5000);
+                <?php unset($_SESSION['success_msg']); ?>
+            <?php endif; ?>
+            
+            <?php if (isset($_SESSION['error_msg'])): ?>
+                showErrorToast('<?php echo addslashes($_SESSION['error_msg']); ?>', 7000);
+                <?php unset($_SESSION['error_msg']); ?>
+            <?php endif; ?>
+            
+            <?php if (isset($_SESSION['warning_msg'])): ?>
+                showWarningToast('<?php echo addslashes($_SESSION['warning_msg']); ?>', 6000);
+                <?php unset($_SESSION['warning_msg']); ?>
+            <?php endif; ?>
+            
+            <?php if (isset($_SESSION['info_msg'])): ?>
+                showInfoToast('<?php echo addslashes($_SESSION['info_msg']); ?>', 5000);
+                <?php unset($_SESSION['info_msg']); ?>
+            <?php endif; ?>
+            
             // Initialize DataTable
-            $('#arrearsTable').DataTable({
+            var arrearsTable = $('#arrearsTable').DataTable({
                 "order": [[8, "asc"]], // Order by due date ascending (oldest first)
                 "pageLength": 25,
                 "responsive": true,
@@ -596,7 +867,7 @@
                     "emptyTable": "No overdue payments found for the selected period"
                 },
                 "columnDefs": [
-                    { "orderable": false, "targets": [10] } // Make status column non-orderable
+                    { "orderable": false, "targets": [<?php echo $is_admin ? '10, 11' : '10'; ?>] }
                 ]
             });
 
@@ -626,16 +897,61 @@
                     
                     if (!startDate || !endDate) {
                         e.preventDefault();
-                        alert('Please select both start and end dates for custom range');
+                        showWarningToast('Please select both start and end dates for custom range', 5000);
                         return false;
                     }
                     
                     if (new Date(startDate) > new Date(endDate)) {
                         e.preventDefault();
-                        alert('Start date cannot be later than end date');
+                        showErrorToast('Start date cannot be later than end date', 5000);
                         return false;
                     }
                 }
+            });
+
+            // Handle Excel export
+            $('#exportExcelBtn').click(function(e) {
+                e.preventDefault();
+                
+                var filterType = $('#filter_type').val();
+                var startDate = '';
+                var endDate = '';
+                
+                if (filterType === 'custom') {
+                    startDate = $('input[name="start_date"]').val();
+                    endDate = $('input[name="end_date"]').val();
+                    
+                    if (!startDate || !endDate) {
+                        showWarningToast('Please select both start and end dates for custom range', 5000);
+                        return;
+                    }
+                    
+                    if (new Date(startDate) > new Date(endDate)) {
+                        showErrorToast('Start date cannot be later than end date', 5000);
+                        return;
+                    }
+                }
+                
+                var url = '../controllers/export_arrears.php?filter_type=' + filterType;
+                if (filterType === 'custom' && startDate && endDate) {
+                    url += '&start_date=' + startDate + '&end_date=' + endDate;
+                }
+                
+                var btn = $(this);
+                var originalText = btn.html();
+                btn.html('<i class="fas fa-spinner fa-spin"></i> Exporting...').prop('disabled', true);
+                
+                // Show info toast
+                showInfoToast('Generating Excel file... Your download will begin shortly.', 3000);
+                
+                // Trigger download
+                window.location.href = url;
+                
+                // Reset button and show success after delay
+                setTimeout(function() {
+                    btn.html(originalText).prop('disabled', false);
+                    showSuccessToast('Excel file has been generated and downloaded successfully', 4000);
+                }, 2000);
             });
 
             // Handle report generation
@@ -652,12 +968,12 @@
                     endDate = $('input[name="end_date"]').val();
                     
                     if (!startDate || !endDate) {
-                        alert('Please select both start and end dates for custom range');
+                        showWarningToast('Please select both start and end dates for custom range', 5000);
                         return;
                     }
                     
                     if (new Date(startDate) > new Date(endDate)) {
-                        alert('Start date cannot be later than end date');
+                        showErrorToast('Start date cannot be later than end date', 5000);
                         return;
                     }
                 }
@@ -671,16 +987,94 @@
                 // Show loading state
                 var btn = $(this);
                 var originalText = btn.html();
-                btn.html('<i class="fas fa-spinner fa-spin"></i> Generating...');
+                btn.html('<i class="fas fa-spinner fa-spin"></i> Generating...').prop('disabled', true);
+                
+                // Show info toast
+                showInfoToast('Generating report... Please wait.', 3000);
                 
                 // Trigger download
                 window.location.href = url;
                 
                 // Reset button after short delay
                 setTimeout(function() {
-                    btn.html(originalText);
+                    btn.html(originalText).prop('disabled', false);
+                    showSuccessToast('Report has been generated successfully', 4000);
                 }, 2000);
             });
+
+            <?php if ($is_admin): ?>
+            // Delete arrear functionality
+            var deleteLoanId, deleteDueDate;
+            
+            $('.btn-delete-arrear').click(function() {
+                deleteLoanId = $(this).data('loan-id');
+                deleteDueDate = $(this).data('due-date');
+                var refNo = $(this).data('ref-no');
+                var clientName = $(this).data('client-name');
+                
+                $('#delete-loan-ref').text(refNo);
+                $('#delete-client-name').text(clientName);
+                $('#delete-due-date').text(deleteDueDate);
+                
+                $('#deleteArrearModal').modal('show');
+            });
+            
+            $('#confirmDeleteArrear').click(function() {
+                var btn = $(this);
+                var originalText = btn.html();
+                btn.html('<i class="fas fa-spinner fa-spin"></i> Deleting...').prop('disabled', true);
+                
+                $.ajax({
+                    url: '../controllers/delete_arrear.php',
+                    type: 'POST',
+                    data: {
+                        loan_id: deleteLoanId,
+                        due_date: deleteDueDate
+                    },
+                    dataType: 'json',
+                    success: function(response) {
+                        $('#deleteArrearModal').modal('hide');
+                        
+                        if (response.status === 'success') {
+                            showSuccessToast(
+                                response.message || 'Arrear successfully deleted and marked as paid',
+                                5000
+                            );
+                            
+                            // Reload page after a short delay to show the toast
+                            setTimeout(function() {
+                                location.reload();
+                            }, 1500);
+                        } else {
+                            showErrorToast(
+                                response.message || 'Failed to delete arrear. Please try again.',
+                                7000
+                            );
+                            btn.html(originalText).prop('disabled', false);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        $('#deleteArrearModal').modal('hide');
+                        
+                        let errorMessage = 'Failed to delete arrear. Please try again.';
+                        
+                        // Try to parse error response
+                        try {
+                            const errorResponse = JSON.parse(xhr.responseText);
+                            if (errorResponse.message) {
+                                errorMessage = errorResponse.message;
+                            }
+                        } catch (e) {
+                            // Use default error message
+                        }
+                        
+                        showErrorToast(errorMessage, 7000);
+                        console.error('Delete error:', error);
+                        btn.html(originalText).prop('disabled', false);
+                    }
+                });
+            });
+            <?php endif; ?>
 
             // Auto-update defaulters list every 5 minutes
             function updateDefaulters() {
@@ -708,49 +1102,6 @@
 
             // Initialize tooltips
             $('[data-toggle="tooltip"]').tooltip();
-
-            // Add refresh button functionality
-            $('#refreshData').click(function(e) {
-                e.preventDefault();
-                location.reload();
-            });
-
-            // Export functionality for filtered data
-            $('#exportData').click(function(e) {
-                e.preventDefault();
-                
-                var table = $('#arrearsTable').DataTable();
-                var data = table.rows({search: 'applied'}).data();
-                
-                if (data.length === 0) {
-                    alert('No data to export for the current filter');
-                    return;
-                }
-                
-                // Create CSV content
-                var csv = 'Loan Reference,Client Name,Phone Number,Principal,Interest,Expected Amount,Repaid Amount,Overdue Amount,Due Date,Days Overdue,Status\n';
-                
-                data.each(function(row) {
-                    // Clean the data for CSV export
-                    var cleanRow = [];
-                    $(row).each(function(index, cell) {
-                        var cleanCell = $(cell).text().replace(/,/g, ';').replace(/\n/g, ' ').trim();
-                        cleanRow.push('"' + cleanCell + '"');
-                    });
-                    csv += cleanRow.join(',') + '\n';
-                });
-                
-                // Download CSV
-                var blob = new Blob([csv], { type: 'text/csv' });
-                var url = window.URL.createObjectURL(blob);
-                var a = document.createElement('a');
-                a.href = url;
-                a.download = 'arrears_report_' + new Date().toISOString().split('T')[0] + '.csv';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                window.URL.revokeObjectURL(url);
-            });
         });
     </script>
 </body>

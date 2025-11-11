@@ -289,8 +289,9 @@ $(document).ready(function() {
         $('#clientDetails').hide();
     });
 
-    // Remove Member Click
-    $('.remove-member').click(function() {
+    // Remove Member Click - Using event delegation for DataTables pagination
+    // This ensures the click event works on all pages, not just the first one
+    $(document).on('click', '.remove-member', function() {
         var memberId = $(this).data('member-id');
         var memberName = $(this).data('member-name');
         $('#memberToRemove').text(memberName);
@@ -312,7 +313,11 @@ $(document).ready(function() {
             dataType: 'json',
             success: function(response) {
                 if (response.status === 'success') {
-                    location.reload();
+                    $('#removeMemberModal').modal('hide');
+                    showMessage('Member removed successfully', 'success');
+                    setTimeout(function() {
+                        location.reload();
+                    }, 1500);
                 } else {
                     showMessage('Error: ' + response.message, 'error');
                 }
@@ -323,8 +328,8 @@ $(document).ready(function() {
         });
     });
 
-    // View member details
-    $('.view-member').click(function() {
+    // View member details - Also using event delegation
+    $(document).on('click', '.view-member', function() {
         var memberId = $(this).data('member-id');
         window.open(`../views/view_account.php?id=${memberId}`, '_blank');
     });

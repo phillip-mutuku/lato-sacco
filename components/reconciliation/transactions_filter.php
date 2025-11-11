@@ -141,6 +141,23 @@
     font-weight: bold;
     text-align: center;
 }
+
+.export-btn {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: white;
+    border: none;
+    transition: all 0.3s ease;
+}
+
+.export-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+    color: white;
+}
+
+.export-btn i {
+    margin-right: 5px;
+}
 </style>
 
 <!-- Transaction Filter Section -->
@@ -193,7 +210,7 @@
             </div>
             <div class="col-md-3">
                 <div class="net-position-summary">
-                    <div class="summary-amount"><?= count(array_merge($group_savings_data, $group_withdrawals_data, $business_savings_data, $business_withdrawals_data, $payments_data, $repayments_data, $expenses_data, $savings_data)) ?></div>
+                    <div class="summary-amount"><?= count(array_merge($group_savings_data, $group_withdrawals_data, $business_savings_data, $business_withdrawals_data, $payments_data, $repayments_data, $expenses_data, $money_received_data, $savings_data)) ?></div>
                     <div class="summary-label">Total Transactions</div>
                 </div>
             </div>
@@ -216,10 +233,10 @@
         <div class="tab-content" id="moneyFlowTabContent">
             <!-- Money In Tab -->
             <div class="tab-pane fade show active" id="moneyIn" role="tabpanel">
-                <!-- Search Section -->
+                <!-- Search Section with Export Button -->
                 <div class="search-section">
                     <div class="row">
-                        <div class="col-md-6">
+                        <div class="col-md-5">
                             <input type="text" id="moneyInSearch" class="form-control" placeholder="Search by name, receipt no, group name...">
                         </div>
                         <div class="col-md-3">
@@ -229,11 +246,17 @@
                                 <option value="business_savings">Business Savings</option>
                                 <option value="individual_savings">Individual Savings</option>
                                 <option value="loan_repayments">Loan Repayments</option>
+                                <option value="money_received">Money Received</option>
                             </select>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <button class="btn btn-outline-primary btn-block" onclick="filterMoneyIn()">
                                 <i class="fas fa-search"></i> Search
+                            </button>
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn export-btn btn-block" onclick="exportMoneyIn()">
+                                <i class="fas fa-file-excel"></i> Export
                             </button>
                         </div>
                     </div>
@@ -256,6 +279,14 @@
                     <div class="breakdown-item">
                         <h6>Loan Repayments</h6>
                         <div class="amount">KSh <?= number_format($total_repayments, 2) ?></div>
+                    </div>
+                    <div class="breakdown-item">
+                        <h6>Money Received</h6>
+                        <div class="amount">KSh <?= number_format($total_money_received, 2) ?></div>
+                    </div>
+                    <div class="breakdown-item">
+                        <h6>Total Fees</h6>
+                        <div class="amount">KSh <?= number_format($total_withdrawal_fees, 2) ?></div>
                     </div>
                 </div>
 
@@ -281,7 +312,14 @@
                         <tbody>
                             <!-- Group Savings -->
                             <?php foreach ($group_savings_data as $row): ?>
-                            <tr class="group_savings">
+                            <tr class="group_savings" 
+                                data-date="<?= $row['date_saved'] ?>"
+                                data-type="Group Savings"
+                                data-client="<?= htmlspecialchars($row['group_name'] ?? 'Unknown Group') ?>"
+                                data-amount="<?= $row['amount'] ?>"
+                                data-payment="<?= htmlspecialchars($row['payment_mode']) ?>"
+                                data-receipt="<?= htmlspecialchars($row['receipt_no']) ?>"
+                                data-served="<?= htmlspecialchars($row['served_by_name']) ?>">
                                 <td><?= date('M d, Y', strtotime($row['date_saved'])) ?></td>
                                 <td><span class="badge badge-success">Group Savings</span></td>
                                 <td><?= htmlspecialchars($row['group_name'] ?? 'Unknown Group') ?></td>
@@ -294,7 +332,14 @@
 
                             <!-- Business Savings -->
                             <?php foreach ($business_savings_data as $row): ?>
-                            <tr class="business_savings">
+                            <tr class="business_savings"
+                                data-date="<?= $row['date'] ?>"
+                                data-type="Business Savings"
+                                data-client="<?= htmlspecialchars($row['group_name'] ?? 'Unknown Business Group') ?>"
+                                data-amount="<?= $row['amount'] ?>"
+                                data-payment="<?= htmlspecialchars($row['payment_mode']) ?>"
+                                data-receipt="<?= htmlspecialchars($row['receipt_no']) ?>"
+                                data-served="<?= htmlspecialchars($row['served_by_name']) ?>">
                                 <td><?= date('M d, Y', strtotime($row['date'])) ?></td>
                                 <td><span class="badge badge-success">Business Savings</span></td>
                                 <td><?= htmlspecialchars($row['group_name'] ?? 'Unknown Business Group') ?></td>
@@ -308,7 +353,14 @@
                             <!-- Individual Savings -->
                             <?php foreach ($savings_data as $row): ?>
                                 <?php if ($row['type'] == 'Savings'): ?>
-                                <tr class="individual_savings">
+                                <tr class="individual_savings"
+                                    data-date="<?= $row['date'] ?>"
+                                    data-type="Individual Savings"
+                                    data-client="<?= htmlspecialchars($row['account_name'] ?? 'Unknown Client') ?>"
+                                    data-amount="<?= $row['amount'] ?>"
+                                    data-payment="<?= htmlspecialchars($row['payment_mode']) ?>"
+                                    data-receipt="<?= htmlspecialchars($row['receipt_number']) ?>"
+                                    data-served="<?= htmlspecialchars($row['served_by_name']) ?>">
                                     <td><?= date('M d, Y', strtotime($row['date'])) ?></td>
                                     <td><span class="badge badge-success">Individual Savings</span></td>
                                     <td><?= htmlspecialchars($row['account_name'] ?? 'Unknown Client') ?></td>
@@ -322,7 +374,14 @@
 
                             <!-- Loan Repayments -->
                             <?php foreach ($repayments_data as $row): ?>
-                            <tr class="loan_repayments">
+                            <tr class="loan_repayments"
+                                data-date="<?= $row['date_paid'] ?>"
+                                data-type="Loan Repayment"
+                                data-client="<?= htmlspecialchars($row['ref_no'] ?? 'Unknown Loan') ?>"
+                                data-amount="<?= $row['amount_repaid'] ?>"
+                                data-payment="<?= htmlspecialchars($row['payment_mode']) ?>"
+                                data-receipt="<?= htmlspecialchars($row['receipt_number']) ?>"
+                                data-served="<?= htmlspecialchars($row['served_by_name']) ?>">
                                 <td><?= date('M d, Y', strtotime($row['date_paid'])) ?></td>
                                 <td><span class="badge badge-success">Loan Repayment</span></td>
                                 <td><?= htmlspecialchars($row['ref_no'] ?? 'Unknown Loan') ?></td>
@@ -330,6 +389,26 @@
                                 <td><?= htmlspecialchars($row['payment_mode']) ?></td>
                                 <td><?= htmlspecialchars($row['receipt_number']) ?></td>
                                 <td><?= htmlspecialchars($row['served_by_name']) ?></td>
+                            </tr>
+                            <?php endforeach; ?>
+
+                            <!-- Money Received -->
+                            <?php foreach ($money_received_data as $row): ?>
+                            <tr class="money_received"
+                                data-date="<?= $row['date'] ?>"
+                                data-type="Money Received"
+                                data-client="<?= htmlspecialchars($row['category'] ?? 'Income') ?>"
+                                data-amount="<?= abs($row['amount']) ?>"
+                                data-payment="<?= htmlspecialchars($row['payment_method']) ?>"
+                                data-receipt="<?= htmlspecialchars($row['receipt_no']) ?>"
+                                data-served="<?= htmlspecialchars($row['created_by_name']) ?>">
+                                <td><?= date('M d, Y', strtotime($row['date'])) ?></td>
+                                <td><span class="badge badge-success">Money Received</span></td>
+                                <td><?= htmlspecialchars($row['category'] ?? 'Income') ?></td>
+                                <td><?= number_format(abs($row['amount']), 2) ?></td>
+                                <td><?= htmlspecialchars($row['payment_method']) ?></td>
+                                <td><?= htmlspecialchars($row['receipt_no']) ?></td>
+                                <td><?= htmlspecialchars($row['created_by_name']) ?></td>
                             </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -346,10 +425,10 @@
 
             <!-- Money Out Tab -->
             <div class="tab-pane fade" id="moneyOut" role="tabpanel">
-                <!-- Search Section -->
+                <!-- Search Section with Export Button -->
                 <div class="search-section">
                     <div class="row">
-                        <div class="col-md-6">
+                        <div class="col-md-5">
                             <input type="text" id="moneyOutSearch" class="form-control" placeholder="Search by name, receipt no, group name...">
                         </div>
                         <div class="col-md-3">
@@ -362,41 +441,20 @@
                                 <option value="expenses">Expenses</option>
                             </select>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <button class="btn btn-outline-primary btn-block" onclick="filterMoneyOut()">
                                 <i class="fas fa-search"></i> Search
+                            </button>
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn export-btn btn-block" onclick="exportMoneyOut()">
+                                <i class="fas fa-file-excel"></i> Export
                             </button>
                         </div>
                     </div>
                 </div>
 
                 <!-- Money Out Breakdown -->
-                <?php
-                $total_group_withdrawal_fees = 0;
-                $total_business_withdrawal_fees = 0; 
-                $total_individual_withdrawal_fees = 0;
-                $total_disbursement_fees = 0;
-
-                // Calculate withdrawal fees
-                foreach ($business_withdrawals_data as $row) {
-                    if ($row['type'] == 'Withdrawal Fee') {
-                        $total_business_withdrawal_fees += $row['amount'];
-                    }
-                }
-
-                foreach ($savings_data as $row) {
-                    if ($row['type'] == 'Withdrawal') {
-                        $total_individual_withdrawal_fees += $row['withdrawal_fee'];
-                    }
-                }
-
-                foreach ($payments_data as $row) {
-                    $total_disbursement_fees += $row['withdrawal_fee'];
-                }
-
-                $total_withdrawal_fees = $total_group_withdrawal_fees + $total_business_withdrawal_fees + $total_individual_withdrawal_fees + $total_disbursement_fees;
-                ?>
-
                 <div class="breakdown-summary">
                     <div class="breakdown-item">
                         <h6>Group Withdrawals</h6>
@@ -417,10 +475,6 @@
                     <div class="breakdown-item">
                         <h6>Expenses</h6>
                         <div class="amount">KSh <?= number_format($total_expenses, 2) ?></div>
-                    </div>
-                    <div class="breakdown-item">
-                        <h6>Total Fees</h6>
-                        <div class="amount">KSh <?= number_format($total_withdrawal_fees, 2) ?></div>
                     </div>
                 </div>
 
@@ -447,7 +501,15 @@
                         <tbody>
                             <!-- Group Withdrawals -->
                             <?php foreach ($group_withdrawals_data as $row): ?>
-                            <tr class="group_withdrawals">
+                            <tr class="group_withdrawals"
+                                data-date="<?= $row['date_withdrawn'] ?>"
+                                data-type="Group Withdrawal"
+                                data-client="<?= htmlspecialchars($row['group_name'] ?? 'Unknown Group') ?>"
+                                data-amount="<?= $row['amount'] ?>"
+                                data-fee="<?= $row['withdrawal_fee'] ?? 0 ?>"
+                                data-payment="<?= htmlspecialchars($row['payment_mode']) ?>"
+                                data-receipt="<?= htmlspecialchars($row['receipt_no']) ?>"
+                                data-served="<?= htmlspecialchars($row['served_by_name']) ?>">
                                 <td><?= date('M d, Y', strtotime($row['date_withdrawn'])) ?></td>
                                 <td><span class="badge badge-danger">Group Withdrawal</span></td>
                                 <td><?= htmlspecialchars($row['group_name'] ?? 'Unknown Group') ?></td>
@@ -462,7 +524,15 @@
                             <!-- Business Withdrawals -->
                             <?php foreach ($business_withdrawals_data as $row): ?>
                                 <?php if ($row['type'] == 'Withdrawal'): ?>
-                                <tr class="business_withdrawals">
+                                <tr class="business_withdrawals"
+                                    data-date="<?= $row['date'] ?>"
+                                    data-type="Business Withdrawal"
+                                    data-client="<?= htmlspecialchars($row['group_name'] ?? 'Unknown Business Group') ?>"
+                                    data-amount="<?= $row['amount'] ?>"
+                                    data-fee="<?= $row['withdrawal_fee'] ?>"
+                                    data-payment="<?= htmlspecialchars($row['payment_mode']) ?>"
+                                    data-receipt="<?= htmlspecialchars($row['receipt_no']) ?>"
+                                    data-served="<?= htmlspecialchars($row['served_by_name']) ?>">
                                     <td><?= date('M d, Y', strtotime($row['date'])) ?></td>
                                     <td><span class="badge badge-danger">Business Withdrawal</span></td>
                                     <td><?= htmlspecialchars($row['group_name'] ?? 'Unknown Business Group') ?></td>
@@ -478,7 +548,15 @@
                             <!-- Individual Withdrawals -->
                             <?php foreach ($savings_data as $row): ?>
                                 <?php if ($row['type'] == 'Withdrawal'): ?>
-                                <tr class="individual_withdrawals">
+                                <tr class="individual_withdrawals"
+                                    data-date="<?= $row['date'] ?>"
+                                    data-type="Individual Withdrawal"
+                                    data-client="<?= htmlspecialchars($row['account_name'] ?? 'Unknown Client') ?>"
+                                    data-amount="<?= $row['amount'] ?>"
+                                    data-fee="<?= $row['withdrawal_fee'] ?>"
+                                    data-payment="<?= htmlspecialchars($row['payment_mode']) ?>"
+                                    data-receipt="<?= htmlspecialchars($row['receipt_number']) ?>"
+                                    data-served="<?= htmlspecialchars($row['served_by_name']) ?>">
                                     <td><?= date('M d, Y', strtotime($row['date'])) ?></td>
                                     <td><span class="badge badge-danger">Individual Withdrawal</span></td>
                                     <td><?= htmlspecialchars($row['account_name'] ?? 'Unknown Client') ?></td>
@@ -493,7 +571,15 @@
 
                             <!-- Loan Disbursements -->
                             <?php foreach ($payments_data as $row): ?>
-                            <tr class="loan_disbursements">
+                            <tr class="loan_disbursements"
+                                data-date="<?= $row['date_created'] ?>"
+                                data-type="Loan Disbursement"
+                                data-client="<?= htmlspecialchars($row['payee'] ?? 'Unknown Payee') ?>"
+                                data-amount="<?= $row['pay_amount'] ?>"
+                                data-fee="<?= $row['withdrawal_fee'] ?>"
+                                data-payment="Bank Transfer"
+                                data-receipt="<?= htmlspecialchars($row['receipt_no']) ?>"
+                                data-served="<?= htmlspecialchars($row['disbursed_by']) ?>">
                                 <td><?= date('M d, Y', strtotime($row['date_created'])) ?></td>
                                 <td><span class="badge badge-danger">Loan Disbursement</span></td>
                                 <td><?= htmlspecialchars($row['payee'] ?? 'Unknown Payee') ?></td>
@@ -507,14 +593,22 @@
 
                             <!-- Expenses -->
                             <?php foreach ($expenses_data as $row): ?>
-                            <tr class="expenses">
+                            <tr class="expenses"
+                                data-date="<?= $row['date'] ?>"
+                                data-type="Expense"
+                                data-client="<?= htmlspecialchars($row['category']) ?> - <?= htmlspecialchars($row['description'] ?? 'N/A') ?>"
+                                data-amount="<?= abs($row['amount']) ?>"
+                                data-fee="0"
+                                data-payment="<?= htmlspecialchars($row['payment_method']) ?>"
+                                data-receipt="<?= htmlspecialchars($row['receipt_no']) ?>"
+                                data-served="<?= htmlspecialchars($row['created_by_name']) ?>">
                                 <td><?= date('M d, Y', strtotime($row['date'])) ?></td>
                                 <td><span class="badge badge-danger">Expense</span></td>
-                                <td><?= htmlspecialchars($row['category']) ?> - <?= htmlspecialchars($row['description']) ?></td>
-                                <td><?= number_format($row['amount'], 2) ?></td>
+                                <td><?= htmlspecialchars($row['category']) ?> - <?= htmlspecialchars($row['description'] ?? 'N/A') ?></td>
+                                <td><?= number_format(abs($row['amount']), 2) ?></td>
                                 <td>0.00</td>
                                 <td><?= htmlspecialchars($row['payment_method']) ?></td>
-                                <td><?= htmlspecialchars($row['reference_no']) ?></td>
+                                <td><?= htmlspecialchars($row['receipt_no']) ?></td>
                                 <td><?= htmlspecialchars($row['created_by_name']) ?></td>
                             </tr>
                             <?php endforeach; ?>
@@ -533,3 +627,61 @@
         </div>
     </div>
 </div>
+
+<script>
+// Export Money In transactions to Excel
+function exportMoneyIn() {
+    const startDate = $('#transactionStartDate').val();
+    const endDate = $('#transactionEndDate').val();
+    const searchTerm = $('#moneyInSearch').val();
+    const transactionType = $('#moneyInType').val();
+    
+    // Build URL with parameters
+    const params = new URLSearchParams({
+        type: 'money_in',
+        start_date: startDate,
+        end_date: endDate,
+        search: searchTerm,
+        transaction_type: transactionType
+    });
+    
+    // Show loading spinner
+    showLoadingSpinner();
+    
+    // Open export URL in new window
+    window.open('../controllers/export_transactions.php?' + params.toString(), '_blank');
+    
+    // Remove loading spinner after a short delay
+    setTimeout(() => {
+        $('.loading-overlay').fadeOut();
+    }, 2000);
+}
+
+// Export Money Out transactions to Excel
+function exportMoneyOut() {
+    const startDate = $('#transactionStartDate').val();
+    const endDate = $('#transactionEndDate').val();
+    const searchTerm = $('#moneyOutSearch').val();
+    const transactionType = $('#moneyOutType').val();
+    
+    // Build URL with parameters
+    const params = new URLSearchParams({
+        type: 'money_out',
+        start_date: startDate,
+        end_date: endDate,
+        search: searchTerm,
+        transaction_type: transactionType
+    });
+    
+    // Show loading spinner
+    showLoadingSpinner();
+    
+    // Open export URL in new window
+    window.open('../controllers/export_transactions.php?' + params.toString(), '_blank');
+    
+    // Remove loading spinner after a short delay
+    setTimeout(() => {
+        $('.loading-overlay').fadeOut();
+    }, 2000);
+}
+</script>
