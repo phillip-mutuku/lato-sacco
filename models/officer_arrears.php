@@ -1003,10 +1003,12 @@
             });
 
             <?php if ($is_admin): ?>
-            // Delete arrear functionality
+            // Delete arrear functionality - USING EVENT DELEGATION
+            // This is the KEY fix - attach handler to the table instead of individual buttons
             var deleteLoanId, deleteDueDate;
             
-            $('.btn-delete-arrear').click(function() {
+            // Use event delegation by attaching to the table (parent element)
+            $('#arrearsTable').on('click', '.btn-delete-arrear', function() {
                 deleteLoanId = $(this).data('loan-id');
                 deleteDueDate = $(this).data('due-date');
                 var refNo = $(this).data('ref-no');
