@@ -632,6 +632,7 @@ $(document).ready(function() {
             }
         },
         error: function(xhr, status, error) {
+            console.log('Raw Response Text:', xhr.responseText);
             console.error('Loan repayment AJAX Error:', {
                 status: status,
                 error: error,

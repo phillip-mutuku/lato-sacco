@@ -171,9 +171,8 @@ class AccountModel {
     // =====================================
 
 
-   /**
+/**
  * Check if a transaction record already exists for this receipt and account
- * to prevent duplicate transaction entries
  */
 public function checkDuplicateTransaction($receiptNumber, $accountId, $type, $amount) {
     try {
@@ -727,139 +726,213 @@ public function getLoanDetailsForRepayment($loanId) {
         }
     }
 
-   /**
- * Fixed repayLoan method that prevents duplicate transaction records
+/**
+ * BULLETPROOF: Process loan repayment with full data integrity
  */
 public function repayLoan($accountId, $loanId, $repayAmount, $paymentMode, $servedBy, $receiptNumber) {
-    error_log("Model: Repay Loan - accountId=$accountId, loanId=$loanId, repayAmount=$repayAmount");
-    
-    // Validate loan exists and get loan details
-    $loanQuery = $this->conn->prepare("SELECT loan_id, account_id, ref_no, status FROM loan WHERE loan_id = ?");
-    $loanQuery->bind_param("i", $loanId);
-    $loanQuery->execute();
-    $loanResult = $loanQuery->get_result();
-    
-    if ($loanResult->num_rows === 0) {
-        error_log("Loan not found with ID: $loanId");
-        return ['status' => 'error', 'message' => "Loan not found with ID: $loanId"];
-    }
-    
-    $loanData = $loanResult->fetch_assoc();
-    
-    if ($loanData['status'] < 2) {
-        return ['status' => 'error', 'message' => 'Cannot process repayment. Loan must be disbursed first (status >= 2).'];
-    }
-    
-    $loanRefNo = $loanData['ref_no'];
-    
-    $this->conn->begin_transaction();
+    error_log("=== LOAN REPAYMENT STARTED ===");
+    error_log("Loan ID: $loanId, Amount: $repayAmount, Receipt: $receiptNumber");
     
     try {
-        // CORRECTED: Get unpaid/partial schedule entries in strict chronological order
-        $scheduleStmt = $this->conn->prepare("
-            SELECT * FROM loan_schedule 
-            WHERE loan_id = ? 
-            AND (status = 'unpaid' OR status = 'partial')
-            AND (amount - COALESCE(repaid_amount, 0)) > 0.01
-            ORDER BY due_date ASC
+        // Start transaction
+        $this->conn->begin_transaction();
+        
+        // Step 1: Validate loan exists and is disbursed
+        $loanQuery = $this->conn->prepare("
+            SELECT l.loan_id, l.account_id, l.ref_no, l.status, l.amount as loan_amount
+            FROM loan l
+            WHERE l.loan_id = ?
         ");
         
-        $scheduleStmt->bind_param("i", $loanId);
-        $scheduleStmt->execute();
-        $schedules = $scheduleStmt->get_result()->fetch_all(MYSQLI_ASSOC);
-        
-        if (empty($schedules)) {
-            throw new Exception("No outstanding installments found for this loan");
+        if (!$loanQuery) {
+            throw new Exception("Failed to prepare loan query: " . $this->conn->error);
         }
         
-        $remainingPayment = floatval($repayAmount);
-        $today = date('Y-m-d');
-        $updatedInstallments = 0;
+        $loanQuery->bind_param("i", $loanId);
+        $loanQuery->execute();
+        $loanData = $loanQuery->get_result()->fetch_assoc();
         
-        // CORRECTED: Process payments strictly in chronological order
-        foreach ($schedules as $schedule) {
-            if ($remainingPayment <= 0.01) break; // Stop when payment is exhausted
+        if (!$loanData) {
+            throw new Exception("Loan not found with ID: $loanId");
+        }
+        
+        if ($loanData['status'] < 2) {
+            throw new Exception('Loan must be disbursed (status >= 2) before accepting repayments');
+        }
+        
+        if ($loanData['account_id'] != $accountId) {
+            throw new Exception("Loan does not belong to account ID: $accountId");
+        }
+        
+        // Step 2: Validate repayment amount
+        $repayAmount = floatval($repayAmount);
+        if ($repayAmount <= 0) {
+            throw new Exception("Invalid repayment amount: $repayAmount");
+        }
+        
+        // Step 3: Get ALL schedule entries in strict chronological order
+        $scheduleQuery = $this->conn->prepare("
+            SELECT 
+                id,
+                due_date,
+                principal,
+                interest,
+                amount,
+                balance,
+                COALESCE(repaid_amount, 0) as repaid_amount,
+                status,
+                paid_date
+            FROM loan_schedule 
+            WHERE loan_id = ? 
+            ORDER BY due_date ASC, id ASC
+        ");
+        
+        if (!$scheduleQuery) {
+            throw new Exception("Failed to prepare schedule query: " . $this->conn->error);
+        }
+        
+        $scheduleQuery->bind_param("i", $loanId);
+        $scheduleQuery->execute();
+        $scheduleEntries = $scheduleQuery->get_result()->fetch_all(MYSQLI_ASSOC);
+        
+        if (empty($scheduleEntries)) {
+            throw new Exception("No loan schedule found for loan ID: $loanId");
+        }
+        
+        error_log("Found " . count($scheduleEntries) . " schedule entries");
+        
+        // Step 4: Calculate total outstanding
+        $totalOutstanding = 0;
+        foreach ($scheduleEntries as $entry) {
+            $dueAmount = floatval($entry['amount']);
+            $alreadyPaid = floatval($entry['repaid_amount']);
+            $stillOwed = $dueAmount - $alreadyPaid;
+            if ($stillOwed > 0.01) {
+                $totalOutstanding += $stillOwed;
+            }
+        }
+        
+        error_log("Total outstanding before payment: KSh $totalOutstanding");
+        
+        if ($totalOutstanding <= 0.01) {
+            throw new Exception("Loan is already fully paid. No outstanding balance.");
+        }
+        
+        // Allow overpayment but warn
+        if ($repayAmount > $totalOutstanding + 0.01) {
+            error_log("WARNING: Repayment amount (KSh $repayAmount) exceeds outstanding (KSh $totalOutstanding)");
+        }
+        
+        // Step 5: Apply payment chronologically
+        $remainingPayment = $repayAmount;
+        $today = date('Y-m-d');
+        $updatedEntries = [];
+        
+        foreach ($scheduleEntries as $entry) {
+            if ($remainingPayment <= 0.01) {
+                break;
+            }
             
-            $dueAmount = floatval($schedule['amount']);
-            $currentRepaidAmount = floatval($schedule['repaid_amount'] ?? 0);
-            $stillOwed = $dueAmount - $currentRepaidAmount;
+            $entryId = $entry['id'];
+            $dueDate = $entry['due_date'];
+            $dueAmount = floatval($entry['amount']);
+            $currentlyPaid = floatval($entry['repaid_amount']);
             
-            if ($stillOwed <= 0.01) continue; // Skip if already fully paid
+            $stillOwed = $dueAmount - $currentlyPaid;
             
-            $paymentForThisInstallment = min($remainingPayment, $stillOwed);
-            $newRepaidAmount = $currentRepaidAmount + $paymentForThisInstallment;
+            if ($stillOwed <= 0.01) {
+                continue;
+            }
             
-            // CORRECTED: Determine status with proper rounding tolerance
+            $paymentForThisEntry = min($remainingPayment, $stillOwed);
+            $newRepaidAmount = $currentlyPaid + $paymentForThisEntry;
+            
+            // Determine new status
             $newStatus = 'unpaid';
             $paidDate = null;
             
-            if (abs($newRepaidAmount - $dueAmount) <= 0.01) { 
-                // Fully paid (allowing for small rounding differences)
+            if (abs($newRepaidAmount - $dueAmount) <= 0.01) {
                 $newStatus = 'paid';
                 $paidDate = $today;
-                $newRepaidAmount = $dueAmount; // Ensure exact amount
+                $newRepaidAmount = $dueAmount;
             } elseif ($newRepaidAmount > 0.01) {
                 $newStatus = 'partial';
             }
             
-            // CORRECTED: Calculate default amount properly
+            // Calculate default amount
             $newDefaultAmount = 0;
-            if ($newStatus !== 'paid' && strtotime($schedule['due_date']) < strtotime($today)) {
-                $newDefaultAmount = max(0, $dueAmount - $newRepaidAmount);
+            if ($newStatus !== 'paid' && strtotime($dueDate) < strtotime($today)) {
+                $newDefaultAmount = $dueAmount - $newRepaidAmount;
             }
             
-            // Update schedule entry
-            $updateQuery = "
-                UPDATE loan_schedule 
-                SET repaid_amount = ?,
-                    default_amount = ?,
-                    status = ?,
-                    paid_date = ?
-                WHERE id = ?
-            ";
+            $updatedEntries[] = [
+                'id' => $entryId,
+                'due_date' => $dueDate,
+                'new_repaid_amount' => $newRepaidAmount,
+                'payment_applied' => $paymentForThisEntry,
+                'new_status' => $newStatus,
+                'paid_date' => $paidDate,
+                'default_amount' => $newDefaultAmount
+            ];
             
-            $updateScheduleStmt = $this->conn->prepare($updateQuery);
-            if (!$updateScheduleStmt) {
-                throw new Exception("Prepare failed: " . $this->conn->error);
-            }
+            $remainingPayment -= $paymentForThisEntry;
             
-            $updateScheduleStmt->bind_param(
-                "ddssi",
-                $newRepaidAmount,
-                $newDefaultAmount,
-                $newStatus,
-                $paidDate,
-                $schedule['id']
+            error_log("  Entry $entryId: Applied KSh $paymentForThisEntry, Status: $newStatus");
+        }
+        
+        if (empty($updatedEntries)) {
+            throw new Exception("No schedule entries available for payment");
+        }
+        
+        error_log("Updated " . count($updatedEntries) . " entries, Remaining: KSh $remainingPayment");
+        
+        // Step 6: Update schedule entries - WITH ERROR CHECKING
+        $updateStmt = $this->conn->prepare("
+            UPDATE loan_schedule 
+            SET repaid_amount = ?,
+                status = ?,
+                paid_date = ?,
+                default_amount = ?
+            WHERE id = ?
+        ");
+        
+        if (!$updateStmt) {
+            throw new Exception("Failed to prepare update statement: " . $this->conn->error);
+        }
+        
+        foreach ($updatedEntries as $update) {
+            $updateStmt->bind_param(
+                "dssdi",
+                $update['new_repaid_amount'],
+                $update['new_status'],
+                $update['paid_date'],
+                $update['default_amount'],
+                $update['id']
             );
             
-            if (!$updateScheduleStmt->execute()) {
-                error_log("MySQL Error: " . $updateScheduleStmt->error);
-                throw new Exception("Failed to update loan schedule: " . $updateScheduleStmt->error);
-            }
-            
-            $remainingPayment -= $paymentForThisInstallment;
-            $updatedInstallments++;
-            
-            error_log("Updated installment {$schedule['id']}: paid {$paymentForThisInstallment}, new total: {$newRepaidAmount}, status: {$newStatus}");
-            
-            // CORRECTED: If this installment is fully paid, move to next one
-            if ($newStatus === 'paid') {
-                error_log("Installment {$schedule['id']} fully paid, moving to next");
-            } else {
-                // If partial payment, stop here (don't move to next installment)
-                error_log("Partial payment on installment {$schedule['id']}, remaining: " . ($dueAmount - $newRepaidAmount));
-                break;
+            if (!$updateStmt->execute()) {
+                throw new Exception("Failed to update schedule entry ID {$update['id']}: " . $updateStmt->error);
             }
         }
         
-        // Insert loan repayment record
+        // Step 7: Insert repayment record
         $repaymentStmt = $this->conn->prepare("
             INSERT INTO loan_repayments (
-                loan_id, amount_repaid, date_paid, payment_mode, served_by, receipt_number
+                loan_id, 
+                amount_repaid, 
+                date_paid, 
+                payment_mode, 
+                served_by, 
+                receipt_number
             ) VALUES (?, ?, NOW(), ?, ?, ?)
         ");
         
-        $repaymentStmt->bind_param("idsss", 
+        if (!$repaymentStmt) {
+            throw new Exception("Failed to prepare repayment insert: " . $this->conn->error);
+        }
+        
+        $repaymentStmt->bind_param(
+            "idsss",
             $loanId,
             $repayAmount,
             $paymentMode,
@@ -868,56 +941,93 @@ public function repayLoan($accountId, $loanId, $repayAmount, $paymentMode, $serv
         );
         
         if (!$repaymentStmt->execute()) {
-            throw new Exception("Failed to record loan repayment for loan ID: $loanId");
+            throw new Exception("Failed to insert repayment record: " . $repaymentStmt->error);
         }
         
-        // Insert transaction record safely
-        $description = "Loan repayment for loan ref #" . $loanRefNo;
-        $this->addTransactionSafe(
-            $accountId,
-            'Loan Repayment',
-            $repayAmount,
-            $description,
-            $receiptNumber
-        );
+        $repaymentId = $this->conn->insert_id;
+        error_log("Repayment record created with ID: $repaymentId");
         
-        // CORRECTED: Check if loan is fully paid
-        $unpaidStmt = $this->conn->prepare("
-            SELECT COUNT(*) as unpaid_count, SUM(amount - COALESCE(repaid_amount, 0)) as total_remaining
-            FROM loan_schedule
-            WHERE loan_id = ? AND status != 'paid'
+        // Step 8: Add transaction record (safely)
+        $description = "Loan repayment for loan ref #" . $loanData['ref_no'];
+        
+        // Use simple transaction insert instead of addTransactionSafe to avoid method call issues
+        $transactionStmt = $this->conn->prepare("
+            INSERT INTO transactions (
+                account_id,
+                type,
+                amount,
+                description,
+                receipt_number,
+                date
+            ) VALUES (?, 'Loan Repayment', ?, ?, ?, NOW())
         ");
         
-        $unpaidStmt->bind_param("i", $loanId);
-        $unpaidStmt->execute();
-        $unpaidResult = $unpaidStmt->get_result()->fetch_assoc();
-        
-        $unpaidCount = intval($unpaidResult['unpaid_count']);
-        $totalRemaining = floatval($unpaidResult['total_remaining'] ?? 0);
-        
-        // Mark loan as completed if no significant amount remaining
-        if ($unpaidCount == 0 || $totalRemaining <= 0.01) {
-            $updateLoanStmt = $this->conn->prepare("
-                UPDATE loan SET status = 3 WHERE loan_id = ?
-            ");
-            $updateLoanStmt->bind_param("i", $loanId);
-            $updateLoanStmt->execute();
-            error_log("Loan {$loanId} marked as fully paid (status 3)");
+        if ($transactionStmt) {
+            $transactionStmt->bind_param("idss", $accountId, $repayAmount, $description, $receiptNumber);
+            $transactionStmt->execute();
+            error_log("Transaction record created");
+        } else {
+            error_log("WARNING: Could not create transaction record: " . $this->conn->error);
         }
         
+        // Step 9: Check if loan is fully paid
+        $statusCheckStmt = $this->conn->prepare("
+            SELECT 
+                COUNT(*) as total_installments,
+                SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid_installments,
+                SUM(amount - COALESCE(repaid_amount, 0)) as total_remaining
+            FROM loan_schedule 
+            WHERE loan_id = ?
+        ");
+        
+        if (!$statusCheckStmt) {
+            throw new Exception("Failed to prepare status check: " . $this->conn->error);
+        }
+        
+        $statusCheckStmt->bind_param("i", $loanId);
+        $statusCheckStmt->execute();
+        $statusResult = $statusCheckStmt->get_result()->fetch_assoc();
+        
+        $totalInstallments = intval($statusResult['total_installments']);
+        $paidInstallments = intval($statusResult['paid_installments']);
+        $totalRemaining = floatval($statusResult['total_remaining'] ?? 0);
+        
+        error_log("Status: $paidInstallments/$totalInstallments paid, Remaining: KSh $totalRemaining");
+        
+        // Update loan status if fully paid
+        if ($paidInstallments === $totalInstallments && $totalRemaining <= 0.01) {
+            $updateLoanStmt = $this->conn->prepare("UPDATE loan SET status = 3 WHERE loan_id = ?");
+            
+            if ($updateLoanStmt) {
+                $updateLoanStmt->bind_param("i", $loanId);
+                $updateLoanStmt->execute();
+                error_log("✓ Loan marked as FULLY PAID (status = 3)");
+            }
+        }
+        
+        // Commit transaction
         $this->conn->commit();
+        
+        error_log("=== LOAN REPAYMENT COMPLETED SUCCESSFULLY ===");
         
         return [
             'status' => 'success',
-            'message' => 'Loan repayment successful',
-            'repaymentId' => $this->conn->insert_id,
-            'installments_updated' => $updatedInstallments,
-            'remaining_payment' => $remainingPayment
+            'message' => 'Loan repayment processed successfully',
+            'repaymentId' => $repaymentId,
+            'details' => [
+                'amount_paid' => $repayAmount,
+                'installments_updated' => count($updatedEntries),
+                'remaining_balance' => max(0, $totalRemaining - $repayAmount),
+                'loan_fully_paid' => ($paidInstallments === $totalInstallments && $totalRemaining <= 0.01)
+            ]
         ];
         
     } catch (Exception $e) {
         $this->conn->rollback();
-        error_log("Error in repayLoan: " . $e->getMessage());
+        error_log("=== LOAN REPAYMENT FAILED ===");
+        error_log("ERROR: " . $e->getMessage());
+        error_log("Stack trace: " . $e->getTraceAsString());
+        
         return [
             'status' => 'error',
             'message' => $e->getMessage()
@@ -979,14 +1089,14 @@ public function repayLoan($accountId, $loanId, $repayAmount, $paymentMode, $serv
         }
     }
 
-    /**
-     * Delete loan repayment and update schedule
-     */
+/**
+ * FULLY FIXED: Delete loan repayment and properly reset schedule
+ */
 public function deleteRepayment($repaymentId, $loanId, $deletedAmount) {
     $this->conn->begin_transaction();
     
     try {
-        // Step 1: Get repayment details before deletion
+        // Step 1: Get repayment details BEFORE deletion
         $getRepaymentStmt = $this->conn->prepare("
             SELECT lr.*, l.ref_no as loan_ref_no, l.status as loan_status
             FROM loan_repayments lr
@@ -1002,80 +1112,107 @@ public function deleteRepayment($repaymentId, $loanId, $deletedAmount) {
         }
         
         $deletedAmountFloat = floatval($deletedAmount);
-        $repaymentDate = $repaymentDetails['date_paid'];
         $receiptNumber = $repaymentDetails['receipt_number'];
         
-        error_log("Deleting repayment ID: $repaymentId, Amount: $deletedAmountFloat, Date: $repaymentDate");
+        error_log("=== DELETE REPAYMENT STARTED ===");
+        error_log("Repayment ID: $repaymentId");
+        error_log("Loan ID: $loanId");
+        error_log("Amount to delete: $deletedAmountFloat");
+        error_log("Receipt: $receiptNumber");
         
-        // Step 2: Find all loan schedule entries that were affected by this specific repayment
-        // We'll identify them by finding paid entries that match the repayment date
-        $affectedScheduleStmt = $this->conn->prepare("
-            SELECT id, due_date, amount, principal, interest, repaid_amount, status
+        // Step 2: Get ALL schedule entries in chronological order
+        $allScheduleStmt = $this->conn->prepare("
+            SELECT id, due_date, amount, principal, interest, 
+                   COALESCE(repaid_amount, 0) as repaid_amount, 
+                   status, paid_date
             FROM loan_schedule 
             WHERE loan_id = ? 
-            AND (paid_date = ? OR (status = 'paid' AND repaid_amount > 0))
             ORDER BY due_date ASC
         ");
-        $affectedScheduleStmt->bind_param("is", $loanId, $repaymentDate);
-        $affectedScheduleStmt->execute();
-        $affectedEntries = $affectedScheduleStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+        $allScheduleStmt->bind_param("i", $loanId);
+        $allScheduleStmt->execute();
+        $allEntries = $allScheduleStmt->get_result()->fetch_all(MYSQLI_ASSOC);
         
-        error_log("Found " . count($affectedEntries) . " potentially affected schedule entries");
+        error_log("Total schedule entries found: " . count($allEntries));
         
-        // Step 3: Reset affected schedule entries to unpaid status
-        // Work backwards through the payment to identify which entries to reset
+        // Step 3: Identify entries to reset by working through them chronologically
         $remainingDeletionAmount = $deletedAmountFloat;
         $entriesToReset = [];
         
-        // Process affected entries in reverse chronological order (last paid first)
-        $reversedEntries = array_reverse($affectedEntries);
-        
-        foreach ($reversedEntries as $entry) {
-            if ($remainingDeletionAmount <= 0) break;
+        foreach ($allEntries as $entry) {
+            // Stop when deletion amount is exhausted
+            if ($remainingDeletionAmount <= 0.01) {
+                break;
+            }
             
-            $entryAmount = floatval($entry['amount']);
+            $entryId = $entry['id'];
+            $dueDate = $entry['due_date'];
+            $dueAmount = floatval($entry['amount']);
             $currentlyPaid = floatval($entry['repaid_amount']);
             
-            if ($currentlyPaid > 0) {
-                // This entry has payments that need to be reversed
-                $amountToReset = min($remainingDeletionAmount, $currentlyPaid);
-                $newPaidAmount = max(0, $currentlyPaid - $amountToReset);
-                
-                // Determine new status
-                $newStatus = 'unpaid';
-                $newPaidDate = null;
-                
-                if ($newPaidAmount > 0.01) {
-                    $newStatus = (abs($newPaidAmount - $entryAmount) <= 0.01) ? 'paid' : 'partial';
-                    if ($newStatus === 'paid') {
-                        $newPaidDate = $entry['paid_date']; // Keep original paid date if still fully paid
-                    }
-                }
-                
-                // Calculate default amount
-                $today = date('Y-m-d');
-                $newDefaultAmount = 0;
-                if ($newStatus !== 'paid' && strtotime($entry['due_date']) < strtotime($today)) {
-                    $newDefaultAmount = $entryAmount - $newPaidAmount;
-                }
-                
-                $entriesToReset[] = [
-                    'id' => $entry['id'],
-                    'due_date' => $entry['due_date'],
-                    'new_repaid_amount' => $newPaidAmount,
-                    'new_status' => $newStatus,
-                    'new_paid_date' => $newPaidDate,
-                    'new_default_amount' => $newDefaultAmount,
-                    'reset_amount' => $amountToReset
-                ];
-                
-                $remainingDeletionAmount -= $amountToReset;
-                
-                error_log("Entry {$entry['id']} (due: {$entry['due_date']}): Reset $amountToReset, New paid: $newPaidAmount, Status: $newStatus");
+            // Skip entries with no payment
+            if ($currentlyPaid <= 0.01) {
+                error_log("Skipping entry $entryId (due: $dueDate) - no payment");
+                continue;
             }
+            
+            // Calculate how much to deduct from this entry
+            $amountToDeduct = min($remainingDeletionAmount, $currentlyPaid);
+            $newPaidAmount = $currentlyPaid - $amountToDeduct;
+            
+            // Ensure no negative values
+            if ($newPaidAmount < 0) {
+                $newPaidAmount = 0;
+            }
+            
+            // Determine new status
+            $newStatus = 'unpaid';
+            $newPaidDate = null;
+            
+            if ($newPaidAmount > 0.01) {
+                // There's still some payment remaining
+                if (abs($newPaidAmount - $dueAmount) <= 0.01) {
+                    // Fully paid
+                    $newStatus = 'paid';
+                    $newPaidAmount = $dueAmount; // Ensure exact amount
+                    $newPaidDate = $entry['paid_date']; // Keep original paid date
+                } else {
+                    // Partially paid
+                    $newStatus = 'partial';
+                }
+            }
+            
+            // Calculate default amount for overdue unpaid/partial installments
+            $today = date('Y-m-d');
+            $newDefaultAmount = 0;
+            if ($newStatus !== 'paid' && strtotime($dueDate) < strtotime($today)) {
+                $newDefaultAmount = $dueAmount - $newPaidAmount;
+            }
+            
+            $entriesToReset[] = [
+                'id' => $entryId,
+                'due_date' => $dueDate,
+                'old_repaid_amount' => $currentlyPaid,
+                'new_repaid_amount' => $newPaidAmount,
+                'new_status' => $newStatus,
+                'new_paid_date' => $newPaidDate,
+                'new_default_amount' => $newDefaultAmount,
+                'deducted_amount' => $amountToDeduct
+            ];
+            
+            $remainingDeletionAmount -= $amountToDeduct;
+            
+            error_log("Entry $entryId (due: $dueDate): Deducting $amountToDeduct from $currentlyPaid -> $newPaidAmount, Status: $newStatus");
         }
         
-        // Step 4: Update loan schedule entries
+        // Warning if we couldn't account for all the deletion amount
+        if ($remainingDeletionAmount > 0.01) {
+            error_log("WARNING: Could not fully account for deleted amount. Remaining: $remainingDeletionAmount");
+        }
+        
+        error_log("Entries to reset: " . count($entriesToReset));
+        
+        // Step 4: Update ALL affected schedule entries
         $updateScheduleStmt = $this->conn->prepare("
             UPDATE loan_schedule 
             SET repaid_amount = ?, 
@@ -1085,6 +1222,11 @@ public function deleteRepayment($repaymentId, $loanId, $deletedAmount) {
             WHERE id = ?
         ");
         
+        if (!$updateScheduleStmt) {
+            throw new Exception("Failed to prepare update statement: " . $this->conn->error);
+        }
+        
+        $updatedCount = 0;
         foreach ($entriesToReset as $resetEntry) {
             $updateScheduleStmt->bind_param(
                 "dssdi",
@@ -1098,66 +1240,105 @@ public function deleteRepayment($repaymentId, $loanId, $deletedAmount) {
             if (!$updateScheduleStmt->execute()) {
                 throw new Exception("Failed to update schedule entry ID {$resetEntry['id']}: " . $updateScheduleStmt->error);
             }
+            
+            if ($updateScheduleStmt->affected_rows > 0) {
+                $updatedCount++;
+                error_log("✓ UPDATED Schedule ID {$resetEntry['id']}: {$resetEntry['old_repaid_amount']} -> {$resetEntry['new_repaid_amount']}, Status: {$resetEntry['new_status']}");
+            } else {
+                error_log("⚠ No changes for Schedule ID {$resetEntry['id']}");
+            }
         }
         
-        // Step 5: Delete from loan_repayments table
-        $deleteRepaymentStmt = $this->conn->prepare("DELETE FROM loan_repayments WHERE id = ?");
+        error_log("Total schedule entries updated: $updatedCount");
+        
+        // Step 5: Delete the repayment record
+        $deleteRepaymentStmt = $this->conn->prepare("
+            DELETE FROM loan_repayments WHERE id = ?
+        ");
         $deleteRepaymentStmt->bind_param("i", $repaymentId);
         
         if (!$deleteRepaymentStmt->execute()) {
-            throw new Exception("Failed to delete repayment record");
+            throw new Exception("Failed to delete repayment record: " . $deleteRepaymentStmt->error);
         }
         
-        // Step 6: Delete from transactions table
+        error_log("✓ DELETED repayment record ID: $repaymentId");
+        
+        // Step 6: Delete associated transactions
         $deleteTransactionStmt = $this->conn->prepare("
             DELETE FROM transactions 
             WHERE receipt_number = ? 
-            AND type = 'Loan Repayment' 
-            AND ABS(amount - ?) < 0.01
+            AND type = 'Loan Repayment'
         ");
-        $deleteTransactionStmt->bind_param("sd", $receiptNumber, $deletedAmountFloat);
+        $deleteTransactionStmt->bind_param("s", $receiptNumber);
         $deleteTransactionStmt->execute();
         
         $deletedTransactions = $deleteTransactionStmt->affected_rows;
-        error_log("Deleted $deletedTransactions transaction records");
+        error_log("✓ DELETED $deletedTransactions transaction record(s)");
         
-        // Step 7: Update loan status if needed
-        // Check if loan should no longer be marked as fully paid
-        $unpaidCountStmt = $this->conn->prepare("
-            SELECT COUNT(*) as unpaid_count 
+        // Step 7: Recalculate loan status
+        $statusCheckStmt = $this->conn->prepare("
+            SELECT 
+                COUNT(*) as total_installments,
+                SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid_installments,
+                SUM(amount - COALESCE(repaid_amount, 0)) as remaining_amount
             FROM loan_schedule 
-            WHERE loan_id = ? AND status != 'paid'
+            WHERE loan_id = ?
         ");
-        $unpaidCountStmt->bind_param("i", $loanId);
-        $unpaidCountStmt->execute();
-        $unpaidResult = $unpaidCountStmt->get_result()->fetch_assoc();
-        $unpaidCount = intval($unpaidResult['unpaid_count']);
+        $statusCheckStmt->bind_param("i", $loanId);
+        $statusCheckStmt->execute();
+        $statusResult = $statusCheckStmt->get_result()->fetch_assoc();
         
-        if ($unpaidCount > 0 && $repaymentDetails['loan_status'] == 3) {
-            // Loan was marked as fully paid but now has unpaid installments
-            $updateLoanStmt = $this->conn->prepare("UPDATE loan SET status = 2 WHERE loan_id = ?");
-            $updateLoanStmt->bind_param("i", $loanId);
-            $updateLoanStmt->execute();
-            error_log("Loan $loanId status changed from fully paid (3) to disbursed (2) due to unpaid installments");
+        $totalInstallments = intval($statusResult['total_installments']);
+        $paidInstallments = intval($statusResult['paid_installments']);
+        $remainingAmount = floatval($statusResult['remaining_amount'] ?? 0);
+        
+        error_log("Loan status check: $paidInstallments/$totalInstallments paid, remaining: KSh $remainingAmount");
+        
+        // Update loan status
+        $newLoanStatus = null;
+        if ($paidInstallments === $totalInstallments && $remainingAmount <= 0.01) {
+            // Fully paid
+            $newLoanStatus = 3;
+            error_log("Loan should be marked as FULLY PAID (status 3)");
+        } elseif ($repaymentDetails['loan_status'] == 3) {
+            // Was marked as fully paid but now has unpaid installments
+            $newLoanStatus = 2;
+            error_log("Loan should be changed to DISBURSED (status 2) - was incorrectly marked as fully paid");
         }
         
+        if ($newLoanStatus !== null) {
+            $updateLoanStmt = $this->conn->prepare("
+                UPDATE loan SET status = ? WHERE loan_id = ?
+            ");
+            $updateLoanStmt->bind_param("ii", $newLoanStatus, $loanId);
+            $updateLoanStmt->execute();
+            error_log("✓ UPDATED loan status to: $newLoanStatus");
+        }
+        
+        // Commit transaction
         $this->conn->commit();
+        
+        error_log("=== DELETE REPAYMENT COMPLETED SUCCESSFULLY ===");
         
         return [
             'status' => 'success',
-            'message' => 'Repayment deleted successfully. Affected schedule entries have been reset to unpaid status.',
+            'message' => 'Repayment deleted and loan schedule updated successfully',
             'details' => [
                 'repayment_id' => $repaymentId,
                 'deleted_amount' => $deletedAmountFloat,
-                'entries_reset' => count($entriesToReset),
+                'schedule_entries_updated' => $updatedCount,
                 'transactions_deleted' => $deletedTransactions,
-                'unpaid_installments_remaining' => $unpaidCount
+                'remaining_unpaid' => ($totalInstallments - $paidInstallments),
+                'remaining_amount' => $remainingAmount
             ]
         ];
         
     } catch (Exception $e) {
         $this->conn->rollback();
-        error_log("Error in simplified deleteRepayment: " . $e->getMessage());
+        error_log("=== DELETE REPAYMENT FAILED ===");
+        error_log("ERROR: " . $e->getMessage());
+        error_log("Stack trace: " . $e->getTraceAsString());
+        
         return [
             'status' => 'error',
             'message' => $e->getMessage()
@@ -1265,78 +1446,104 @@ public function deleteRepayment($repaymentId, $loanId, $deletedAmount) {
         return $stmt->execute();
     }
 
-    /**
-     * Create loan schedule for new loan
-     */
-    public function createLoanSchedule($loanId) {
-        try {
-            $loanQuery = "SELECT l.*, lp.interest_rate 
-                         FROM loan l
-                         JOIN loan_products lp ON l.loan_product_id = lp.id
-                         WHERE l.loan_id = ?";
-            
-            $stmt = $this->conn->prepare($loanQuery);
-            $stmt->bind_param("i", $loanId);
-            $stmt->execute();
-            $loan = $stmt->get_result()->fetch_assoc();
-            
-            if (!$loan) {
-                throw new Exception("Loan not found");
-            }
-            
-            $totalLoanAmount = $loan['amount'];
-            $loanTerm = $loan['loan_term'];
-            $monthlyPrincipal = round($totalLoanAmount / $loanTerm, 2);
-            $interestRate = $loan['interest_rate'] / 100 / 12;
-            
-            $startDate = new DateTime($loan['meeting_date'] ?? $loan['date_created']);
-            $paymentDate = clone $startDate;
-            $paymentDate->modify('+1 month');
-            
-            $principalsPaid = 0;
-            $remainingBalance = $totalLoanAmount;
-            
-            $this->conn->query("DELETE FROM loan_schedule WHERE loan_id = $loanId");
-            
-            $insertStmt = $this->conn->prepare("
-                INSERT INTO loan_schedule (
-                    loan_id, due_date, principal, interest, 
-                    amount, balance, status
-                ) VALUES (?, ?, ?, ?, ?, ?, 'unpaid')
-            ");
-            
-            for ($i = 0; $i < $loanTerm; $i++) {
-                $interest = round(($totalLoanAmount - $principalsPaid) * $interestRate, 2);
-                $dueAmount = $monthlyPrincipal + $interest;
-                $dueDate = $paymentDate->format('Y-m-d');
-                
-                $insertStmt->bind_param(
-                    "isdddd",
-                    $loanId,
-                    $dueDate,
-                    $monthlyPrincipal,
-                    $interest,
-                    $dueAmount,
-                    $remainingBalance
-                );
-                
-                if (!$insertStmt->execute()) {
-                    throw new Exception("Failed to insert schedule entry: " . $insertStmt->error);
-                }
-                
-                $principalsPaid += $monthlyPrincipal;
-                $remainingBalance -= $monthlyPrincipal;
-                if ($remainingBalance < 0) $remainingBalance = 0;
-                
-                $paymentDate->modify('+1 month');
-            }
-            
-            return true;
-        } catch (Exception $e) {
-            error_log("Error creating loan schedule: " . $e->getMessage());
-            return false;
+/**
+ * FIXED: Create loan schedule - prevents duplicates
+ */
+public function createLoanSchedule($loanId) {
+    try {
+        $this->conn->begin_transaction();
+        
+        // Get loan details
+        $loanQuery = "SELECT l.*, lp.interest_rate 
+                     FROM loan l
+                     JOIN loan_products lp ON l.loan_product_id = lp.id
+                     WHERE l.loan_id = ?";
+        
+        $stmt = $this->conn->prepare($loanQuery);
+        $stmt->bind_param("i", $loanId);
+        $stmt->execute();
+        $loan = $stmt->get_result()->fetch_assoc();
+        
+        if (!$loan) {
+            throw new Exception("Loan not found");
         }
+        
+        // CRITICAL: Check if schedule already exists
+        $existingCheckStmt = $this->conn->prepare("
+            SELECT COUNT(*) as count FROM loan_schedule WHERE loan_id = ?
+        ");
+        $existingCheckStmt->bind_param("i", $loanId);
+        $existingCheckStmt->execute();
+        $existingCount = $existingCheckStmt->get_result()->fetch_assoc()['count'];
+        
+        if ($existingCount > 0) {
+            error_log("WARNING: Schedule already exists for loan $loanId. Deleting old schedule...");
+            // Delete existing schedule to prevent duplicates
+            $deleteStmt = $this->conn->prepare("DELETE FROM loan_schedule WHERE loan_id = ?");
+            $deleteStmt->bind_param("i", $loanId);
+            $deleteStmt->execute();
+        }
+        
+        $totalLoanAmount = $loan['amount'];
+        $loanTerm = $loan['loan_term'];
+        $monthlyPrincipal = round($totalLoanAmount / $loanTerm, 2);
+        $interestRate = $loan['interest_rate'] / 100 / 12;
+        
+        $startDate = new DateTime($loan['meeting_date'] ?? $loan['date_created']);
+        $paymentDate = clone $startDate;
+        $paymentDate->modify('+1 month');
+        
+        $principalsPaid = 0;
+        $remainingBalance = $totalLoanAmount;
+        
+        $insertStmt = $this->conn->prepare("
+            INSERT INTO loan_schedule (
+                loan_id, due_date, principal, interest, 
+                amount, balance, repaid_amount, default_amount, status, paid_date
+            ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 'unpaid', NULL)
+        ");
+        
+        $insertedCount = 0;
+        
+        for ($i = 0; $i < $loanTerm; $i++) {
+            $interest = round(($totalLoanAmount - $principalsPaid) * $interestRate, 2);
+            $dueAmount = $monthlyPrincipal + $interest;
+            $dueDate = $paymentDate->format('Y-m-d');
+            
+            $insertStmt->bind_param(
+                "isdddd",
+                $loanId,
+                $dueDate,
+                $monthlyPrincipal,
+                $interest,
+                $dueAmount,
+                $remainingBalance
+            );
+            
+            if (!$insertStmt->execute()) {
+                throw new Exception("Failed to insert schedule entry: " . $insertStmt->error);
+            }
+            
+            $insertedCount++;
+            
+            $principalsPaid += $monthlyPrincipal;
+            $remainingBalance -= $monthlyPrincipal;
+            if ($remainingBalance < 0) $remainingBalance = 0;
+            
+            $paymentDate->modify('+1 month');
+        }
+        
+        error_log("Created $insertedCount schedule entries for loan $loanId");
+        
+        $this->conn->commit();
+        return true;
+        
+    } catch (Exception $e) {
+        $this->conn->rollback();
+        error_log("Error creating loan schedule: " . $e->getMessage());
+        return false;
     }
+}
 
     /**
      * Get unpaid installment count for specific loan

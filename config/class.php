@@ -1140,34 +1140,37 @@ public function can_delete_loan($loan_id) {
         return array('can_delete' => false, 'reason' => 'Loan not found');
     }
     
-    // Only allow deletion of pending loans (status = 0)
-    if ($loan['status'] != 0) {
-        $status_text = array(
-            1 => 'approved',
-            2 => 'disbursed', 
-            3 => 'completed',
-            4 => 'denied'
-        );
-        return array(
-            'can_delete' => false, 
-            'reason' => 'Cannot delete ' . ($status_text[$loan['status']] ?? 'processed') . ' loans'
-        );
+    // Allow deletion of loans waiting for disbursement (status = 1)
+    // These are approved but not yet disbursed
+    if ($loan['status'] == 1) {
+        // Check if any payments have been made (shouldn't happen for status 1, but safety check)
+        $payment_check = $this->conn->prepare("SELECT COUNT(*) as payment_count FROM payment WHERE loan_id = ?");
+        $payment_check->bind_param("i", $loan_id);
+        $payment_check->execute();
+        $result = $payment_check->get_result()->fetch_assoc();
+        
+        if ($result['payment_count'] > 0) {
+            return array(
+                'can_delete' => false, 
+                'reason' => 'Cannot delete loan with existing payments'
+            );
+        }
+        
+        return array('can_delete' => true);
     }
     
-    // Check if any payments have been made (shouldn't happen for pending loans, but safety check)
-    $payment_check = $this->conn->prepare("SELECT COUNT(*) as payment_count FROM payment WHERE loan_id = ?");
-    $payment_check->bind_param("i", $loan_id);
-    $payment_check->execute();
-    $result = $payment_check->get_result()->fetch_assoc();
+    // Don't allow deletion of other statuses
+    $status_text = array(
+        0 => 'pending approval',
+        2 => 'disbursed', 
+        3 => 'completed',
+        4 => 'denied'
+    );
     
-    if ($result['payment_count'] > 0) {
-        return array(
-            'can_delete' => false, 
-            'reason' => 'Cannot delete loan with existing payments'
-        );
-    }
-    
-    return array('can_delete' => true);
+    return array(
+        'can_delete' => false, 
+        'reason' => 'Cannot delete ' . ($status_text[$loan['status']] ?? 'processed') . ' loans. Only loans waiting for disbursement can be deleted.'
+    );
 }
 
 // Enhanced method to get loan with client details for better logging

@@ -1,6 +1,7 @@
 <?php
 // Transactions Table Component
 // This component displays the recent transactions table with enhanced columns
+// Now properly respects all filters including category filter
 ?>
 
 <!-- Manage expenses and income begins -->
@@ -18,12 +19,47 @@
 </div>
 
 <div class="card mb-4">
-    <div class="card-header py-3">
+    <div class="card-header py-3 d-flex justify-content-between align-items-center">
         <h6 style="color: #51087E;" class="m-0 font-weight-bold">Recent Transactions</h6>
+        <?php if ($transactions && $transactions->num_rows > 0): ?>
+            <span class="badge badge-info badge-pill" style="font-size: 14px;">
+                <?php echo $transactions->num_rows; ?> transaction(s) found
+            </span>
+        <?php endif; ?>
     </div>
     <div class="card-body">
+        <?php 
+        // Display active filters information
+        if ($transaction_type !== 'all' || $date_range !== 'all' || $category_filter !== 'all'): 
+        ?>
+        <div class="alert alert-info mb-3" role="alert">
+            <i class="fas fa-info-circle"></i> <strong>Active Filters:</strong>
+            <?php 
+            $active_filters = [];
+            
+            if ($transaction_type !== 'all') {
+                $active_filters[] = '<strong>Type:</strong> ' . ucfirst($transaction_type);
+            }
+            
+            if ($category_filter !== 'all') {
+                $active_filters[] = '<strong>Category:</strong> ' . htmlspecialchars($category_filter);
+            }
+            
+            if ($date_range !== 'all') {
+                if ($date_range === 'custom' && $start_date && $end_date) {
+                    $active_filters[] = '<strong>Date:</strong> ' . date('M d, Y', strtotime($start_date)) . ' to ' . date('M d, Y', strtotime($end_date));
+                } else {
+                    $active_filters[] = '<strong>Date:</strong> ' . ucfirst($date_range);
+                }
+            }
+            
+            echo implode(' | ', $active_filters);
+            ?>
+        </div>
+        <?php endif; ?>
+        
         <div class="table-responsive">
-            <table class="table table-bordered" id="transactionTable" width="100%" cellspacing="0">
+            <table class="table table-bordered table-hover" id="transactionTable" width="100%" cellspacing="0">
                 <thead>
                     <tr>
                         <th>Date</th>
@@ -42,74 +78,32 @@
                 <tbody>
                     <?php 
                     if ($transactions && $transactions->num_rows > 0):
-                        // Update the query to include both category and expense name
-                        $enhanced_query = "
-                            SELECT 
-                                e.*,
-                                ec.category as main_category,
-                                e.category as expense_name,
-                                u.username as created_by_name,
-                                CASE 
-                                    WHEN e.status = 'received' THEN ABS(e.amount)
-                                    ELSE -ABS(e.amount)
-                                END as signed_amount
-                            FROM expenses e 
-                            LEFT JOIN expenses_categories ec ON e.category = ec.name 
-                            LEFT JOIN user u ON e.created_by = u.user_id
-                            WHERE 1=1";
+                        // Reset the pointer to the beginning since we already processed the data
+                        $transactions->data_seek(0);
                         
-                        // Apply the same filters as in the main query
-                        if ($transaction_type !== 'all') {
-                            if ($transaction_type === 'expenses') {
-                                $enhanced_query .= " AND e.status = 'completed'";
-                            } elseif ($transaction_type === 'received') {
-                                $enhanced_query .= " AND e.status = 'received'";
-                            }
-                        }
-
-                        if ($date_range !== 'all') {
-                            $today = date('Y-m-d');
-                            switch ($date_range) {
-                                case 'today':
-                                    $enhanced_query .= " AND DATE(e.date) = '$today'";
-                                    break;
-                                case 'week':
-                                    $week_start = date('Y-m-d', strtotime('-1 week'));
-                                    $enhanced_query .= " AND DATE(e.date) >= '$week_start'";
-                                    break;
-                                case 'month':
-                                    $month_start = date('Y-m-d', strtotime('first day of this month'));
-                                    $enhanced_query .= " AND DATE(e.date) >= '$month_start'";
-                                    break;
-                                case 'year':
-                                    $year_start = date('Y-m-d', strtotime('first day of january this year'));
-                                    $enhanced_query .= " AND DATE(e.date) >= '$year_start'";
-                                    break;
-                                case 'custom':
-                                    if ($start_date && $end_date) {
-                                        $enhanced_query .= " AND DATE(e.date) BETWEEN '$start_date' AND '$end_date'";
-                                    }
-                                    break;
-                            }
-                        }
-
-                        $enhanced_query .= " ORDER BY e.date DESC, e.created_at DESC";
-                        
-                        $enhanced_transactions = $db->conn->query($enhanced_query);
-                        
-                        if ($enhanced_transactions && $enhanced_transactions->num_rows > 0):
-                            while($transaction = $enhanced_transactions->fetch_assoc()): 
+                        while($transaction = $transactions->fetch_assoc()): 
                     ?>
                                 <tr>
                                     <td><?php echo date('Y-m-d H:i', strtotime($transaction['date'])); ?></td>
                                     <td><?php echo htmlspecialchars($transaction['receipt_no']); ?></td>
-                                    <td><?php echo htmlspecialchars($transaction['main_category']); ?></td>
-                                    <td><?php echo htmlspecialchars($transaction['expense_name']); ?></td>
-                                    <td><?php echo htmlspecialchars($transaction['description']); ?></td>
-                                    <td class="<?php echo $transaction['status'] === 'received' ? 'text-success' : 'text-danger'; ?>">
-                                        KSh <?php echo number_format(abs($transaction['amount']), 2); ?>
+                                    <td>
+                                        <span class="badge badge-secondary">
+                                            <?php echo htmlspecialchars($transaction['main_category'] ?? 'N/A'); ?>
+                                        </span>
                                     </td>
-                                    <td><?php echo htmlspecialchars($transaction['payment_method']); ?></td>
+                                    <td><?php echo htmlspecialchars($transaction['category']); ?></td>
+                                    <td><?php echo htmlspecialchars($transaction['description'] ?? '-'); ?></td>
+                                    <td class="<?php echo $transaction['status'] === 'received' ? 'text-success' : 'text-danger'; ?>">
+                                        <strong>
+                                            <?php echo $transaction['status'] === 'received' ? '+' : '-'; ?>
+                                            KSh <?php echo number_format(abs($transaction['amount']), 2); ?>
+                                        </strong>
+                                    </td>
+                                    <td>
+                                        <span class="badge badge-light">
+                                            <?php echo htmlspecialchars($transaction['payment_method'] ?? 'Cash'); ?>
+                                        </span>
+                                    </td>
                                     <td>
                                         <span class="badge badge-<?php 
                                             if ($transaction['status'] == 'received') {
@@ -131,33 +125,42 @@
                                             ?>
                                         </span>
                                     </td>
-                                    <td><?php echo htmlspecialchars($transaction['remarks']); ?></td>
-                                    <td><?php echo htmlspecialchars($transaction['created_by_name']); ?></td>
+                                    <td><?php echo htmlspecialchars($transaction['remarks'] ?? '-'); ?></td>
                                     <td>
-                                        <button class="btn btn-sm btn-warning print-receipt mr-2" 
-                                                data-transaction='<?php echo json_encode($transaction); ?>'>
-                                            <i class="fas fa-print"></i> Print
-                                        </button>
-                                        <button class="btn btn-sm btn-danger delete-transaction" 
-                                                data-receipt-no="<?php echo htmlspecialchars($transaction['receipt_no']); ?>"
-                                                data-id="<?php echo htmlspecialchars($transaction['id']); ?>">
-                                            <i class="fas fa-trash"></i> Delete
-                                        </button>
+                                        <small class="text-muted">
+                                            <?php echo htmlspecialchars($transaction['created_by_name'] ?? 'Unknown'); ?>
+                                        </small>
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="btn-group" role="group">
+                                            <button class="btn btn-sm btn-warning print-receipt" 
+                                                    data-transaction='<?php echo htmlspecialchars(json_encode($transaction), ENT_QUOTES, 'UTF-8'); ?>'
+                                                    title="Print Receipt">
+                                                <i class="fas fa-print"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-danger delete-transaction" 
+                                                    data-receipt-no="<?php echo htmlspecialchars($transaction['receipt_no']); ?>"
+                                                    data-id="<?php echo htmlspecialchars($transaction['id']); ?>"
+                                                    title="Delete Transaction">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                     <?php 
-                            endwhile;
-                        else:
-                    ?>
-                            <tr>
-                                <td colspan="11" class="text-center">No transactions found</td>
-                            </tr>
-                    <?php 
-                        endif;
+                        endwhile;
                     else:
                     ?>
                         <tr>
-                            <td colspan="11" class="text-center">No transactions found</td>
+                            <td colspan="11" class="text-center py-5">
+                                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                                <h5 class="text-muted">No transactions found</h5>
+                                <?php if ($transaction_type !== 'all' || $date_range !== 'all' || $category_filter !== 'all'): ?>
+                                    <p class="text-muted">Try adjusting your filters or <a href="manage_expenses.php">clear all filters</a></p>
+                                <?php else: ?>
+                                    <p class="text-muted">Get started by adding your first transaction using the buttons above</p>
+                                <?php endif; ?>
+                            </td>
                         </tr>
                     <?php endif; ?>
                 </tbody>
@@ -165,3 +168,46 @@
         </div>
     </div>
 </div>
+
+<!-- Transaction Statistics Summary (shows at bottom) -->
+<?php if ($transactions && $transactions->num_rows > 0): ?>
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-body">
+                <h6 class="font-weight-bold text-primary mb-3">
+                    <i class="fas fa-chart-line"></i> Quick Statistics for Current View
+                </h6>
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="stat-box text-center p-3" style="background-color: #f8f9fc; border-radius: 5px;">
+                            <small class="text-muted d-block mb-1">Transaction Count</small>
+                            <h4 class="mb-0"><?php echo $transactions->num_rows; ?></h4>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-box text-center p-3" style="background-color: #fff5f5; border-radius: 5px;">
+                            <small class="text-muted d-block mb-1">Total Expenses</small>
+                            <h4 class="text-danger mb-0">KSh <?php echo number_format($total_expenses, 2); ?></h4>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-box text-center p-3" style="background-color: #f0fdf4; border-radius: 5px;">
+                            <small class="text-muted d-block mb-1">Total Received</small>
+                            <h4 class="text-success mb-0">KSh <?php echo number_format($total_received, 2); ?></h4>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-box text-center p-3" style="background-color: <?php echo ($total_received - $total_expenses) >= 0 ? '#f0fdf4' : '#fff5f5'; ?>; border-radius: 5px;">
+                            <small class="text-muted d-block mb-1">Net Balance</small>
+                            <h4 class="<?php echo ($total_received - $total_expenses) >= 0 ? 'text-success' : 'text-danger'; ?> mb-0">
+                                KSh <?php echo number_format($total_received - $total_expenses, 2); ?>
+                            </h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>

@@ -16,6 +16,17 @@
     $date_range = isset($_GET['date_range']) ? $_GET['date_range'] : 'all';
     $start_date = isset($_GET['start_date']) ? $_GET['start_date'] : '';
     $end_date = isset($_GET['end_date']) ? $_GET['end_date'] : '';
+    $category_filter = isset($_GET['category_filter']) ? $_GET['category_filter'] : 'all';
+
+    // Fetch all available categories for the dropdown
+    $categories_query = "SELECT DISTINCT name FROM expenses_categories ORDER BY name ASC";
+    $categories_result = $db->conn->query($categories_query);
+    $available_categories = [];
+    if ($categories_result && $categories_result->num_rows > 0) {
+        while ($cat = $categories_result->fetch_assoc()) {
+            $available_categories[] = $cat['name'];
+        }
+    }
 
     // Build the base query with dynamic date filtering
     $transactions_query = "
@@ -39,6 +50,11 @@
         } elseif ($transaction_type === 'received') {
             $transactions_query .= " AND e.status = 'received'";
         }
+    }
+
+    // Add category filter
+    if ($category_filter !== 'all') {
+        $transactions_query .= " AND ec.name = '" . $db->conn->real_escape_string($category_filter) . "'";
     }
 
     // Add date range filter
@@ -168,6 +184,10 @@
             display: block;
         }
 
+        .category-filter-select {
+            width: 100%;
+        }
+
         @media print {
             .statement-print-area {
                 display: block;
@@ -219,6 +239,16 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+
+        .filter-info-badge {
+            display: inline-block;
+            background-color: #51087E;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
     </style>
 </head>
 
@@ -250,7 +280,7 @@
     </div>
 
     <!-- Modals Section Component -->
-    <?php require_once '../components/manage_expenses/cashier_modals_section.php'; ?>
+    <?php require_once '../components/manage_expenses/modals_section.php'; ?>
 
     <!-- Toast Container -->
     <div class="toast-container" id="toastContainer"></div>
@@ -283,12 +313,10 @@ $(document).ready(function() {
         
         toastContainer.insertAdjacentHTML('beforeend', toastHtml);
         
-        // Show toast
         setTimeout(() => {
             document.getElementById(toastId).classList.add('show');
         }, 100);
         
-        // Auto hide after 5 seconds
         setTimeout(() => {
             hideToast(toastId);
         }, 5000);
@@ -336,25 +364,21 @@ $(document).ready(function() {
         }
         
         bindEvents() {
-            // Click on select to toggle dropdown
             this.select.addEventListener('click', (e) => {
                 e.preventDefault();
                 this.toggle();
             });
             
-            // Search functionality
             this.searchInput.addEventListener('input', (e) => {
                 this.filterOptions(e.target.value);
             });
             
-            // Close on outside click
             document.addEventListener('click', (e) => {
                 if (!this.container.contains(e.target)) {
                     this.close();
                 }
             });
             
-            // Prevent dropdown from closing when clicking inside
             this.dropdown.addEventListener('click', (e) => {
                 e.stopPropagation();
             });
@@ -369,7 +393,6 @@ $(document).ready(function() {
         }
         
         open() {
-            // Close other open dropdowns
             document.querySelectorAll('.enhanced-select .dropdown-container.show').forEach(dropdown => {
                 if (dropdown !== this.dropdown) {
                     dropdown.classList.remove('show');
@@ -389,25 +412,17 @@ $(document).ready(function() {
         }
         
         selectOption(value, text) {
-                this.select.value = value;
-                
-                // Trigger change event to ensure form validation works
-                this.select.dispatchEvent(new Event('change', { bubbles: true }));
-                
-                // Update the visual display if you have one
-                const displayElement = this.container.querySelector('.select-display');
-                if (displayElement) {
-                    displayElement.textContent = text;
-                }
-                
-                this.close();
-                
-                // Remove validation error if present
-                this.select.classList.remove('is-invalid');
-                
-                // Debug logging
-                console.log('Selected option:', value, text);
+            this.select.value = value;
+            this.select.dispatchEvent(new Event('change', { bubbles: true }));
+            
+            const displayElement = this.container.querySelector('.select-display');
+            if (displayElement) {
+                displayElement.textContent = text;
             }
+            
+            this.close();
+            this.select.classList.remove('is-invalid');
+        }
         
         filterOptions(searchTerm) {
             const term = searchTerm.toLowerCase();
@@ -423,7 +438,6 @@ $(document).ready(function() {
         }
     }
     
-    // Initialize enhanced selects
     function initializeEnhancedSelects() {
         document.querySelectorAll('.enhanced-select').forEach(container => {
             if (!container.enhancedSelect) {
@@ -432,7 +446,6 @@ $(document).ready(function() {
         });
     }
     
-    // Initialize on page load
     initializeEnhancedSelects();
 
     // Initialize DataTable
@@ -460,40 +473,29 @@ $(document).ready(function() {
         }
     });
 
-    // Form validation and submission - Simplified
-        $('#expenseForm, #receivedForm').on('submit', function(e) {
+    // Form validation and submission
+    $('#expenseForm, #receivedForm').on('submit', function(e) {
         const form = $(this);
         let isValid = true;
         
-        // Debug: Log form data before validation
-        console.log('Form submission attempt:', form.attr('id'));
-        
-        // Simple validation - check required fields
         form.find('[required]').each(function() {
             const fieldValue = $(this).val();
-            console.log('Field:', $(this).attr('name'), 'Value:', fieldValue);
             
             if (!fieldValue || fieldValue === '') {
                 isValid = false;
                 $(this).addClass('is-invalid');
-                console.log('Invalid field:', $(this).attr('name'));
             } else {
                 $(this).removeClass('is-invalid');
             }
         });
 
         if (!isValid) {
-            console.log('Form validation failed');
             alert('Please fill in all required fields');
             e.preventDefault();
             return false;
         }
-        
-        console.log('Form validation passed, submitting...');
-        // If validation passes, let the form submit normally
     });
 
-    // Clear validation on input change
     $('.form-control').on('change keyup', function() {
         $(this).removeClass('is-invalid');
     });
@@ -533,7 +535,7 @@ $(document).ready(function() {
         $('#receiptModal').modal('show');
     });
 
-    // Delete transaction handler - Updated to use modal
+    // Delete transaction handler
     let deleteTransactionId = null;
     $('.delete-transaction').on('click', function(e) {
         e.preventDefault();
@@ -544,7 +546,6 @@ $(document).ready(function() {
         $('#deleteConfirmModal').modal('show');
     });
 
-    // Handle actual deletion when confirmed
     $('#confirmDeleteBtn').on('click', function() {
         if (deleteTransactionId) {
             $('#deleteConfirmModal').modal('hide');
@@ -577,7 +578,6 @@ $(document).ready(function() {
         }
     });
 
-    // Print receipt function
     window.printReceipt = function() {
         const printWindow = window.open('', '_blank');
         const printContent = document.getElementById('receiptContent').innerHTML;
@@ -616,6 +616,7 @@ $(document).ready(function() {
         const date_range = $('#dateRangeSelect').val();
         const start_date = $('input[name="start_date"]').val();
         const end_date = $('input[name="end_date"]').val();
+        const category_filter = $('select[name="category_filter"]').val();
 
         if (date_range === 'custom' && (!start_date || !end_date)) {
             $('.loading-overlay').remove();
@@ -627,7 +628,8 @@ $(document).ready(function() {
             transaction_type: transaction_type,
             date_range: date_range,
             start_date: start_date || '',
-            end_date: end_date || ''
+            end_date: end_date || '',
+            category_filter: category_filter || 'all'
         });
 
         window.location.href = '../controllers/generate_expenses_report.php?' + params.toString();
@@ -637,26 +639,21 @@ $(document).ready(function() {
         }, 2000);
     };
 
-    // Initialize modals - Enhanced
-        $('#addExpenseModal, #addReceivedModal').on('show.bs.modal', function() {
+    $('#addExpenseModal, #addReceivedModal').on('show.bs.modal', function() {
         const modal = $(this);
         
-        // Reset form
         modal.find('form')[0].reset();
         modal.find('.is-invalid').removeClass('is-invalid');
         
-        // Set today's date
         const today = new Date().toISOString().split('T')[0];
         modal.find('input[name="date"]').val(today);
         
-        // Reset enhanced selects
         modal.find('.enhanced-select').each(function() {
             if (this.enhancedSelect) {
                 this.enhancedSelect.reset();
             }
         });
         
-        // Re-initialize enhanced selects after a short delay
         setTimeout(() => {
             initializeEnhancedSelects();
         }, 100);

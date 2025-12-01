@@ -864,135 +864,142 @@ class AccountController {
         }
     }
 
-    /**
-     * Fixed handleRepayLoan method with duplicate prevention
-     */
-        private function handleRepayLoan() {
-        try {
-            // Start session if not already started
-            if (session_status() == PHP_SESSION_NONE) {
-                session_start();
-            }
-            
-            // Security check - ensure user is logged in
-            if (!isset($_SESSION['user_id'])) {
-                throw new Exception("Unauthorized: User not logged in");
-            }
-            
-            // Log the request for debugging
-            error_log("RepayLoan request from user " . $_SESSION['user_id'] . ": " . json_encode($_POST));
-            
-            // Extract and validate parameters
-            $accountId = filter_var($_POST['accountId'] ?? null, FILTER_VALIDATE_INT);
-            $loanId = filter_var($_POST['loanId'] ?? null, FILTER_VALIDATE_INT);
-            $repayAmount = filter_var($_POST['repayAmount'] ?? null, FILTER_VALIDATE_FLOAT);
-            $paymentMode = trim($_POST['paymentMode'] ?? '');
-            $receiptNumber = trim($_POST['receiptNumber'] ?? '');
-            $servedBy = $_POST['served_by'] ?? $_SESSION['user_id'] ?? 'System';
-            
-            // Comprehensive validation
-            $errors = [];
-            
-            if (!$accountId || $accountId <= 0) {
-                $errors[] = "Valid Account ID is required";
-            }
-            
-            if (!$loanId || $loanId <= 0) {
-                $errors[] = "Valid Loan ID is required";
-            }
-            
-            if (!$repayAmount || $repayAmount <= 0) {
-                $errors[] = "Valid repayment amount is required";
-            }
-            
-            if (empty($paymentMode)) {
-                $errors[] = "Payment mode is required";
-            }
-            
-            if (empty($receiptNumber)) {
-                $errors[] = "Receipt number is required";
-            }
-            
-            // Validate receipt number format
-            if (!empty($receiptNumber) && !preg_match('/^[A-Za-z0-9\-_]+$/', $receiptNumber)) {
-                $errors[] = "Receipt number contains invalid characters";
-            }
-            
-            // Check for reasonable amount limits
-            if ($repayAmount && ($repayAmount > 10000000 || $repayAmount < 0.01)) {
-                $errors[] = "Repayment amount must be between 0.01 and 10,000,000";
-            }
-            
-            if (!empty($errors)) {
-                throw new Exception("Validation failed: " . implode(", ", $errors));
-            }
-            
-            // Verify loan exists and belongs to account
-            $loan = $this->model->getLoanDetailsForRepayment($loanId);
-            if (!$loan || $loan['account_id'] != $accountId) {
-                throw new Exception("Loan not found or does not belong to this account");
-            }
-            
-            // Check if loan is disbursed
-            if ($loan['status'] < 2) {
-                throw new Exception("Loan must be disbursed before accepting repayments");
-            }
-            
-            // Process the loan repayment
-            $result = $this->repayLoan(
-                $accountId,
-                $loanId,
-                $repayAmount,
-                $paymentMode,
-                $servedBy,
-                $receiptNumber
-            );
-            
-            // Verify the result
-            if (!$result || $result['status'] !== 'success') {
-                throw new Exception($result['message'] ?? 'Failed to process loan repayment');
-            }
-            
-            // Log successful transaction
-            error_log("Loan repayment successful: Receipt {$receiptNumber}, Amount {$repayAmount}, Loan {$loanId}");
-            
-            // Return proper JSON response
-            header('Content-Type: application/json; charset=utf-8');
-            header('Cache-Control: no-cache, must-revalidate');
-            http_response_code(200);
-            
-            echo json_encode([
-                'status' => 'success',
-                'message' => 'Loan repayment processed successfully',
-                'data' => [
-                    'repaymentId' => $result['repaymentId'] ?? null,
-                    'receiptNumber' => $receiptNumber,
-                    'amount' => $repayAmount,
-                    'loanId' => $loanId,
-                    'timestamp' => date('Y-m-d H:i:s')
-                ]
-            ], JSON_UNESCAPED_UNICODE);
-            
-            exit; // Critical: prevent any additional output
-            
-        } catch (Exception $e) {
-            // Log the error with full context
-            error_log("RepayLoan error: " . $e->getMessage() . " | POST data: " . json_encode($_POST) . " | User: " . ($_SESSION['user_id'] ?? 'unknown'));
-            
-            // Return proper error response
-            header('Content-Type: application/json; charset=utf-8');
-            header('Cache-Control: no-cache, must-revalidate');
-            http_response_code(400);
-            
-            echo json_encode([
-                'status' => 'error',
-                'message' => $e->getMessage(),
-                'timestamp' => date('Y-m-d H:i:s')
-            ], JSON_UNESCAPED_UNICODE);
-            
-            exit; // Critical: prevent any additional output
+    //repay loan
+   private function handleRepayLoan() {
+    // CRITICAL: Catch any output that might occur
+    ob_start();
+    
+    try {
+        // Start session if not already started
+        if (session_status() == PHP_SESSION_NONE) {
+            session_start();
         }
+        
+        // Security check - ensure user is logged in
+        if (!isset($_SESSION['user_id'])) {
+            throw new Exception("Unauthorized: User not logged in");
+        }
+        
+        // Log the request for debugging
+        error_log("RepayLoan request from user " . $_SESSION['user_id'] . ": " . json_encode($_POST));
+        
+        // Extract and validate parameters
+        $accountId = filter_var($_POST['accountId'] ?? null, FILTER_VALIDATE_INT);
+        $loanId = filter_var($_POST['loanId'] ?? null, FILTER_VALIDATE_INT);
+        $repayAmount = filter_var($_POST['repayAmount'] ?? null, FILTER_VALIDATE_FLOAT);
+        $paymentMode = trim($_POST['paymentMode'] ?? '');
+        $receiptNumber = trim($_POST['receiptNumber'] ?? '');
+        $servedBy = $_POST['served_by'] ?? $_SESSION['user_id'] ?? 'System';
+        
+        // Comprehensive validation
+        $errors = [];
+        
+        if (!$accountId || $accountId <= 0) {
+            $errors[] = "Valid Account ID is required";
+        }
+        
+        if (!$loanId || $loanId <= 0) {
+            $errors[] = "Valid Loan ID is required";
+        }
+        
+        if (!$repayAmount || $repayAmount <= 0) {
+            $errors[] = "Valid repayment amount is required";
+        }
+        
+        if (empty($paymentMode)) {
+            $errors[] = "Payment mode is required";
+        }
+        
+        if (empty($receiptNumber)) {
+            $errors[] = "Receipt number is required";
+        }
+        
+        // Validate receipt number format
+        if (!empty($receiptNumber) && !preg_match('/^[A-Za-z0-9\-_]+$/', $receiptNumber)) {
+            $errors[] = "Receipt number contains invalid characters";
+        }
+        
+        // Check for reasonable amount limits
+        if ($repayAmount && ($repayAmount > 10000000 || $repayAmount < 0.01)) {
+            $errors[] = "Repayment amount must be between 0.01 and 10,000,000";
+        }
+        
+        if (!empty($errors)) {
+            throw new Exception("Validation failed: " . implode(", ", $errors));
+        }
+        
+        // Verify loan exists and belongs to account
+        $loan = $this->model->getLoanDetailsForRepayment($loanId);
+        if (!$loan || $loan['account_id'] != $accountId) {
+            throw new Exception("Loan not found or does not belong to this account");
+        }
+        
+        // Check if loan is disbursed
+        if ($loan['status'] < 2) {
+            throw new Exception("Loan must be disbursed before accepting repayments");
+        }
+        
+        // Process the loan repayment
+        $result = $this->repayLoan(
+            $accountId,
+            $loanId,
+            $repayAmount,
+            $paymentMode,
+            $servedBy,
+            $receiptNumber
+        );
+        
+        // Verify the result
+        if (!$result || $result['status'] !== 'success') {
+            throw new Exception($result['message'] ?? 'Failed to process loan repayment');
+        }
+        
+        // Log successful transaction
+        error_log("Loan repayment successful: Receipt {$receiptNumber}, Amount {$repayAmount}, Loan {$loanId}");
+        
+        // CRITICAL: Clear any output buffer before sending JSON
+        ob_end_clean();
+        
+        // Return proper JSON response
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-cache, must-revalidate');
+        http_response_code(200);
+        
+        echo json_encode([
+            'status' => 'success',
+            'message' => 'Loan repayment processed successfully',
+            'data' => [
+                'repaymentId' => $result['repaymentId'] ?? null,
+                'receiptNumber' => $receiptNumber,
+                'amount' => $repayAmount,
+                'loanId' => $loanId,
+                'timestamp' => date('Y-m-d H:i:s')
+            ]
+        ], JSON_UNESCAPED_UNICODE);
+        
+        exit; // Critical: prevent any additional output
+        
+    } catch (Exception $e) {
+        // Log the error with full context
+        error_log("RepayLoan error: " . $e->getMessage() . " | POST data: " . json_encode($_POST) . " | User: " . ($_SESSION['user_id'] ?? 'unknown'));
+        
+        // CRITICAL: Clear any output buffer before sending JSON
+        ob_end_clean();
+        
+        // Return proper error response
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-cache, must-revalidate');
+        http_response_code(400);
+        
+        echo json_encode([
+            'status' => 'error',
+            'message' => $e->getMessage(),
+            'timestamp' => date('Y-m-d H:i:s')
+        ], JSON_UNESCAPED_UNICODE);
+        
+        exit; // Critical: prevent any additional output
     }
+}
 
     private function handleGetLoanSchedule() {
         $loanId = $_GET['loanId'] ?? '';
