@@ -265,6 +265,22 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
         .toast-warning .toast-title {
             color: #ffc107;
         }
+
+        /* Export button style */
+        .btn-export {
+            background-color: #28a745;
+            color: white;
+            border: none;
+        }
+
+        .btn-export:hover {
+            background-color: #218838;
+            color: white;
+        }
+
+        .btn-export:focus {
+            box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.5);
+        }
     </style>
 </head>
 
@@ -293,6 +309,9 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
                                 <input type="text" class="form-control mr-2" name="search_query" placeholder="Search by Shareholder No or National ID" value="<?php echo isset($_GET['search_query']) ? $_GET['search_query'] : ''; ?>">
                                 <button style="background-color: #51087E; color: white;" type="submit" class="btn">Search</button>
                                 <a href="account.php" class="btn btn-warning ml-2">Refresh</a>
+                                <a href="../controllers/export_clients_to_excel.php" class="btn btn-export ml-2">
+                                    <i class="fas fa-file-excel mr-1"></i> Export to Excel
+                                </a>
                             </form>
                         </div>
                     </div>

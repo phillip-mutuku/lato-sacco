@@ -158,6 +158,20 @@
 .export-btn i {
     margin-right: 5px;
 }
+
+.client-name-display {
+    font-weight: 500;
+    color: #2c3e50;
+}
+
+.loan-ref-badge {
+    background-color: #e9ecef;
+    color: #495057;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    margin-left: 5px;
+}
 </style>
 
 <!-- Transaction Filter Section -->
@@ -302,7 +316,7 @@
                             <tr>
                                 <th>Date</th>
                                 <th>Type</th>
-                                <th>Client/Group</th>
+                                <th>Client/Group Name</th>
                                 <th>Amount (KSh)</th>
                                 <th>Payment Mode</th>
                                 <th>Receipt No</th>
@@ -322,7 +336,11 @@
                                 data-served="<?= htmlspecialchars($row['served_by_name']) ?>">
                                 <td><?= date('M d, Y', strtotime($row['date_saved'])) ?></td>
                                 <td><span class="badge badge-success">Group Savings</span></td>
-                                <td><?= htmlspecialchars($row['group_name'] ?? 'Unknown Group') ?></td>
+                                <td>
+                                    <span class="client-name-display">
+                                        <?= htmlspecialchars($row['group_name'] ?? 'Unknown Group') ?>
+                                    </span>
+                                </td>
                                 <td><?= number_format($row['amount'], 2) ?></td>
                                 <td><?= htmlspecialchars($row['payment_mode']) ?></td>
                                 <td><?= htmlspecialchars($row['receipt_no']) ?></td>
@@ -342,7 +360,11 @@
                                 data-served="<?= htmlspecialchars($row['served_by_name']) ?>">
                                 <td><?= date('M d, Y', strtotime($row['date'])) ?></td>
                                 <td><span class="badge badge-success">Business Savings</span></td>
-                                <td><?= htmlspecialchars($row['group_name'] ?? 'Unknown Business Group') ?></td>
+                                <td>
+                                    <span class="client-name-display">
+                                        <?= htmlspecialchars($row['group_name'] ?? 'Unknown Business Group') ?>
+                                    </span>
+                                </td>
                                 <td><?= number_format($row['amount'], 2) ?></td>
                                 <td><?= htmlspecialchars($row['payment_mode']) ?></td>
                                 <td><?= htmlspecialchars($row['receipt_no']) ?></td>
@@ -356,14 +378,18 @@
                                 <tr class="individual_savings"
                                     data-date="<?= $row['date'] ?>"
                                     data-type="Individual Savings"
-                                    data-client="<?= htmlspecialchars($row['account_name'] ?? 'Unknown Client') ?>"
+                                    data-client="<?= htmlspecialchars($row['client_name'] ?? 'Unknown Client') ?>"
                                     data-amount="<?= $row['amount'] ?>"
                                     data-payment="<?= htmlspecialchars($row['payment_mode']) ?>"
                                     data-receipt="<?= htmlspecialchars($row['receipt_number']) ?>"
                                     data-served="<?= htmlspecialchars($row['served_by_name']) ?>">
                                     <td><?= date('M d, Y', strtotime($row['date'])) ?></td>
                                     <td><span class="badge badge-success">Individual Savings</span></td>
-                                    <td><?= htmlspecialchars($row['account_name'] ?? 'Unknown Client') ?></td>
+                                    <td>
+                                        <span class="client-name-display">
+                                            <?= htmlspecialchars($row['client_name'] ?? ($row['first_name'] . ' ' . $row['last_name']) ?? 'Unknown Client') ?>
+                                        </span>
+                                    </td>
                                     <td><?= number_format($row['amount'], 2) ?></td>
                                     <td><?= htmlspecialchars($row['payment_mode']) ?></td>
                                     <td><?= htmlspecialchars($row['receipt_number']) ?></td>
@@ -377,14 +403,21 @@
                             <tr class="loan_repayments"
                                 data-date="<?= $row['date_paid'] ?>"
                                 data-type="Loan Repayment"
-                                data-client="<?= htmlspecialchars($row['ref_no'] ?? 'Unknown Loan') ?>"
+                                data-client="<?= htmlspecialchars($row['borrower_name'] ?? 'Unknown Borrower') ?>"
                                 data-amount="<?= $row['amount_repaid'] ?>"
                                 data-payment="<?= htmlspecialchars($row['payment_mode']) ?>"
                                 data-receipt="<?= htmlspecialchars($row['receipt_number']) ?>"
                                 data-served="<?= htmlspecialchars($row['served_by_name']) ?>">
                                 <td><?= date('M d, Y', strtotime($row['date_paid'])) ?></td>
                                 <td><span class="badge badge-success">Loan Repayment</span></td>
-                                <td><?= htmlspecialchars($row['ref_no'] ?? 'Unknown Loan') ?></td>
+                                <td>
+                                    <span class="client-name-display">
+                                        <?= htmlspecialchars($row['borrower_name'] ?? ($row['first_name'] . ' ' . $row['last_name']) ?? 'Unknown Borrower') ?>
+                                    </span>
+                                    <?php if (!empty($row['ref_no'])): ?>
+                                        <span class="loan-ref-badge"><?= htmlspecialchars($row['ref_no']) ?></span>
+                                    <?php endif; ?>
+                                </td>
                                 <td><?= number_format($row['amount_repaid'], 2) ?></td>
                                 <td><?= htmlspecialchars($row['payment_mode']) ?></td>
                                 <td><?= htmlspecialchars($row['receipt_number']) ?></td>
@@ -404,7 +437,14 @@
                                 data-served="<?= htmlspecialchars($row['created_by_name']) ?>">
                                 <td><?= date('M d, Y', strtotime($row['date'])) ?></td>
                                 <td><span class="badge badge-success">Money Received</span></td>
-                                <td><?= htmlspecialchars($row['category'] ?? 'Income') ?></td>
+                                <td>
+                                    <span class="client-name-display">
+                                        <?= htmlspecialchars($row['category'] ?? 'Income') ?>
+                                    </span>
+                                    <?php if (!empty($row['description'])): ?>
+                                        <br><small class="text-muted"><?= htmlspecialchars($row['description']) ?></small>
+                                    <?php endif; ?>
+                                </td>
                                 <td><?= number_format(abs($row['amount']), 2) ?></td>
                                 <td><?= htmlspecialchars($row['payment_method']) ?></td>
                                 <td><?= htmlspecialchars($row['receipt_no']) ?></td>
@@ -490,7 +530,7 @@
                             <tr>
                                 <th>Date</th>
                                 <th>Type</th>
-                                <th>Client/Group/Category</th>
+                                <th>Client/Group Name</th>
                                 <th>Amount (KSh)</th>
                                 <th>Withdrawal Fee (KSh)</th>
                                 <th>Payment Mode</th>
@@ -512,7 +552,11 @@
                                 data-served="<?= htmlspecialchars($row['served_by_name']) ?>">
                                 <td><?= date('M d, Y', strtotime($row['date_withdrawn'])) ?></td>
                                 <td><span class="badge badge-danger">Group Withdrawal</span></td>
-                                <td><?= htmlspecialchars($row['group_name'] ?? 'Unknown Group') ?></td>
+                                <td>
+                                    <span class="client-name-display">
+                                        <?= htmlspecialchars($row['group_name'] ?? 'Unknown Group') ?>
+                                    </span>
+                                </td>
                                 <td><?= number_format($row['amount'], 2) ?></td>
                                 <td><?= number_format($row['withdrawal_fee'] ?? 0, 2) ?></td>
                                 <td><?= htmlspecialchars($row['payment_mode']) ?></td>
@@ -535,7 +579,11 @@
                                     data-served="<?= htmlspecialchars($row['served_by_name']) ?>">
                                     <td><?= date('M d, Y', strtotime($row['date'])) ?></td>
                                     <td><span class="badge badge-danger">Business Withdrawal</span></td>
-                                    <td><?= htmlspecialchars($row['group_name'] ?? 'Unknown Business Group') ?></td>
+                                    <td>
+                                        <span class="client-name-display">
+                                            <?= htmlspecialchars($row['group_name'] ?? 'Unknown Business Group') ?>
+                                        </span>
+                                    </td>
                                     <td><?= number_format($row['amount'], 2) ?></td>
                                     <td><?= number_format($row['withdrawal_fee'], 2) ?></td>
                                     <td><?= htmlspecialchars($row['payment_mode']) ?></td>
@@ -551,7 +599,7 @@
                                 <tr class="individual_withdrawals"
                                     data-date="<?= $row['date'] ?>"
                                     data-type="Individual Withdrawal"
-                                    data-client="<?= htmlspecialchars($row['account_name'] ?? 'Unknown Client') ?>"
+                                    data-client="<?= htmlspecialchars($row['client_name'] ?? 'Unknown Client') ?>"
                                     data-amount="<?= $row['amount'] ?>"
                                     data-fee="<?= $row['withdrawal_fee'] ?>"
                                     data-payment="<?= htmlspecialchars($row['payment_mode']) ?>"
@@ -559,7 +607,11 @@
                                     data-served="<?= htmlspecialchars($row['served_by_name']) ?>">
                                     <td><?= date('M d, Y', strtotime($row['date'])) ?></td>
                                     <td><span class="badge badge-danger">Individual Withdrawal</span></td>
-                                    <td><?= htmlspecialchars($row['account_name'] ?? 'Unknown Client') ?></td>
+                                    <td>
+                                        <span class="client-name-display">
+                                            <?= htmlspecialchars($row['client_name'] ?? ($row['first_name'] . ' ' . $row['last_name']) ?? 'Unknown Client') ?>
+                                        </span>
+                                    </td>
                                     <td><?= number_format($row['amount'], 2) ?></td>
                                     <td><?= number_format($row['withdrawal_fee'], 2) ?></td>
                                     <td><?= htmlspecialchars($row['payment_mode']) ?></td>
@@ -574,7 +626,7 @@
                             <tr class="loan_disbursements"
                                 data-date="<?= $row['date_created'] ?>"
                                 data-type="Loan Disbursement"
-                                data-client="<?= htmlspecialchars($row['payee'] ?? 'Unknown Payee') ?>"
+                                data-client="<?= htmlspecialchars($row['borrower_name'] ?? 'Unknown Borrower') ?>"
                                 data-amount="<?= $row['pay_amount'] ?>"
                                 data-fee="<?= $row['withdrawal_fee'] ?>"
                                 data-payment="Bank Transfer"
@@ -582,7 +634,14 @@
                                 data-served="<?= htmlspecialchars($row['disbursed_by']) ?>">
                                 <td><?= date('M d, Y', strtotime($row['date_created'])) ?></td>
                                 <td><span class="badge badge-danger">Loan Disbursement</span></td>
-                                <td><?= htmlspecialchars($row['payee'] ?? 'Unknown Payee') ?></td>
+                                <td>
+                                    <span class="client-name-display">
+                                        <?= htmlspecialchars($row['borrower_name'] ?? ($row['first_name'] . ' ' . $row['last_name']) ?? 'Unknown Borrower') ?>
+                                    </span>
+                                    <?php if (!empty($row['ref_no'])): ?>
+                                        <span class="loan-ref-badge"><?= htmlspecialchars($row['ref_no']) ?></span>
+                                    <?php endif; ?>
+                                </td>
                                 <td><?= number_format($row['pay_amount'], 2) ?></td>
                                 <td><?= number_format($row['withdrawal_fee'], 2) ?></td>
                                 <td>Bank Transfer</td>
@@ -596,7 +655,7 @@
                             <tr class="expenses"
                                 data-date="<?= $row['date'] ?>"
                                 data-type="Expense"
-                                data-client="<?= htmlspecialchars($row['category']) ?> - <?= htmlspecialchars($row['description'] ?? 'N/A') ?>"
+                                data-client="<?= htmlspecialchars($row['category']) ?>"
                                 data-amount="<?= abs($row['amount']) ?>"
                                 data-fee="0"
                                 data-payment="<?= htmlspecialchars($row['payment_method']) ?>"
@@ -604,7 +663,14 @@
                                 data-served="<?= htmlspecialchars($row['created_by_name']) ?>">
                                 <td><?= date('M d, Y', strtotime($row['date'])) ?></td>
                                 <td><span class="badge badge-danger">Expense</span></td>
-                                <td><?= htmlspecialchars($row['category']) ?> - <?= htmlspecialchars($row['description'] ?? 'N/A') ?></td>
+                                <td>
+                                    <span class="client-name-display">
+                                        <?= htmlspecialchars($row['category']) ?>
+                                    </span>
+                                    <?php if (!empty($row['description'])): ?>
+                                        <br><small class="text-muted"><?= htmlspecialchars($row['description']) ?></small>
+                                    <?php endif; ?>
+                                </td>
                                 <td><?= number_format(abs($row['amount']), 2) ?></td>
                                 <td>0.00</td>
                                 <td><?= htmlspecialchars($row['payment_method']) ?></td>

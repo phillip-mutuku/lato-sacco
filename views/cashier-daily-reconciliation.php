@@ -476,8 +476,10 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
     $start_date = isset($_GET['start_date']) ? $_GET['start_date'] . " 00:00:00" : $today_start;
     $end_date = isset($_GET['end_date']) ? $_GET['end_date'] . " 23:59:59" : $today_end;
 
-    // Group Savings Query
-    $group_savings_query = "SELECT gs.*, lg.group_name, u.username as served_by_name
+    // UPDATED: Group Savings Query with proper name display
+    $group_savings_query = "SELECT gs.*, 
+                           lg.group_name, 
+                           u.username as served_by_name
                            FROM group_savings gs 
                            LEFT JOIN lato_groups lg ON gs.group_id = lg.group_id 
                            LEFT JOIN user u ON gs.served_by = u.user_id
@@ -492,11 +494,12 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
         $total_group_savings += $row['amount'];
     }
 
-    // Business Group Savings Query
+    // UPDATED: Business Group Savings Query with proper name display
     $business_savings_query = "SELECT 
         bgt.transaction_id, bgt.group_id, bgt.type, bgt.amount, bgt.description,
         bgt.receipt_no, bgt.payment_mode, bgt.date, bgt.served_by,
-        bg.group_name, u.username as served_by_name
+        bg.group_name, 
+        u.username as served_by_name
     FROM business_group_transactions bgt
     LEFT JOIN business_groups bg ON bgt.group_id = bg.group_id
     LEFT JOIN user u ON bgt.served_by = u.user_id
@@ -512,11 +515,12 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
         $total_business_savings += $row['amount'];
     }
 
-    // Business Group Withdrawals
+    // UPDATED: Business Group Withdrawals with proper name display
     $business_withdrawals_query = "SELECT 
         bgt.transaction_id, bgt.group_id, bgt.type, bgt.amount, bgt.description,
         bgt.receipt_no, bgt.payment_mode, bgt.date, bgt.served_by,
-        bg.group_name, u.username as served_by_name,
+        bg.group_name, 
+        u.username as served_by_name,
         CASE WHEN bgt.type = 'Withdrawal Fee' THEN bgt.amount ELSE 0 END as withdrawal_fee
     FROM business_group_transactions bgt
     LEFT JOIN business_groups bg ON bgt.group_id = bg.group_id
@@ -538,8 +542,10 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
         }
     }
 
-    // Group Withdrawals
-    $group_withdrawals_query = "SELECT gw.*, lg.group_name, u.username as served_by_name
+    // UPDATED: Group Withdrawals with proper name display
+    $group_withdrawals_query = "SELECT gw.*, 
+        lg.group_name, 
+        u.username as served_by_name
     FROM group_withdrawals gw
     LEFT JOIN lato_groups lg ON gw.group_id = lg.group_id
     LEFT JOIN user u ON gw.served_by = u.user_id
@@ -558,8 +564,12 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
         }
     }
 
-    // Individual Savings Transactions
-    $savings_query = "SELECT s.*, a.first_name as account_name, u.username as served_by_name
+    // UPDATED: Individual Savings Transactions with proper client name
+    $savings_query = "SELECT s.*, 
+        CONCAT(a.first_name, ' ', a.last_name) as client_name,
+        a.first_name,
+        a.last_name,
+        u.username as served_by_name
     FROM savings s
     LEFT JOIN client_accounts a ON s.account_id = a.account_id
     LEFT JOIN user u ON s.served_by = u.user_id
@@ -586,13 +596,19 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
         }
     }
 
-    // Loan Payments Query
-    $payments_query = "SELECT p.*, l.ref_no, u.username as disbursed_by 
-                      FROM payment p 
-                      LEFT JOIN loan l ON p.loan_id = l.loan_id 
-                      LEFT JOIN user u ON p.user_id = u.user_id
-                      WHERE p.date_created BETWEEN ? AND ?
-                      ORDER BY p.date_created DESC";
+    // UPDATED: Loan Payments Query with proper borrower name
+    $payments_query = "SELECT p.*, 
+        l.ref_no, 
+        CONCAT(ca.first_name, ' ', ca.last_name) as borrower_name,
+        ca.first_name,
+        ca.last_name,
+        u.username as disbursed_by 
+    FROM payment p 
+    LEFT JOIN loan l ON p.loan_id = l.loan_id 
+    LEFT JOIN client_accounts ca ON l.account_id = ca.account_id
+    LEFT JOIN user u ON p.user_id = u.user_id
+    WHERE p.date_created BETWEEN ? AND ?
+    ORDER BY p.date_created DESC";
     $stmt = $db->conn->prepare($payments_query);
     $stmt->bind_param("ss", $start_date, $end_date);
     $stmt->execute();
@@ -605,13 +621,19 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
         }
     }
 
-    // Loan Repayments Query
-    $repayments_query = "SELECT lr.*, l.ref_no, u.username as served_by_name
-                        FROM loan_repayments lr 
-                        LEFT JOIN loan l ON lr.loan_id = l.loan_id 
-                        LEFT JOIN user u ON lr.served_by = u.user_id
-                        WHERE lr.date_paid BETWEEN ? AND ?
-                        ORDER BY lr.date_paid DESC";
+    // UPDATED: Loan Repayments Query with proper borrower name
+    $repayments_query = "SELECT lr.*, 
+        l.ref_no, 
+        CONCAT(ca.first_name, ' ', ca.last_name) as borrower_name,
+        ca.first_name,
+        ca.last_name,
+        u.username as served_by_name
+    FROM loan_repayments lr 
+    LEFT JOIN loan l ON lr.loan_id = l.loan_id 
+    LEFT JOIN client_accounts ca ON l.account_id = ca.account_id
+    LEFT JOIN user u ON lr.served_by = u.user_id
+    WHERE lr.date_paid BETWEEN ? AND ?
+    ORDER BY lr.date_paid DESC";
     $stmt = $db->conn->prepare($repayments_query);
     $stmt->bind_param("ss", $start_date, $end_date);
     $stmt->execute();
@@ -621,7 +643,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
         $total_repayments += $row['amount_repaid'];
     }
 
-    // FIXED: Expenses Query (only status = 'completed' or NULL)
+    // UPDATED: Expenses Query (only status = 'completed' or NULL)
     $expenses_query = "SELECT e.*, u.username as created_by_name
                       FROM expenses e 
                       LEFT JOIN user u ON e.created_by = u.user_id
@@ -637,7 +659,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
         $total_expenses += abs($row['amount']);
     }
 
-    // FIXED: Money Received Query (status = 'received')
+    // UPDATED: Money Received Query (status = 'received')
     $money_received_query = "SELECT e.*, u.username as created_by_name
                       FROM expenses e 
                       LEFT JOIN user u ON e.created_by = u.user_id
@@ -835,7 +857,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                                 <div class="float-amount" id="closingFloatAmount" style="color: #51087E; font-weight: bold;">
                                     KSh <?= number_format($closing_float, 2) ?>
                                 </div>
-                                <button class="btn btn-info mt-3 w-100" onclick="showClosingFloatHistory()">
+                                <button class="btn btn-info mt-3 w-100" onclick="openFloatHistoryModal()">
                                     <i class="fas fa-history"></i> View History
                                 </button>
                             </div>
@@ -878,6 +900,9 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
     </div>
     <!-- End of Main Content -->
 
+    <!-- Float History Modal Component -->
+    <?php include '../components/reconciliation/float_history_modal.php'; ?>
+
     <!-- Reset Float Confirmation Modal -->
     <div class="modal fade" id="resetFloatModal" tabindex="-1" role="dialog" aria-hidden="true">
         <div class="modal-dialog" role="document">
@@ -909,36 +934,6 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                             <i class="fas fa-redo"></i> Yes, Reset Float
                         </button>
                     </form>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Closing Float History Modal -->
-    <div class="modal fade" id="closingFloatHistoryModal" tabindex="-1" role="dialog" aria-hidden="true">
-        <div class="modal-dialog modal-lg" role="document">
-            <div class="modal-content">
-                <div class="modal-header" style="background-color: #51087E;">
-                    <h5 class="modal-title text-white">
-                        <i class="fas fa-history"></i> Closing Float History
-                    </h5>
-                    <button class="close text-white" type="button" data-dismiss="modal">
-                        <span aria-hidden="true">×</span>
-                    </button>
-                </div>
-                <div class="modal-body">
-                    <div id="historyContent">
-                        <div class="text-center">
-                            <i class="fas fa-spinner fa-spin fa-2x"></i>
-                            <p>Loading history...</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-secondary" type="button" data-dismiss="modal">Close</button>
-                    <button class="btn btn-primary" onclick="exportFloatHistory()" style="background-color: #51087E;">
-                        <i class="fas fa-download"></i> Export History
-                    </button>
                 </div>
             </div>
         </div>
@@ -1283,204 +1278,6 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
 
     function confirmResetFloat() {
         $('#resetFloatModal').modal('show');
-    }
-
-    function showClosingFloatHistory() {
-        $('#closingFloatHistoryModal').modal('show');
-        loadClosingFloatHistory();
-    }
-
-    function loadClosingFloatHistory() {
-        $.ajax({
-            url: '../controllers/get_float_history.php',
-            method: 'GET',
-            dataType: 'json',
-            success: function(response) {
-                if (response.success) {
-                    displayFloatHistory(response.data, response.summary);
-                } else {
-                    $('#historyContent').html('<div class="alert alert-warning">Failed to load history: ' + response.message + '</div>');
-                }
-            },
-            error: function() {
-                $('#historyContent').html('<div class="alert alert-danger">Error loading float history. Please try again.</div>');
-            }
-        });
-    }
-
-    function displayFloatHistory(data, summary) {
-        if (data.length === 0) {
-            $('#historyContent').html('<div class="alert alert-info">No float history found.</div>');
-            return;
-        }
-
-        const itemsPerPage = 10;
-        let currentPage = 1;
-        const totalPages = Math.ceil(data.length / itemsPerPage);
-
-        function renderPage(page) {
-            const startIndex = (page - 1) * itemsPerPage;
-            const endIndex = startIndex + itemsPerPage;
-            const pageData = data.slice(startIndex, endIndex);
-
-            let historyHtml = `
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h6 class="mb-0">Float History Records (${data.length} total)</h6>
-                    <small class="text-muted">Page ${page} of ${totalPages}</small>
-                </div>
-                <div class="table-responsive">
-                    <table class="table table-striped table-bordered">
-                        <thead style="background-color: #51087E; color: white;">
-                            <tr>
-                                <th>Date</th>
-                                <th>Time</th>
-                                <th>Closing Float (KSh)</th>
-                                <th>Reset By</th>
-                            </tr>
-                        </thead>
-                        <tbody>`;
-
-            pageData.forEach(function(record) {
-                historyHtml += `
-                    <tr>
-                        <td>${record.formatted_date}</td>
-                        <td>${record.formatted_time}</td>
-                        <td class="text-right font-weight-bold">${record.closing_float_formatted}</td>
-                        <td>${record.reset_by_full_name}</td>
-                    </tr>`;
-            });
-
-            historyHtml += `</tbody></table></div>`;
-
-            if (totalPages > 1) {
-                historyHtml += `
-                    <div class="d-flex justify-content-between align-items-center mt-3">
-                        <div>
-                            <small class="text-muted">
-                                Showing ${startIndex + 1} to ${Math.min(endIndex, data.length)} of ${data.length} entries
-                            </small>
-                        </div>
-                        <nav aria-label="Float history pagination">
-                            <ul class="pagination pagination-sm mb-0">`;
-                
-                historyHtml += `
-                    <li class="page-item ${page === 1 ? 'disabled' : ''}">
-                        <a class="page-link" href="#" onclick="navigateFloatHistory(${page - 1}); return false;">
-                            <i class="fas fa-chevron-left"></i> Previous
-                        </a>
-                    </li>`;
-                
-                let startPage = Math.max(1, page - 2);
-                let endPage = Math.min(totalPages, page + 2);
-                
-                if (startPage > 1) {
-                    historyHtml += `
-                        <li class="page-item">
-                            <a class="page-link" href="#" onclick="navigateFloatHistory(1); return false;">1</a>
-                        </li>`;
-                    if (startPage > 2) {
-                        historyHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
-                    }
-                }
-                
-                for (let i = startPage; i <= endPage; i++) {
-                    historyHtml += `
-                        <li class="page-item ${i === page ? 'active' : ''}">
-                            <a class="page-link" href="#" onclick="navigateFloatHistory(${i}); return false;" 
-                               style="${i === page ? 'background-color: #51087E; border-color: #51087E;' : ''}">${i}</a>
-                        </li>`;
-                }
-                
-                if (endPage < totalPages) {
-                    if (endPage < totalPages - 1) {
-                        historyHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
-                    }
-                    historyHtml += `
-                        <li class="page-item">
-                            <a class="page-link" href="#" onclick="navigateFloatHistory(${totalPages}); return false;">${totalPages}</a>
-                        </li>`;
-                }
-                
-                historyHtml += `
-                    <li class="page-item ${page === totalPages ? 'disabled' : ''}">
-                        <a class="page-link" href="#" onclick="navigateFloatHistory(${page + 1}); return false;">
-                            Next <i class="fas fa-chevron-right"></i>
-                        </a>
-                    </li>
-                </ul>
-            </nav>
-        </div>`;
-            }
-
-            if (summary && summary.total_resets > 0) {
-                historyHtml += `
-                    <div class="mt-4">
-                        <h6 class="mb-3">Summary Statistics</h6>
-                        <div class="row">
-                            <div class="col-md-4">
-                                <div class="card bg-info text-white">
-                                    <div class="card-body text-center py-3">
-                                        <h6 class="mb-1">Total Resets</h6>
-                                        <h4 class="mb-0">${summary.total_resets}</h4>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="card bg-success text-white">
-                                    <div class="card-body text-center py-3">
-                                        <h6 class="mb-1">Average Closing</h6>
-                                        <h4 class="mb-0">KSh ${summary.average_closing.toLocaleString('en-US', {minimumFractionDigits: 2})}</h4>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="card bg-warning text-white">
-                                    <div class="card-body text-center py-3">
-                                        <h6 class="mb-1">Days Tracked</h6>
-                                        <h4 class="mb-0">${summary.unique_days}</h4>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="row mt-3">
-                            <div class="col-md-6">
-                                <div class="card bg-primary text-white">
-                                    <div class="card-body text-center py-3">
-                                        <h6 class="mb-1">Highest Closing</h6>
-                                        <h4 class="mb-0">KSh ${summary.highest_closing.toLocaleString('en-US', {minimumFractionDigits: 2})}</h4>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="card bg-secondary text-white">
-                                    <div class="card-body text-center py-3">
-                                        <h6 class="mb-1">Lowest Closing</h6>
-                                        <h4 class="mb-0">KSh ${summary.lowest_closing.toLocaleString('en-US', {minimumFractionDigits: 2})}</h4>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>`;
-            }
-
-            $('#historyContent').html(historyHtml);
-        }
-
-        window.navigateFloatHistory = function(page) {
-            if (page >= 1 && page <= totalPages) {
-                currentPage = page;
-                renderPage(currentPage);
-            }
-        };
-
-        window.floatHistoryData = data;
-        window.floatHistorySummary = summary;
-
-        renderPage(currentPage);
-    }
-
-    function exportFloatHistory() {
-        window.open('../controllers/export_float_history.php', '_blank');
     }
 
     function filterMoneyIn() {

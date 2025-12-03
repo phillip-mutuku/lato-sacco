@@ -265,6 +265,22 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
         .toast-warning .toast-title {
             color: #ffc107;
         }
+
+        /* Export button style */
+        .btn-export {
+            background-color: #28a745;
+            color: white;
+            border: none;
+        }
+
+        .btn-export:hover {
+            background-color: #218838;
+            color: white;
+        }
+
+        .btn-export:focus {
+            box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.5);
+        }
     </style>
 </head>
 
@@ -283,6 +299,7 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
                     <!-- Page Heading -->
                     <div class="d-sm-flex align-items-center justify-content-between mb-4">
                         <h1 class="h3 mb-0 text-gray-800">Manage Clients' Accounts</h1>
+                        <button class="btn btn-warning" data-toggle="modal" data-target="#addAccountModal">Add New Account</button>
                     </div>
 
                     <!-- Search and Filters Section -->
@@ -291,6 +308,10 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
                             <form class="form-inline" method="GET">
                                 <input type="text" class="form-control mr-2" name="search_query" placeholder="Search by Shareholder No or National ID" value="<?php echo isset($_GET['search_query']) ? $_GET['search_query'] : ''; ?>">
                                 <button style="background-color: #51087E; color: white;" type="submit" class="btn">Search</button>
+                                <a href="account.php" class="btn btn-warning ml-2">Refresh</a>
+                                <a href="../controllers/export_clients_to_excel.php" class="btn btn-export ml-2">
+                                    <i class="fas fa-file-excel mr-1"></i> Export to Excel
+                                </a>
                             </form>
                         </div>
                     </div>
@@ -311,6 +332,7 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
                                             <th>Division</th>
                                             <th>Village</th>
                                             <th>Account Type</th>
+                                            <th>Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -338,6 +360,20 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
                                         <td><?php echo $fetch['division']; ?></td>
                                         <td><?php echo $fetch['village']; ?></td>
                                         <td><?php echo $formatted_account_types; ?></td>
+                                        <td>
+                                            <div class="dropdown">
+                                                <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton<?php echo $fetch['account_id']; ?>" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                                    Action
+                                                </button>
+                                                <div class="dropdown-menu" aria-labelledby="dropdownMenuButton<?php echo $fetch['account_id']; ?>">
+                                                    <a class="dropdown-item" href="#" onclick="viewAccount(<?php echo $fetch['account_id']; ?>)">View</a>
+                                                    <a class="dropdown-item bg-warning text-white" href="#" onclick="editAccount(<?php echo $fetch['account_id']; ?>)">Edit</a>
+                                                    <?php if ($_SESSION['role'] === 'admin'): ?>
+                                                    <a class="dropdown-item bg-danger text-white" href="#" onclick="deleteAccount(<?php echo $fetch['account_id']; ?>)">Delete</a>
+                                                    <?php endif; ?>
+                                                </div>
+                                            </div>
+</td>
                                     </tr>
                                     <?php } ?>
                                 </tbody>
@@ -819,7 +855,7 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
     }
 
     function viewAccount(accountId) {
-        window.open('view_account.php?id=' + accountId, '_blank');
+        window.open('officer_view_account.php?id=' + accountId, '_blank');
     }
 
     // Function to load data and open modal
@@ -864,6 +900,7 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
         });
     }
 
+    // Function to save the updated data
     // Function to save the updated data
 function updateAccount() {
     // Validate all fields are filled

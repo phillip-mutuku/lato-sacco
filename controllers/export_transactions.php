@@ -22,7 +22,7 @@ $export_data = [];
 
 try {
     if ($type === 'money_in') {
-        // Get Group Savings
+        // Get Group Savings with full group names
         if (empty($transaction_type) || $transaction_type === 'group_savings') {
             $query = "SELECT gs.date_saved as date, 'Group Savings' as type, 
                       COALESCE(lg.group_name, 'Unknown Group') as client, 
@@ -47,10 +47,10 @@ try {
             }
         }
         
-        // Get Business Savings
+        // Get Business Savings with full business group names
         if (empty($transaction_type) || $transaction_type === 'business_savings') {
             $query = "SELECT bgt.date, 'Business Savings' as type, 
-                      COALESCE(bg.group_name, 'Unknown Group') as client, 
+                      COALESCE(bg.group_name, 'Unknown Business Group') as client, 
                       bgt.amount, 
                       COALESCE(bgt.payment_mode, 'N/A') as payment_mode, 
                       COALESCE(bgt.receipt_no, 'N/A') as receipt_no, 
@@ -72,10 +72,10 @@ try {
             }
         }
         
-        // Get Individual Savings
+        // Get Individual Savings with full client names
         if (empty($transaction_type) || $transaction_type === 'individual_savings') {
             $query = "SELECT s.date, 'Individual Savings' as type, 
-                      COALESCE(a.first_name, 'Unknown Client') as client, 
+                      COALESCE(CONCAT(a.first_name, ' ', a.last_name), 'Unknown Client') as client, 
                       s.amount, 
                       COALESCE(s.payment_mode, 'N/A') as payment_mode, 
                       COALESCE(s.receipt_number, 'N/A') as receipt_no, 
@@ -97,16 +97,20 @@ try {
             }
         }
         
-        // Get Loan Repayments
+        // Get Loan Repayments with borrower names and loan reference
         if (empty($transaction_type) || $transaction_type === 'loan_repayments') {
             $query = "SELECT lr.date_paid as date, 'Loan Repayment' as type, 
-                      COALESCE(l.ref_no, 'Unknown Loan') as client, 
+                      CONCAT(
+                          COALESCE(CONCAT(ca.first_name, ' ', ca.last_name), 'Unknown Borrower'),
+                          ' [Loan: ', COALESCE(l.ref_no, 'N/A'), ']'
+                      ) as client, 
                       lr.amount_repaid as amount, 
                       COALESCE(lr.payment_mode, 'N/A') as payment_mode, 
                       COALESCE(lr.receipt_number, 'N/A') as receipt_no, 
                       COALESCE(u.username, 'N/A') as served_by
                       FROM loan_repayments lr 
                       LEFT JOIN loan l ON lr.loan_id = l.loan_id 
+                      LEFT JOIN client_accounts ca ON l.account_id = ca.account_id
                       LEFT JOIN user u ON lr.served_by = u.user_id
                       WHERE lr.date_paid BETWEEN ? AND ?
                       ORDER BY lr.date_paid DESC";
@@ -125,7 +129,11 @@ try {
         // Get Money Received
         if (empty($transaction_type) || $transaction_type === 'money_received') {
             $query = "SELECT e.date, 'Money Received' as type, 
-                      COALESCE(e.category, 'Income') as client, 
+                      CONCAT(COALESCE(e.category, 'Income'), 
+                             CASE WHEN e.description IS NOT NULL AND e.description != '' 
+                                  THEN CONCAT(' - ', e.description) 
+                                  ELSE '' END
+                      ) as client, 
                       ABS(e.amount) as amount, 
                       COALESCE(e.payment_method, 'N/A') as payment_mode, 
                       COALESCE(e.receipt_no, 'N/A') as receipt_no, 
@@ -147,7 +155,7 @@ try {
         }
         
     } else if ($type === 'money_out') {
-        // Get Group Withdrawals
+        // Get Group Withdrawals with full group names
         if (empty($transaction_type) || $transaction_type === 'group_withdrawals') {
             $query = "SELECT gw.date_withdrawn as date, 'Group Withdrawal' as type, 
                       COALESCE(lg.group_name, 'Unknown Group') as client, 
@@ -173,15 +181,16 @@ try {
             }
         }
         
-        // Get Business Withdrawals
+        // Get Business Withdrawals with full business group names
         if (empty($transaction_type) || $transaction_type === 'business_withdrawals') {
             $query = "SELECT bgt.date, 'Business Withdrawal' as type, 
-                      COALESCE(bg.group_name, 'Unknown Group') as client, 
+                      COALESCE(bg.group_name, 'Unknown Business Group') as client, 
                       bgt.amount, 
                       0 as withdrawal_fee,
                       COALESCE(bgt.payment_mode, 'N/A') as payment_mode, 
                       COALESCE(bgt.receipt_no, 'N/A') as receipt_no, 
-                      COALESCE(u.username, 'N/A') as served_by
+                      COALESCE(u.username, 'N/A') as served_by,
+                      bgt.group_id
                       FROM business_group_transactions bgt
                       LEFT JOIN business_groups bg ON bgt.group_id = bg.group_id
                       LEFT JOIN user u ON bgt.served_by = u.user_id
@@ -201,7 +210,7 @@ try {
                                  LIMIT 1";
                     $fee_stmt = $db->conn->prepare($fee_query);
                     if ($fee_stmt && isset($row['group_id'])) {
-                        $group_id = $row['group_id'] ?? 0;
+                        $group_id = $row['group_id'];
                         $date = $row['date'];
                         $fee_stmt->bind_param("is", $group_id, $date);
                         $fee_stmt->execute();
@@ -211,16 +220,17 @@ try {
                         }
                         $fee_stmt->close();
                     }
+                    unset($row['group_id']); // Remove group_id from export
                     $export_data[] = $row;
                 }
                 $stmt->close();
             }
         }
         
-        // Get Individual Withdrawals
+        // Get Individual Withdrawals with full client names
         if (empty($transaction_type) || $transaction_type === 'individual_withdrawals') {
             $query = "SELECT s.date, 'Individual Withdrawal' as type, 
-                      COALESCE(a.first_name, 'Unknown Client') as client, 
+                      COALESCE(CONCAT(a.first_name, ' ', a.last_name), 'Unknown Client') as client, 
                       s.amount, 
                       COALESCE(s.withdrawal_fee, 0) as withdrawal_fee, 
                       COALESCE(s.payment_mode, 'N/A') as payment_mode, 
@@ -243,16 +253,21 @@ try {
             }
         }
         
-        // Get Loan Disbursements
+        // Get Loan Disbursements with borrower names and loan reference
         if (empty($transaction_type) || $transaction_type === 'loan_disbursements') {
             $query = "SELECT p.date_created as date, 'Loan Disbursement' as type, 
-                      COALESCE(p.payee, 'Unknown Payee') as client, 
+                      CONCAT(
+                          COALESCE(CONCAT(ca.first_name, ' ', ca.last_name), p.payee, 'Unknown Borrower'),
+                          ' [Loan: ', COALESCE(l.ref_no, 'N/A'), ']'
+                      ) as client, 
                       p.pay_amount as amount, 
                       COALESCE(p.withdrawal_fee, 0) as withdrawal_fee, 
                       'Bank Transfer' as payment_mode, 
                       COALESCE(p.receipt_no, 'N/A') as receipt_no, 
                       COALESCE(u.username, 'N/A') as served_by
                       FROM payment p 
+                      LEFT JOIN loan l ON p.loan_id = l.loan_id
+                      LEFT JOIN client_accounts ca ON l.account_id = ca.account_id
                       LEFT JOIN user u ON p.user_id = u.user_id
                       WHERE p.date_created BETWEEN ? AND ?
                       ORDER BY p.date_created DESC";
@@ -271,7 +286,12 @@ try {
         // Get Expenses
         if (empty($transaction_type) || $transaction_type === 'expenses') {
             $query = "SELECT e.date, 'Expense' as type, 
-                      CONCAT(COALESCE(e.category, 'N/A'), ' - ', COALESCE(e.description, 'N/A')) as client, 
+                      CONCAT(
+                          COALESCE(e.category, 'N/A'),
+                          CASE WHEN e.description IS NOT NULL AND e.description != '' 
+                               THEN CONCAT(' - ', e.description) 
+                               ELSE '' END
+                      ) as client, 
                       ABS(e.amount) as amount, 
                       0 as withdrawal_fee,
                       COALESCE(e.payment_method, 'N/A') as payment_mode, 
@@ -351,7 +371,7 @@ try {
     // Table headers
     echo "Date\t";
     echo "Type\t";
-    echo "Client/Group/Category\t";
+    echo "Client/Group Name\t";
     echo "Amount (KSh)\t";
     if ($type === 'money_out') {
         echo "Withdrawal Fee (KSh)\t";

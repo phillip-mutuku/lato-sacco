@@ -1,7 +1,5 @@
 <?php
 // controllers/export_float_history.php
-// Float History PDF Export Controller
-// Prevent any output before PDF generation
 ob_start();
 
 require('../config/class.php');
@@ -21,16 +19,13 @@ class FloatHistoryPDF extends FPDF {
     }
 
     function Header() {
-        // Company Header with LATO SACCO styling
-        $this->SetFillColor(81, 8, 126); // #51087E
-        $this->Rect(0, 0, 210, 25, 'F'); // Full width colored header
+        $this->SetFillColor(81, 8, 126);
+        $this->Rect(0, 0, 210, 25, 'F');
         
-        // Logo (if available)
         if (file_exists('../public/image/logo.jpg')) {
             $this->Image('../public/image/logo.jpg', 15, 5, 20);
         }
         
-        // Company Info
         $this->SetTextColor(255, 255, 255);
         $this->SetFont('Arial','B', 18);
         $this->SetXY(45, 8);
@@ -40,29 +35,24 @@ class FloatHistoryPDF extends FPDF {
         $this->SetXY(45, 16);
         $this->Cell(150, 6, 'Float History Management Report', 0, 1, 'L');
         
-        // Report Details Box
         $this->SetY(30);
         $this->SetTextColor(0, 0, 0);
         $this->SetFont('Arial','B', 11);
         
-        // Report info box
         $this->SetFillColor(248, 249, 252);
         $this->Rect(15, 30, 180, 35, 'F');
         $this->SetXY(20, 35);
         
-        // Date Range
         $formatted_start = date('M d, Y', strtotime($this->start_date));
         $formatted_end = date('M d, Y', strtotime($this->end_date));
         $period_text = "Report Period: $formatted_start to $formatted_end";
         $this->Cell(85, 6, $period_text, 0, 0, 'L');
         
-        // Record Count
         $this->Cell(85, 6, 'Total Records: ' . $this->total_records, 0, 1, 'R');
         
         $this->SetXY(20, 42);
         $this->Cell(85, 6, 'Generated: ' . date('M d, Y H:i:s'), 0, 0, 'L');
         
-        // Days Range
         $this->Cell(85, 6, 'Date Range: ' . $this->date_range_days . ' days', 0, 1, 'R');
         
         $this->SetXY(20, 49);
@@ -83,7 +73,6 @@ class FloatHistoryPDF extends FPDF {
         $this->SetFont('Arial','I', 8);
         $this->SetTextColor(128, 128, 128);
         
-        // Footer line
         $this->Line(15, $this->GetY(), 195, $this->GetY());
         $this->Ln(3);
         
@@ -97,12 +86,10 @@ class FloatHistoryPDF extends FPDF {
         $this->Cell(0, 10, 'EXECUTIVE SUMMARY', 0, 1, 'L');
         $this->Ln(5);
         
-        // Summary boxes in a structured layout
         $box_width = 45;
         $this->SetFont('Arial','B', 10);
         $this->SetFillColor(245, 245, 245);
         
-        // Row 1 - Main Statistics
         $this->Cell($box_width, 8, 'Total Resets:', 1, 0, 'L', true);
         $this->SetFont('Arial','', 10);
         $this->Cell($box_width, 8, number_format($summary['total_resets']), 1, 0, 'R');
@@ -112,22 +99,20 @@ class FloatHistoryPDF extends FPDF {
         $this->SetFont('Arial','', 10);
         $this->Cell($box_width, 8, number_format($summary['unique_days']), 1, 1, 'R');
         
-        // Row 2 - Amount Analysis
         $this->SetFont('Arial','B', 10);
         $this->Cell($box_width, 8, 'Highest Closing:', 1, 0, 'L', true);
         $this->SetFont('Arial','', 10);
-        $this->SetTextColor(0, 128, 0); // Green for positive
+        $this->SetTextColor(0, 128, 0);
         $this->Cell($box_width, 8, 'KSh ' . number_format($summary['highest_closing'], 2), 1, 0, 'R');
         $this->SetTextColor(0, 0, 0);
         
         $this->SetFont('Arial','B', 10);
         $this->Cell($box_width, 8, 'Lowest Closing:', 1, 0, 'L', true);
         $this->SetFont('Arial','', 10);
-        $this->SetTextColor(220, 53, 69); // Red for concerning
+        $this->SetTextColor(220, 53, 69);
         $this->Cell($box_width, 8, 'KSh ' . number_format($summary['lowest_closing'], 2), 1, 1, 'R');
         $this->SetTextColor(0, 0, 0);
         
-        // Row 3 - Averages and Performance
         $this->SetFont('Arial','B', 10);
         $this->Cell($box_width, 8, 'Average Closing:', 1, 0, 'L', true);
         $this->SetFont('Arial','', 10);
@@ -138,7 +123,6 @@ class FloatHistoryPDF extends FPDF {
         $this->SetFont('Arial','', 10);
         $this->Cell($box_width, 8, number_format($summary['average_resets_per_day'], 1), 1, 1, 'R');
         
-        // Row 4 - Financial Performance
         $this->SetFont('Arial','B', 10);
         $this->Cell($box_width, 8, 'Total Fees:', 1, 0, 'L', true);
         $this->SetFont('Arial','', 10);
@@ -159,7 +143,7 @@ class FloatHistoryPDF extends FPDF {
 
     function FloatHistoryTableHeader() {
         $this->SetFont('Arial','B', 9);
-        $this->SetFillColor(81, 8, 126); // Primary purple
+        $this->SetFillColor(81, 8, 126);
         $this->SetTextColor(255, 255, 255);
         
         $headers = [
@@ -182,7 +166,6 @@ class FloatHistoryPDF extends FPDF {
     function FloatHistoryTableRow($data, $is_even = false) {
         $this->SetFont('Arial','', 7);
         
-        // Alternate row colors
         if ($is_even) {
             $this->SetFillColor(248, 249, 252);
         } else {
@@ -192,29 +175,25 @@ class FloatHistoryPDF extends FPDF {
         $this->Cell(25, 7, date('M d, Y', strtotime($data['date'])), 1, 0, 'C', true);
         $this->Cell(25, 7, date('H:i A', strtotime($data['created_at'])), 1, 0, 'C', true);
         
-        // Closing float - color code based on amount
         $closing_amount = floatval($data['closing_float']);
         if ($closing_amount > 50000) {
-            $this->SetTextColor(0, 128, 0); // Green for high amounts
+            $this->SetTextColor(0, 128, 0);
         } elseif ($closing_amount < 10000) {
-            $this->SetTextColor(220, 53, 69); // Red for low amounts
+            $this->SetTextColor(220, 53, 69);
         } else {
-            $this->SetTextColor(255, 140, 0); // Orange for medium amounts
+            $this->SetTextColor(255, 140, 0);
         }
         $this->Cell(35, 7, number_format($closing_amount, 2), 1, 0, 'R', true);
         $this->SetTextColor(0, 0, 0);
         
-        // Opening float
         $opening_amount = floatval($data['opening_float']);
         $this->Cell(35, 7, number_format($opening_amount, 2), 1, 0, 'R', true);
         
-        // Money in (green)
         $money_in = floatval($data['total_money_in']) + floatval($data['total_withdrawal_fees']);
         $this->SetTextColor(0, 128, 0);
         $this->Cell(30, 7, number_format($money_in, 2), 1, 0, 'R', true);
         $this->SetTextColor(0, 0, 0);
         
-        // Money out (red)
         $money_out = floatval($data['total_money_out']);
         $this->SetTextColor(220, 53, 69);
         $this->Cell(30, 7, number_format($money_out, 2), 1, 0, 'R', true);
@@ -231,9 +210,8 @@ class FloatHistoryPDF extends FPDF {
         $this->Cell(0, 10, 'DAILY SUMMARY BREAKDOWN', 0, 1, 'L');
         $this->Ln(3);
         
-        // Daily summary table header
         $this->SetFont('Arial','B', 9);
-        $this->SetFillColor(52, 58, 64); // Dark gray
+        $this->SetFillColor(52, 58, 64);
         $this->SetTextColor(255, 255, 255);
         
         $this->Cell(30, 8, 'Date', 1, 0, 'C', true);
@@ -258,7 +236,6 @@ class FloatHistoryPDF extends FPDF {
             $this->Cell(30, 7, date('M d, Y', strtotime($day['date'])), 1, 0, 'C', true);
             $this->Cell(20, 7, $day['reset_count'], 1, 0, 'C', true);
             
-            // Final closing amount with color coding
             $closing = $day['final_closing_float'];
             if ($closing > 50000) {
                 $this->SetTextColor(0, 128, 0);
@@ -294,7 +271,6 @@ class FloatHistoryPDF extends FPDF {
     }
 }
 
-// Initialize session and check permissions
 session_start();
 date_default_timezone_set("Africa/Nairobi");
 
@@ -303,11 +279,14 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
     die('Unauthorized access');
 }
 
-// Get filter parameters
-$days_back = isset($_GET['days']) ? (int)$_GET['days'] : 30;
-$days_back = max(1, min(365, $days_back)); // Validate range
+$start_date = isset($_GET['start_date']) ? $_GET['start_date'] : null;
+$end_date = isset($_GET['end_date']) ? $_GET['end_date'] : null;
 
-// Initialize database
+if (!$start_date || !$end_date) {
+    http_response_code(400);
+    die('Start date and end date are required');
+}
+
 $db = new db_class();
 
 if (!$db->conn) {
@@ -315,11 +294,6 @@ if (!$db->conn) {
     die('Database connection failed');
 }
 
-// Calculate date range
-$end_date = date('Y-m-d');
-$start_date = date('Y-m-d', strtotime("-{$days_back} days"));
-
-// Get float history data using the same query as the controller
 $query = "SELECT 
             fh.history_id,
             fh.date,
@@ -358,7 +332,6 @@ $daily_summary = [];
 while ($row = $result->fetch_assoc()) {
     $history_data[] = $row;
     
-    // Build daily summary
     $date_key = $row['date'];
     if (!isset($daily_summary[$date_key])) {
         $daily_summary[$date_key] = [
@@ -386,7 +359,6 @@ while ($row = $result->fetch_assoc()) {
 
 $stmt->close();
 
-// Calculate summary statistics
 $summary = [];
 if (!empty($history_data)) {
     $closing_amounts = array_column($history_data, 'closing_float');
@@ -395,6 +367,10 @@ if (!empty($history_data)) {
     $total_fees = array_sum(array_map('floatval', array_column($history_data, 'total_withdrawal_fees')));
     $total_money_in = array_sum(array_map('floatval', array_column($history_data, 'total_money_in')));
     $total_money_out = array_sum(array_map('floatval', array_column($history_data, 'total_money_out')));
+    
+    $date1 = new DateTime($start_date);
+    $date2 = new DateTime($end_date);
+    $days_diff = $date1->diff($date2)->days + 1;
     
     $summary = [
         'total_resets' => count($history_data),
@@ -410,26 +386,22 @@ if (!empty($history_data)) {
         'date_range' => [
             'start' => $start_date,
             'end' => $end_date,
-            'days' => $days_back
+            'days' => $days_diff
         ],
         'daily_breakdown' => array_values($daily_summary)
     ];
 }
 
-// Initialize PDF
 $pdf = new FloatHistoryPDF('P', 'mm', 'A4');
 $pdf->AliasNbPages();
-$pdf->setFilters($start_date, $end_date, count($history_data), $days_back);
+$pdf->setFilters($start_date, $end_date, count($history_data), $summary['date_range']['days'] ?? 0);
 
-// Generate PDF
 $pdf->AddPage();
 
-// Add executive summary if we have data
 if (!empty($summary)) {
     $pdf->ExecutiveSummary($summary);
 }
 
-// Float History Section
 if (!empty($history_data)) {
     $pdf->SetFont('Arial','B', 12);
     $pdf->SetTextColor(81, 8, 126);
@@ -440,7 +412,6 @@ if (!empty($history_data)) {
     
     $row_count = 0;
     foreach ($history_data as $row_data) {
-        // Check if we need a new page
         if ($pdf->GetY() > 250) {
             $pdf->AddPage();
             $pdf->FloatHistoryTableHeader();
@@ -450,7 +421,6 @@ if (!empty($history_data)) {
         $row_count++;
     }
     
-    // Add totals
     if ($pdf->GetY() > 245) {
         $pdf->AddPage();
     }
@@ -458,7 +428,6 @@ if (!empty($history_data)) {
     $pdf->TotalRow(count($history_data), $summary);
     $pdf->Ln(10);
     
-    // Add daily summary section
     if (!empty($daily_summary)) {
         if ($pdf->GetY() > 200) {
             $pdf->AddPage();
@@ -470,13 +439,10 @@ if (!empty($history_data)) {
     $pdf->Cell(0, 20, 'No float history records found for the selected period.', 0, 1, 'C');
 }
 
-// Clear the output buffer
 ob_end_clean();
 
-// Generate filename
-$date_suffix = '_' . date('Y-m-d', strtotime($start_date)) . '_to_' . date('Y-m-d', strtotime($end_date));
+$date_suffix = '_' . date('Ymd', strtotime($start_date)) . '_to_' . date('Ymd', strtotime($end_date));
 $filename = 'Float_History_Report' . $date_suffix . '.pdf';
 
-// Output PDF
 $pdf->Output('D', $filename);
 ?>

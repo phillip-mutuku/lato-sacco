@@ -165,21 +165,25 @@ $defaulted_amount_query = "
     . ($from_date && $to_date ? " AND DATE(l.date_applied) BETWEEN '$from_date' AND '$to_date'" : "");
 $total_defaulted = $db->conn->query($defaulted_amount_query)->fetch_assoc()['total_defaulted'];
 
-// Calculate Outstanding Loans (Principal only) for active loans linked to field officers
+// FIXED: Calculate Outstanding Principal (decreases with repayments)
 function calculateOutstandingPrincipal($db, $selected_officer = 0, $from_date = '', $to_date = '') {
-    $outstanding_principal = 0;
+    // For each unpaid/partial installment, calculate the outstanding principal portion
+    // Formula: For each installment where payment is due:
+    //   - If unpaid: full principal amount is outstanding
+    //   - If partial: proportionally reduce principal by payment ratio
+    //   - If paid: no outstanding principal
     
-    // Get all active loans for group members
-    $loans_query = "
-        SELECT 
-            l.loan_id,
-            l.amount as original_amount,
-            l.loan_term,
-            l.date_applied,
-            l.meeting_date,
-            COALESCE(lp.interest_rate, 0) as interest_rate
-        FROM loan l
-        LEFT JOIN loan_products lp ON l.loan_product_id = lp.id
+    $outstanding_query = "
+        SELECT COALESCE(SUM(
+            CASE 
+                WHEN ls.status = 'unpaid' THEN ls.principal
+                WHEN ls.status = 'partial' THEN 
+                    ls.principal - (ls.repaid_amount * (ls.principal / ls.amount))
+                ELSE 0
+            END
+        ), 0) as total_principal_outstanding
+        FROM loan_schedule ls
+        JOIN loan l ON ls.loan_id = l.loan_id
         JOIN client_accounts ca ON l.account_id = ca.account_id
         JOIN group_members gm ON ca.account_id = gm.account_id
         JOIN lato_groups g ON gm.group_id = g.group_id
@@ -188,67 +192,13 @@ function calculateOutstandingPrincipal($db, $selected_officer = 0, $from_date = 
         " . ($selected_officer ? " AND g.field_officer_id = $selected_officer" : "")
         . ($from_date && $to_date ? " AND DATE(l.date_applied) BETWEEN '$from_date' AND '$to_date'" : "");
     
-    $loans_result = $db->conn->query($loans_query);
-    
-    while ($loan = $loans_result->fetch_assoc()) {
-        $loanId = $loan['loan_id'];
-        $originalAmount = floatval($loan['original_amount']);
-        $loanTerm = intval($loan['loan_term']);
-        $interestRate = floatval($loan['interest_rate']) / 100;
-        
-        if ($loanTerm <= 0) {
-            $outstanding_principal += $originalAmount;
-            continue;
-        }
-        
-        // Calculate monthly principal payment
-        $monthlyPrincipal = $originalAmount / $loanTerm;
-        
-        // Get total amount repaid for this loan
-        $repayment_query = "
-            SELECT COALESCE(SUM(amount_repaid), 0) as total_repaid
-            FROM loan_repayments 
-            WHERE loan_id = $loanId";
-        
-        $repayment_result = $db->conn->query($repayment_query);
-        $totalRepaid = floatval($repayment_result->fetch_assoc()['total_repaid']);
-        
-        // Calculate principal paid following amortization schedule
-        $remainingPrincipal = $originalAmount;
-        $principalPaid = 0;
-        $remainingRepayment = $totalRepaid;
-        
-        for ($month = 1; $month <= $loanTerm && $remainingRepayment > 0; $month++) {
-            $monthlyInterest = $remainingPrincipal * $interestRate;
-            $monthlyPayment = $monthlyPrincipal + $monthlyInterest;
-            
-            if ($remainingRepayment >= $monthlyPayment) {
-                // Full payment made for this month
-                $principalPaid += $monthlyPrincipal;
-                $remainingPrincipal -= $monthlyPrincipal;
-                $remainingRepayment -= $monthlyPayment;
-            } else {
-                // Partial payment - allocate to interest first, then principal
-                if ($remainingRepayment > $monthlyInterest) {
-                    $principalPortionPaid = $remainingRepayment - $monthlyInterest;
-                    $principalPaid += $principalPortionPaid;
-                }
-                break;
-            }
-        }
-        
-        $loanOutstanding = max(0, $originalAmount - $principalPaid);
-        $outstanding_principal += $loanOutstanding;
-    }
-    
-    return $outstanding_principal;
+    $result = $db->conn->query($outstanding_query);
+    return floatval($result->fetch_assoc()['total_principal_outstanding']);
 }
 
-// Calculate Total Outstanding Loans (Principal + Interest) for active loans
+// FIXED: Calculate Total Outstanding (Principal + Interest) - also needs to decrease with repayments
 function calculateTotalOutstandingWithInterest($db, $selected_officer = 0, $from_date = '', $to_date = '') {
-    $total_outstanding = 0;
-    
-    // Get sum of unpaid amounts from loan schedule (principal + interest)
+    // Sum all unpaid amounts (principal + interest) from the loan schedule
     $outstanding_query = "
         SELECT COALESCE(SUM(
             CASE 
@@ -264,14 +214,11 @@ function calculateTotalOutstandingWithInterest($db, $selected_officer = 0, $from
         JOIN lato_groups g ON gm.group_id = g.group_id
         WHERE l.status IN (1, 2)
         AND gm.status = 'active'
-        AND ls.status IN ('unpaid', 'partial')
         " . ($selected_officer ? " AND g.field_officer_id = $selected_officer" : "")
         . ($from_date && $to_date ? " AND DATE(l.date_applied) BETWEEN '$from_date' AND '$to_date'" : "");
     
     $result = $db->conn->query($outstanding_query);
-    $total_outstanding = floatval($result->fetch_assoc()['total_outstanding']);
-    
-    return $total_outstanding;
+    return floatval($result->fetch_assoc()['total_outstanding']);
 }
 
 // Calculate the actual values

@@ -1,21 +1,18 @@
 <?php
 /**
  * Updated Float History Controller
- * Fetches all float reset history with support for multiple resets per day
+ * Fetches all float reset history with unlimited storage and date range filtering
  * Includes withdrawal fees tracking and enhanced data presentation
  */
 
 header('Content-Type: application/json');
 header('Cache-Control: no-cache, must-revalidate');
 
-// Set timezone
 date_default_timezone_set("Africa/Nairobi");
 
-// Include required files
 require_once '../helpers/session.php';
 require_once '../config/class.php';
 
-// Initialize response array
 $response = array(
     'success' => false,
     'message' => '',
@@ -25,39 +22,50 @@ $response = array(
 );
 
 try {
-    // Check if user is logged in and has appropriate permissions
     if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'manager')) {
         throw new Exception('Unauthorized access. Please log in with appropriate permissions.');
     }
 
-    // Initialize database connection
     $db = new db_class();
     
     if (!$db->conn) {
         throw new Exception('Database connection failed.');
     }
 
-    // Validate request method
     if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
         throw new Exception('Invalid request method. Only GET requests are allowed.');
     }
 
-    // Get optional parameters for customization
+    // Get filter parameters
+    $start_date = isset($_GET['start_date']) ? $_GET['start_date'] : null;
+    $end_date = isset($_GET['end_date']) ? $_GET['end_date'] : null;
     $days_back = isset($_GET['days']) ? (int)$_GET['days'] : 30;
     $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 100;
+    $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
     $specific_date = isset($_GET['date']) ? $_GET['date'] : null;
 
     // Validate parameters
     if ($days_back < 1 || $days_back > 365) {
-        $days_back = 30; // Default to 30 days
+        $days_back = 30;
     }
     
     if ($limit < 1 || $limit > 200) {
-        $limit = 100; // Default to 100 records
+        $limit = 100;
     }
 
+    if ($page < 1) {
+        $page = 1;
+    }
+
+    $offset = ($page - 1) * $limit;
+
     // Calculate date range
-    if ($specific_date && preg_match('/^\d{4}-\d{2}-\d{2}$/', $specific_date)) {
+    if ($start_date && $end_date) {
+        // Use provided date range
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $start_date) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $end_date)) {
+            throw new Exception('Invalid date format. Use YYYY-MM-DD.');
+        }
+    } elseif ($specific_date && preg_match('/^\d{4}-\d{2}-\d{2}$/', $specific_date)) {
         $start_date = $specific_date;
         $end_date = $specific_date;
     } else {
@@ -65,7 +73,20 @@ try {
         $start_date = date('Y-m-d', strtotime("-{$days_back} days"));
     }
 
-    // Prepare the main query to fetch float history
+    // Count total records for pagination
+    $count_query = "SELECT COUNT(*) as total FROM float_history fh WHERE fh.date BETWEEN ? AND ?";
+    $count_stmt = $db->conn->prepare($count_query);
+    
+    if (!$count_stmt) {
+        throw new Exception('Failed to prepare count query: ' . $db->conn->error);
+    }
+    
+    $count_stmt->bind_param("ss", $start_date, $end_date);
+    $count_stmt->execute();
+    $total_records = $count_stmt->get_result()->fetch_assoc()['total'];
+    $count_stmt->close();
+
+    // Prepare the main query
     $query = "SELECT 
                 fh.history_id,
                 fh.date,
@@ -92,7 +113,7 @@ try {
               LEFT JOIN user u ON fh.reset_by = u.user_id
               WHERE fh.date BETWEEN ? AND ?
               ORDER BY fh.date DESC, fh.created_at DESC
-              LIMIT ?";
+              LIMIT ? OFFSET ?";
 
     $stmt = $db->conn->prepare($query);
     
@@ -100,10 +121,8 @@ try {
         throw new Exception('Failed to prepare database query: ' . $db->conn->error);
     }
 
-    // Bind parameters
-    $stmt->bind_param("ssi", $start_date, $end_date, $limit);
+    $stmt->bind_param("ssii", $start_date, $end_date, $limit, $offset);
 
-    // Execute the query
     if (!$stmt->execute()) {
         throw new Exception('Failed to execute database query: ' . $stmt->error);
     }
@@ -112,12 +131,9 @@ try {
     $history_data = array();
     $daily_summary = array();
 
-    // Fetch and process results
     while ($row = $result->fetch_assoc()) {
-        // Calculate net position for this reset
         $net_money_flow = ($row['total_money_in'] + $row['total_withdrawal_fees']) - $row['total_money_out'];
         
-        // Format the data for frontend consumption
         $history_record = array(
             'history_id' => (int)$row['history_id'],
             'date' => $row['date'],
@@ -147,7 +163,6 @@ try {
 
         $history_data[] = $history_record;
 
-        // Build daily summary
         $date_key = $row['date'];
         if (!isset($daily_summary[$date_key])) {
             $daily_summary[$date_key] = array(
@@ -175,37 +190,54 @@ try {
 
     $stmt->close();
 
-    // Calculate comprehensive summary statistics
+    // Calculate comprehensive summary statistics for the filtered data
     $summary = array();
     if (!empty($history_data)) {
-        $closing_amounts = array_column($history_data, 'closing_float');
-        $closing_amounts = array_map('floatval', $closing_amounts);
+        // Get summary for all records in date range (not just current page)
+        $summary_query = "SELECT 
+                            COUNT(*) as total_resets,
+                            COUNT(DISTINCT date) as unique_days,
+                            MAX(closing_float) as highest_closing,
+                            MIN(closing_float) as lowest_closing,
+                            AVG(closing_float) as average_closing,
+                            SUM(total_withdrawal_fees) as total_fees_collected,
+                            SUM(total_money_in) as total_money_in,
+                            SUM(total_money_out) as total_money_out
+                          FROM float_history fh
+                          WHERE fh.date BETWEEN ? AND ?";
         
-        $total_fees = array_sum(array_map('floatval', array_column($history_data, 'total_withdrawal_fees')));
-        $total_money_in = array_sum(array_map('floatval', array_column($history_data, 'total_money_in')));
-        $total_money_out = array_sum(array_map('floatval', array_column($history_data, 'total_money_out')));
+        $summary_stmt = $db->conn->prepare($summary_query);
+        $summary_stmt->bind_param("ss", $start_date, $end_date);
+        $summary_stmt->execute();
+        $summary_result = $summary_stmt->get_result()->fetch_assoc();
+        $summary_stmt->close();
+        
+        $total_fees = (float)$summary_result['total_fees_collected'];
+        $total_money_in = (float)$summary_result['total_money_in'];
+        $total_money_out = (float)$summary_result['total_money_out'];
         
         $summary = array(
-            'total_resets' => count($history_data),
-            'unique_days' => count($daily_summary),
-            'highest_closing' => max($closing_amounts),
-            'lowest_closing' => min($closing_amounts),
-            'average_closing' => round(array_sum($closing_amounts) / count($closing_amounts), 2),
+            'total_resets' => (int)$summary_result['total_resets'],
+            'unique_days' => (int)$summary_result['unique_days'],
+            'highest_closing' => (float)$summary_result['highest_closing'],
+            'lowest_closing' => (float)$summary_result['lowest_closing'],
+            'average_closing' => round((float)$summary_result['average_closing'], 2),
             'total_fees_collected' => $total_fees,
             'total_money_in_period' => $total_money_in,
             'total_money_out_period' => $total_money_out,
             'net_money_flow_period' => $total_money_in + $total_fees - $total_money_out,
-            'average_resets_per_day' => round(count($history_data) / max(1, count($daily_summary)), 2),
+            'average_resets_per_day' => $summary_result['unique_days'] > 0 ? 
+                round((float)$summary_result['total_resets'] / (float)$summary_result['unique_days'], 2) : 0,
             'date_range' => array(
                 'start' => $start_date,
                 'end' => $end_date,
-                'days' => $days_back
+                'days' => (strtotime($end_date) - strtotime($start_date)) / 86400 + 1
             ),
             'daily_breakdown' => array_values($daily_summary)
         );
     }
 
-    // Get current float status for context
+    // Get current float status
     $current_float_query = "SELECT 
                             COALESCE(SUM(CASE WHEN type = 'add' THEN amount ELSE 0 END), 0) as current_opening,
                             COALESCE(SUM(CASE WHEN type = 'offload' THEN amount ELSE 0 END), 0) as current_offloaded
@@ -215,7 +247,6 @@ try {
     $current_float = $stmt->get_result()->fetch_assoc();
     $stmt->close();
 
-    // Prepare successful response
     $response['success'] = true;
     $response['message'] = 'Float history retrieved successfully.';
     $response['data'] = $history_data;
@@ -226,27 +257,35 @@ try {
         'current_net_float' => (float)$current_float['current_opening'] - (float)$current_float['current_offloaded'],
         'last_reset' => !empty($history_data) ? $history_data[0]['created_at'] : null
     );
+    $response['pagination'] = array(
+        'current_page' => $page,
+        'total_records' => $total_records,
+        'total_pages' => ceil($total_records / $limit),
+        'limit' => $limit,
+        'offset' => $offset
+    );
+    $response['filters'] = array(
+        'start_date' => $start_date,
+        'end_date' => $end_date,
+        'date_range_days' => (strtotime($end_date) - strtotime($start_date)) / 86400 + 1
+    );
     $response['meta'] = array(
         'total_records' => count($history_data),
-        'date_range_days' => $days_back,
         'query_limit' => $limit,
         'query_time' => date('Y-m-d H:i:s'),
         'timezone' => 'Africa/Nairobi'
     );
 
 } catch (Exception $e) {
-    // Log the error for debugging
     error_log('Float History Error: ' . $e->getMessage() . ' - User ID: ' . ($_SESSION['user_id'] ?? 'Unknown') . ' - IP: ' . ($_SERVER['REMOTE_ADDR'] ?? 'Unknown'));
     
     $response['success'] = false;
     $response['message'] = $e->getMessage();
     $response['data'] = array();
     
-    // Set appropriate HTTP status code
     http_response_code(400);
     
 } catch (Error $e) {
-    // Handle fatal errors
     error_log('Float History Fatal Error: ' . $e->getMessage() . ' - File: ' . $e->getFile() . ' - Line: ' . $e->getLine());
     
     $response['success'] = false;
@@ -256,9 +295,6 @@ try {
     http_response_code(500);
 }
 
-// Output JSON response
 echo json_encode($response, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-
-// Ensure no additional output
 exit();
 ?>

@@ -1,7 +1,11 @@
 <?php
-// views/groups_performance_report.php
+// controllers/groups_performance_report.php
 // Prevent any output before PDF generation
 ob_start();
+
+// Increase execution time for large datasets
+set_time_limit(300); // 5 minutes
+ini_set('memory_limit', '256M');
 
 require('../config/class.php');
 require('../helpers/fpdf/fpdf.php');
@@ -21,15 +25,13 @@ class GroupsPerformancePDF extends FPDF {
 
     function Header() {
         // Company Header with LATO SACCO styling
-        $this->SetFillColor(81, 8, 126); // #51087E
-        $this->Rect(0, 0, 297, 25, 'F'); // Full width colored header
+        $this->SetFillColor(81, 8, 126);
+        $this->Rect(0, 0, 297, 25, 'F');
         
-        // Logo (if available)
         if (file_exists('../public/image/logo.jpg')) {
             $this->Image('../public/image/logo.jpg', 15, 5, 20);
         }
         
-        // Company Info
         $this->SetTextColor(255, 255, 255);
         $this->SetFont('Arial','B', 18);
         $this->SetXY(45, 8);
@@ -39,23 +41,19 @@ class GroupsPerformancePDF extends FPDF {
         $this->SetXY(45, 16);
         $this->Cell(200, 6, 'Groups Performance & Portfolio Analysis Report', 0, 1, 'L');
         
-        // Report Details Box
         $this->SetY(30);
         $this->SetTextColor(0, 0, 0);
         $this->SetFont('Arial','B', 11);
         
-        // Report info box
         $this->SetFillColor(248, 249, 252);
         $this->Rect(15, 30, 267, 35, 'F');
         $this->SetXY(20, 35);
         
-        // Date Range
         $formatted_start = date('M d, Y', strtotime($this->start_date));
         $formatted_end = date('M d, Y', strtotime($this->end_date));
         $period_text = "Report Period: $formatted_start to $formatted_end";
         $this->Cell(130, 6, $period_text, 0, 0, 'L');
         
-        // Field Officer Filter
         $officer_text = "Field Officer: " . $this->field_officer_name;
         $this->Cell(110, 6, $officer_text, 0, 1, 'R');
         
@@ -81,7 +79,6 @@ class GroupsPerformancePDF extends FPDF {
         $this->SetFont('Arial','I', 8);
         $this->SetTextColor(128, 128, 128);
         
-        // Footer line
         $this->Line(15, $this->GetY(), 282, $this->GetY());
         $this->Ln(3);
         
@@ -95,12 +92,10 @@ class GroupsPerformancePDF extends FPDF {
         $this->Cell(0, 10, 'EXECUTIVE SUMMARY', 0, 1, 'L');
         $this->Ln(5);
         
-        // Summary boxes in a structured layout
         $box_width = 66;
         $this->SetFont('Arial','B', 9);
         $this->SetFillColor(245, 245, 245);
         
-        // Row 1 - Portfolio Overview
         $this->Cell($box_width, 8, 'Total Groups:', 1, 0, 'L', true);
         $this->SetFont('Arial','', 9);
         $this->Cell($box_width, 8, number_format($stats['total_groups']), 1, 0, 'R');
@@ -110,7 +105,6 @@ class GroupsPerformancePDF extends FPDF {
         $this->SetFont('Arial','', 9);
         $this->Cell($box_width, 8, number_format($stats['total_members']), 1, 1, 'R');
         
-        // Row 2 - Loan Portfolio
         $this->SetFont('Arial','B', 9);
         $this->Cell($box_width, 8, 'Outstanding Principal:', 1, 0, 'L', true);
         $this->SetFont('Arial','', 9);
@@ -125,7 +119,6 @@ class GroupsPerformancePDF extends FPDF {
         $this->Cell($box_width, 8, 'KSh ' . number_format($stats['total_outstanding'], 2), 1, 1, 'R');
         $this->SetTextColor(0, 0, 0);
         
-        // Row 3 - Risk Analysis
         $this->SetFont('Arial','B', 9);
         $this->Cell($box_width, 8, 'Total Defaulters:', 1, 0, 'L', true);
         $this->SetFont('Arial','', 9);
@@ -140,7 +133,6 @@ class GroupsPerformancePDF extends FPDF {
         $this->Cell($box_width, 8, 'KSh ' . number_format($stats['defaulted_amount'], 2), 1, 1, 'R');
         $this->SetTextColor(0, 0, 0);
         
-        // Row 4 - Performance Metrics
         $this->SetFont('Arial','B', 9);
         $this->Cell($box_width, 8, 'Default Rate:', 1, 0, 'L', true);
         $this->SetFont('Arial','', 9);
@@ -189,7 +181,6 @@ class GroupsPerformancePDF extends FPDF {
     function GroupsTableRow($data, $is_even = false) {
         $this->SetFont('Arial','', 7);
         
-        // Alternate row colors
         if ($is_even) {
             $this->SetFillColor(248, 249, 252);
         } else {
@@ -202,87 +193,28 @@ class GroupsPerformancePDF extends FPDF {
         $this->Cell(20, 7, number_format($data['total_members']), 1, 0, 'C', true);
         $this->Cell(25, 7, number_format($data['active_loans']), 1, 0, 'C', true);
         
-        // Outstanding Principal in green
         $this->SetTextColor(0, 128, 0);
         $this->Cell(35, 7, number_format($data['outstanding_principal'], 0), 1, 0, 'R', true);
         $this->SetTextColor(0, 0, 0);
         
-        // Total Outstanding in blue
         $this->SetTextColor(0, 100, 200);
         $this->Cell(35, 7, number_format($data['total_outstanding'], 0), 1, 0, 'R', true);
         $this->SetTextColor(0, 0, 0);
         
-        // Defaulters in red
         $this->SetTextColor(220, 53, 69);
         $this->Cell(20, 7, number_format($data['defaulters']), 1, 0, 'C', true);
         $this->SetTextColor(0, 0, 0);
         
-        // Default Rate with color coding
         $default_rate = $data['total_members'] > 0 ? ($data['defaulters'] / $data['total_members']) * 100 : 0;
         $rate_color = $default_rate > 10 ? [220, 53, 69] : ($default_rate > 5 ? [255, 140, 0] : [0, 128, 0]);
         $this->SetTextColor($rate_color[0], $rate_color[1], $rate_color[2]);
         $this->Cell(22, 7, number_format($default_rate, 1) . '%', 1, 0, 'C', true);
         $this->SetTextColor(0, 0, 0);
         
-        // Risk Level
         $risk_level = $default_rate > 10 ? 'High' : ($default_rate > 5 ? 'Medium' : 'Low');
         $risk_color = $default_rate > 10 ? [220, 53, 69] : ($default_rate > 5 ? [255, 140, 0] : [0, 128, 0]);
         $this->SetTextColor($risk_color[0], $risk_color[1], $risk_color[2]);
         $this->Cell(25, 7, $risk_level, 1, 1, 'C', true);
-        $this->SetTextColor(0, 0, 0);
-    }
-
-    function FieldOfficerTableHeader() {
-        $this->SetFont('Arial','B', 8);
-        $this->SetFillColor(40, 167, 69);
-        $this->SetTextColor(255, 255, 255);
-        
-        $headers = [
-            ['text' => 'Officer Name', 'width' => 50],
-            ['text' => 'Groups', 'width' => 25],
-            ['text' => 'Members', 'width' => 25],
-            ['text' => 'Outstanding Principal', 'width' => 40],
-            ['text' => 'Total Outstanding', 'width' => 40],
-            ['text' => 'Defaulters', 'width' => 25],
-            ['text' => 'Default Rate', 'width' => 25],
-            ['text' => 'Performance', 'width' => 32]
-        ];
-        
-        foreach ($headers as $header) {
-            $this->Cell($header['width'], 8, $header['text'], 1, 0, 'C', true);
-        }
-        $this->Ln();
-        $this->SetTextColor(0, 0, 0);
-    }
-
-    function FieldOfficerTableRow($data, $is_even = false) {
-        $this->SetFont('Arial','', 7);
-        
-        if ($is_even) {
-            $this->SetFillColor(248, 249, 252);
-        } else {
-            $this->SetFillColor(255, 255, 255);
-        }
-        
-        $this->Cell(50, 7, substr($data['officer_name'], 0, 30), 1, 0, 'L', true);
-        $this->Cell(25, 7, number_format($data['total_groups']), 1, 0, 'C', true);
-        $this->Cell(25, 7, number_format($data['total_members']), 1, 0, 'C', true);
-        
-        $this->SetTextColor(0, 128, 0);
-        $this->Cell(40, 7, number_format($data['outstanding_principal'], 0), 1, 0, 'R', true);
-        $this->SetTextColor(0, 100, 200);
-        $this->Cell(40, 7, number_format($data['total_outstanding'], 0), 1, 0, 'R', true);
-        $this->SetTextColor(220, 53, 69);
-        $this->Cell(25, 7, number_format($data['defaulters']), 1, 0, 'C', true);
-        $this->SetTextColor(0, 0, 0);
-        
-        $default_rate = $data['total_members'] > 0 ? ($data['defaulters'] / $data['total_members']) * 100 : 0;
-        $rate_color = $default_rate > 10 ? [220, 53, 69] : ($default_rate > 5 ? [255, 140, 0] : [0, 128, 0]);
-        $this->SetTextColor($rate_color[0], $rate_color[1], $rate_color[2]);
-        $this->Cell(25, 7, number_format($default_rate, 1) . '%', 1, 0, 'C', true);
-        
-        $performance = $default_rate < 5 ? 'Excellent' : ($default_rate < 10 ? 'Good' : 'Needs Improvement');
-        $this->Cell(32, 7, $performance, 1, 1, 'C', true);
         $this->SetTextColor(0, 0, 0);
     }
 
@@ -320,374 +252,222 @@ if ($selected_officer) {
     }
 }
 
-// Calculate Outstanding Loans (Principal only) for groups
-function calculateGroupOutstandingPrincipal($db, $group_id) {
-    $outstanding_principal = 0;
-    
-    $loans_query = "
-        SELECT 
-            l.loan_id,
-            l.amount as original_amount,
-            l.loan_term,
-            COALESCE(lp.interest_rate, 0) as interest_rate
-        FROM loan l
-        LEFT JOIN loan_products lp ON l.loan_product_id = lp.id
-        JOIN client_accounts ca ON l.account_id = ca.account_id
-        JOIN group_members gm ON ca.account_id = gm.account_id
-        WHERE l.status IN (1, 2)
-        AND gm.status = 'active'
-        AND gm.group_id = $group_id";
-    
-    $loans_result = $db->conn->query($loans_query);
-    
-    while ($loan = $loans_result->fetch_assoc()) {
-        $loanId = $loan['loan_id'];
-        $originalAmount = floatval($loan['original_amount']);
-        $loanTerm = intval($loan['loan_term']);
-        $interestRate = floatval($loan['interest_rate']) / 100;
-        
-        if ($loanTerm <= 0) {
-            $outstanding_principal += $originalAmount;
-            continue;
-        }
-        
-        $monthlyPrincipal = $originalAmount / $loanTerm;
-        
-        $repayment_query = "SELECT COALESCE(SUM(amount_repaid), 0) as total_repaid FROM loan_repayments WHERE loan_id = $loanId";
-        $repayment_result = $db->conn->query($repayment_query);
-        $totalRepaid = floatval($repayment_result->fetch_assoc()['total_repaid']);
-        
-        $remainingPrincipal = $originalAmount;
-        $principalPaid = 0;
-        $remainingRepayment = $totalRepaid;
-        
-        for ($month = 1; $month <= $loanTerm && $remainingRepayment > 0; $month++) {
-            $monthlyInterest = $remainingPrincipal * $interestRate;
-            $monthlyPayment = $monthlyPrincipal + $monthlyInterest;
-            
-            if ($remainingRepayment >= $monthlyPayment) {
-                $principalPaid += $monthlyPrincipal;
-                $remainingPrincipal -= $monthlyPrincipal;
-                $remainingRepayment -= $monthlyPayment;
-            } else {
-                if ($remainingRepayment > $monthlyInterest) {
-                    $principalPortionPaid = $remainingRepayment - $monthlyInterest;
-                    $principalPaid += $principalPortionPaid;
-                }
-                break;
-            }
-        }
-        
-        $loanOutstanding = max(0, $originalAmount - $principalPaid);
-        $outstanding_principal += $loanOutstanding;
-    }
-    
-    return $outstanding_principal;
-}
+// Build filter conditions
+$officer_filter = $selected_officer ? " AND g.field_officer_id = $selected_officer" : "";
+$date_filter = ($from_date && $to_date) ? " AND DATE(g.created_at) BETWEEN '$from_date' AND '$to_date'" : "";
 
-// Get summary statistics
-$stats_query = "
-    SELECT 
-        COUNT(DISTINCT g.group_id) as total_groups,
-        COUNT(DISTINCT gm.account_id) as total_members,
-        COUNT(DISTINCT CASE WHEN ls.due_date < CURDATE() AND ls.status IN ('unpaid', 'partial') AND l.status IN (1, 2) THEN l.account_id END) as total_defaulters,
-        COALESCE(SUM(CASE WHEN ls.due_date < CURDATE() AND ls.status = 'unpaid' THEN ls.amount WHEN ls.due_date < CURDATE() AND ls.status = 'partial' THEN (ls.amount - COALESCE(ls.repaid_amount, 0)) ELSE 0 END), 0) as defaulted_amount,
-        COALESCE(SUM(CASE WHEN ls.status IN ('unpaid', 'partial') THEN (CASE WHEN ls.status = 'unpaid' THEN ls.amount ELSE (ls.amount - COALESCE(ls.repaid_amount, 0)) END) ELSE 0 END), 0) as total_outstanding
-    FROM lato_groups g
-    LEFT JOIN group_members gm ON g.group_id = gm.group_id AND gm.status = 'active'
-    LEFT JOIN loan l ON gm.account_id = l.account_id AND l.status IN (1, 2)
-    LEFT JOIN loan_schedule ls ON l.loan_id = ls.loan_id
-    WHERE 1=1
-    " . ($selected_officer ? " AND g.field_officer_id = $selected_officer" : "") . "
-    " . ($from_date && $to_date ? " AND DATE(g.created_at) BETWEEN '$from_date' AND '$to_date'" : "");
-
-$stats_result = $db->conn->query($stats_query);
-$stats = $stats_result->fetch_assoc();
-
-// Calculate outstanding principal across all groups
-$all_groups_query = "SELECT group_id FROM lato_groups" . ($selected_officer ? " WHERE field_officer_id = $selected_officer" : "");
-$all_groups_result = $db->conn->query($all_groups_query);
-$total_outstanding_principal = 0;
-
-while ($group = $all_groups_result->fetch_assoc()) {
-    $total_outstanding_principal += calculateGroupOutstandingPrincipal($db, $group['group_id']);
-}
-
-$stats['outstanding_principal'] = $total_outstanding_principal;
-$stats['default_rate'] = $stats['total_members'] > 0 ? ($stats['total_defaulters'] / $stats['total_members']) * 100 : 0;
-
-// Get detailed groups data
-$groups_query = "
+// OPTIMIZED: Get all data in ONE BIG QUERY
+$master_query = "
     SELECT 
         g.group_id,
         g.group_reference,
         g.group_name,
         g.area,
+        g.field_officer_id,
         CONCAT(u.firstname, ' ', u.lastname) as field_officer,
         COUNT(DISTINCT gm.account_id) as total_members,
         COUNT(DISTINCT CASE WHEN l.status IN (1, 2) THEN l.loan_id END) as active_loans,
-        COUNT(DISTINCT CASE WHEN ls.due_date < CURDATE() AND ls.status IN ('unpaid', 'partial') AND l.status IN (1, 2) THEN l.account_id END) as defaulters
+        COUNT(DISTINCT CASE 
+            WHEN ls.due_date < CURDATE() 
+            AND ls.status IN ('unpaid', 'partial') 
+            AND l.status IN (1, 2)
+            AND ls.default_amount > 0
+            THEN ca.account_id 
+        END) as defaulters,
+        COALESCE(SUM(CASE 
+            WHEN ls.due_date < CURDATE() 
+            AND ls.status IN ('unpaid', 'partial')
+            AND l.status IN (1, 2)
+            THEN ls.default_amount
+            ELSE 0
+        END), 0) as defaulted_amount,
+        COALESCE(SUM(CASE 
+            WHEN l.status IN (1, 2) AND ls.status = 'paid'
+            THEN ls.principal
+            ELSE 0
+        END), 0) as principal_paid,
+        COALESCE(SUM(CASE 
+            WHEN l.status IN (1, 2)
+            THEN l.amount
+            ELSE 0
+        END), 0) as total_loan_amount,
+        COALESCE(SUM(CASE 
+            WHEN l.status IN (1, 2) AND ls.status IN ('unpaid', 'partial')
+            THEN CASE 
+                WHEN ls.status = 'unpaid' THEN ls.amount
+                ELSE (ls.amount - COALESCE(ls.repaid_amount, 0))
+            END
+            ELSE 0
+        END), 0) as total_outstanding
     FROM lato_groups g
     JOIN user u ON g.field_officer_id = u.user_id
     LEFT JOIN group_members gm ON g.group_id = gm.group_id AND gm.status = 'active'
-    LEFT JOIN loan l ON gm.account_id = l.account_id
+    LEFT JOIN client_accounts ca ON gm.account_id = ca.account_id
+    LEFT JOIN loan l ON ca.account_id = l.account_id
     LEFT JOIN loan_schedule ls ON l.loan_id = ls.loan_id
     WHERE 1=1
-    " . ($selected_officer ? " AND g.field_officer_id = $selected_officer" : "") . "
-    " . ($from_date && $to_date ? " AND DATE(g.created_at) BETWEEN '$from_date' AND '$to_date'" : "") . "
-    GROUP BY g.group_id, g.group_reference, g.group_name, g.area, u.firstname, u.lastname
-    ORDER BY g.group_reference";
+    $officer_filter
+    $date_filter
+    GROUP BY g.group_id, g.group_reference, g.group_name, g.area, g.field_officer_id, u.firstname, u.lastname
+    ORDER BY g.group_reference
+";
 
-$groups_result = $db->conn->query($groups_query);
+$master_result = $db->conn->query($master_query);
+
+if (!$master_result) {
+    die("Query Error: " . $db->conn->error);
+}
+
+// Process results
 $groups_data = [];
+$stats = [
+    'total_groups' => 0,
+    'total_members' => 0,
+    'outstanding_principal' => 0,
+    'total_outstanding' => 0,
+    'total_defaulters' => 0,
+    'defaulted_amount' => 0
+];
 
-while ($group = $groups_result->fetch_assoc()) {
-    // Get outstanding amounts for this group
-    $group['outstanding_principal'] = calculateGroupOutstandingPrincipal($db, $group['group_id']);
+while ($row = $master_result->fetch_assoc()) {
+    // Calculate outstanding principal for this group
+    $row['outstanding_principal'] = max(0, $row['total_loan_amount'] - $row['principal_paid']);
     
-    // Get total outstanding (P+I)
-    $total_outstanding_query = "
-        SELECT COALESCE(SUM(CASE WHEN ls.status = 'unpaid' THEN ls.amount WHEN ls.status = 'partial' THEN (ls.amount - COALESCE(ls.repaid_amount, 0)) ELSE 0 END), 0) as total_outstanding
-        FROM loan_schedule ls
-        JOIN loan l ON ls.loan_id = l.loan_id
-        JOIN group_members gm ON l.account_id = gm.account_id
-        WHERE gm.group_id = {$group['group_id']} AND l.status IN (1, 2) AND ls.status IN ('unpaid', 'partial')";
+    // Add to groups data
+    $groups_data[] = $row;
     
-    $outstanding_result = $db->conn->query($total_outstanding_query);
-    $group['total_outstanding'] = floatval($outstanding_result->fetch_assoc()['total_outstanding']);
-    
-    $groups_data[] = $group;
+    // Accumulate stats
+    $stats['total_groups']++;
+    $stats['total_members'] += $row['total_members'];
+    $stats['outstanding_principal'] += $row['outstanding_principal'];
+    $stats['total_outstanding'] += $row['total_outstanding'];
+    $stats['total_defaulters'] += $row['defaulters'];
+    $stats['defaulted_amount'] += $row['defaulted_amount'];
 }
 
-// Get field officers performance data
-$officers_query = "
-    SELECT 
-        u.user_id,
-        CONCAT(u.firstname, ' ', u.lastname) as officer_name,
-        COUNT(DISTINCT g.group_id) as total_groups,
-        COUNT(DISTINCT gm.account_id) as total_members,
-        COUNT(DISTINCT CASE WHEN ls.due_date < CURDATE() AND ls.status IN ('unpaid', 'partial') AND l.status IN (1, 2) THEN l.account_id END) as defaulters
-    FROM user u
-    LEFT JOIN lato_groups g ON u.user_id = g.field_officer_id
-    LEFT JOIN group_members gm ON g.group_id = gm.group_id AND gm.status = 'active'
-    LEFT JOIN loan l ON gm.account_id = l.account_id
-    LEFT JOIN loan_schedule ls ON l.loan_id = ls.loan_id
-    WHERE u.role = 'officer'
-    " . ($selected_officer ? " AND u.user_id = $selected_officer" : "") . "
-    GROUP BY u.user_id, u.firstname, u.lastname
-    HAVING total_groups > 0
-    ORDER BY officer_name";
-
-$officers_result = $db->conn->query($officers_query);
-$officers_data = [];
-
-while ($officer = $officers_result->fetch_assoc()) {
-    // Calculate outstanding amounts for this officer
-    $officer_groups_query = "SELECT group_id FROM lato_groups WHERE field_officer_id = {$officer['user_id']}";
-    $officer_groups_result = $db->conn->query($officer_groups_query);
-    
-    $officer_outstanding_principal = 0;
-    $officer_total_outstanding = 0;
-    
-    while ($group = $officer_groups_result->fetch_assoc()) {
-        $officer_outstanding_principal += calculateGroupOutstandingPrincipal($db, $group['group_id']);
-        
-        $total_outstanding_query = "
-            SELECT COALESCE(SUM(CASE WHEN ls.status = 'unpaid' THEN ls.amount WHEN ls.status = 'partial' THEN (ls.amount - COALESCE(ls.repaid_amount, 0)) ELSE 0 END), 0) as total_outstanding
-            FROM loan_schedule ls
-            JOIN loan l ON ls.loan_id = l.loan_id
-            JOIN group_members gm ON l.account_id = gm.account_id
-            WHERE gm.group_id = {$group['group_id']} AND l.status IN (1, 2) AND ls.status IN ('unpaid', 'partial')";
-        
-        $outstanding_result = $db->conn->query($total_outstanding_query);
-        $officer_total_outstanding += floatval($outstanding_result->fetch_assoc()['total_outstanding']);
-    }
-    
-    $officer['outstanding_principal'] = $officer_outstanding_principal;
-    $officer['total_outstanding'] = $officer_total_outstanding;
-    
-    $officers_data[] = $officer;
-}
+$stats['default_rate'] = $stats['total_members'] > 0 ? ($stats['total_defaulters'] / $stats['total_members']) * 100 : 0;
 
 // Initialize PDF
 $pdf = new GroupsPerformancePDF('L', 'mm', 'A4');
 $pdf->AliasNbPages();
 $pdf->setFilters($from_date, $to_date, $selected_officer, $officer_name);
 
-// Start generating PDF
-$pdf->AddPage();
-
-// Add executive summary
-$pdf->ExecutiveSummary($stats);
-
-// Groups Detail Section
-if (!empty($groups_data)) {
-    $pdf->SetFont('Arial','B', 12);
+try {
+    // Start generating PDF
+    $pdf->AddPage();
+    
+    // Add executive summary
+    $pdf->ExecutiveSummary($stats);
+    
+    // Groups Detail Section
+    if (!empty($groups_data)) {
+        $pdf->SetFont('Arial','B', 12);
+        $pdf->SetTextColor(81, 8, 126);
+        $pdf->Cell(0, 10, 'GROUPS PERFORMANCE ANALYSIS', 0, 1, 'L');
+        $pdf->Ln(3);
+        
+        $pdf->GroupsTableHeader();
+        
+        $row_count = 0;
+        $totals = [
+            'total_groups' => 0,
+            'total_members' => 0,
+            'outstanding_principal' => 0,
+            'total_outstanding' => 0,
+            'defaulters' => 0
+        ];
+        
+        foreach ($groups_data as $group_data) {
+            if ($pdf->GetY() > 180) {
+                $pdf->AddPage();
+                $pdf->GroupsTableHeader();
+            }
+            
+            $pdf->GroupsTableRow($group_data, $row_count % 2 == 0);
+            
+            $totals['total_groups']++;
+            $totals['total_members'] += $group_data['total_members'];
+            $totals['outstanding_principal'] += $group_data['outstanding_principal'];
+            $totals['total_outstanding'] += $group_data['total_outstanding'];
+            $totals['defaulters'] += $group_data['defaulters'];
+            
+            $row_count++;
+        }
+        
+        if ($pdf->GetY() > 175) {
+            $pdf->AddPage();
+        }
+        $pdf->Ln(3);
+        $pdf->TotalRow('GROUPS', $totals, [81, 8, 126]);
+    }
+    
+    // Performance Insights Section
+    $pdf->AddPage();
+    $pdf->SetFont('Arial','B', 14);
     $pdf->SetTextColor(81, 8, 126);
-    $pdf->Cell(0, 10, 'GROUPS PERFORMANCE ANALYSIS', 0, 1, 'L');
-    $pdf->Ln(3);
+    $pdf->Cell(0, 10, 'PERFORMANCE INSIGHTS & RECOMMENDATIONS', 0, 1, 'L');
+    $pdf->Ln(5);
     
-    $pdf->GroupsTableHeader();
+    $pdf->SetFont('Arial','B', 10);
+    $pdf->SetTextColor(0, 0, 0);
     
-    $row_count = 0;
-    $totals = [
-        'total_groups' => 0,
-        'total_members' => 0,
-        'outstanding_principal' => 0,
-        'total_outstanding' => 0,
-        'defaulters' => 0
-    ];
+    $pdf->Cell(0, 8, '1. PORTFOLIO HEALTH ANALYSIS', 0, 1, 'L');
+    $pdf->SetFont('Arial','', 9);
+    $pdf->Ln(2);
     
-    foreach ($groups_data as $group_data) {
-        // Check if we need a new page
-        if ($pdf->GetY() > 180) {
-            $pdf->AddPage();
-            $pdf->GroupsTableHeader();
-        }
-        
-        $pdf->GroupsTableRow($group_data, $row_count % 2 == 0);
-        
-        // Accumulate totals
-        $totals['total_groups']++;
-        $totals['total_members'] += $group_data['total_members'];
-        $totals['outstanding_principal'] += $group_data['outstanding_principal'];
-        $totals['total_outstanding'] += $group_data['total_outstanding'];
-        $totals['defaulters'] += $group_data['defaulters'];
-        
-        $row_count++;
+    $health_status = 'HEALTHY';
+    $health_color = [0, 128, 0];
+    if ($stats['default_rate'] > 10) {
+        $health_status = 'HIGH RISK';
+        $health_color = [220, 53, 69];
+    } elseif ($stats['default_rate'] > 5) {
+        $health_status = 'MODERATE RISK';
+        $health_color = [255, 140, 0];
     }
     
-    // Add groups totals
-    if ($pdf->GetY() > 175) {
-        $pdf->AddPage();
-    }
-    $pdf->Ln(3);
-    $pdf->TotalRow('GROUPS', $totals, [81, 8, 126]);
-    $pdf->Ln(10);
-}
-
-// Field Officers Performance Section
-if (!empty($officers_data) && !$selected_officer) {
-    $pdf->SetFont('Arial','B', 12);
-    $pdf->SetTextColor(40, 167, 69);
-    $pdf->Cell(0, 10, 'FIELD OFFICERS PERFORMANCE ANALYSIS', 0, 1, 'L');
-    $pdf->Ln(3);
+    $pdf->SetTextColor($health_color[0], $health_color[1], $health_color[2]);
+    $pdf->Cell(0, 6, "Overall Portfolio Status: $health_status", 0, 1, 'L');
+    $pdf->SetTextColor(0, 0, 0);
     
-    $pdf->FieldOfficerTableHeader();
+    $pdf->Cell(0, 6, "• Default Rate: " . number_format($stats['default_rate'], 2) . "% (" . ($stats['default_rate'] < 5 ? "Excellent" : ($stats['default_rate'] < 10 ? "Acceptable" : "Needs Attention")) . ")", 0, 1, 'L');
+    $pdf->Cell(0, 6, "• Portfolio at Risk: " . number_format($stats['total_outstanding'] > 0 ? ($stats['defaulted_amount'] / $stats['total_outstanding']) * 100 : 0, 2) . "%", 0, 1, 'L');
+    $pdf->Cell(0, 6, "• Total Exposure: KSh " . number_format($stats['outstanding_principal'], 0) . " (Principal)", 0, 1, 'L');
+    $pdf->Cell(0, 6, "• Total Outstanding: KSh " . number_format($stats['total_outstanding'], 0) . " (Principal + Interest)", 0, 1, 'L');
+    $pdf->Ln(5);
     
-    $row_count = 0;
-    $officer_totals = [
-        'total_groups' => 0,
-        'total_members' => 0,
-        'outstanding_principal' => 0,
-        'total_outstanding' => 0,
-        'defaulters' => 0
-    ];
+    $pdf->SetFont('Arial','B', 10);
+    $pdf->Cell(0, 8, '2. KEY RECOMMENDATIONS', 0, 1, 'L');
+    $pdf->SetFont('Arial','', 9);
+    $pdf->Ln(2);
     
-    foreach ($officers_data as $officer_data) {
-        // Check if we need a new page
-        if ($pdf->GetY() > 180) {
-            $pdf->AddPage();
-            $pdf->FieldOfficerTableHeader();
-        }
-        
-        $pdf->FieldOfficerTableRow($officer_data, $row_count % 2 == 0);
-        
-        // Accumulate totals
-        $officer_totals['total_groups'] += $officer_data['total_groups'];
-        $officer_totals['total_members'] += $officer_data['total_members'];
-        $officer_totals['outstanding_principal'] += $officer_data['outstanding_principal'];
-        $officer_totals['total_outstanding'] += $officer_data['total_outstanding'];
-        $officer_totals['defaulters'] += $officer_data['defaulters'];
-        
-        $row_count++;
+    if ($stats['default_rate'] > 10) {
+        $pdf->Cell(0, 6, "• URGENT: Implement immediate recovery measures for high-risk groups", 0, 1, 'L');
+        $pdf->Cell(0, 6, "• Conduct field visits to assess defaulting members' situations", 0, 1, 'L');
+        $pdf->Cell(0, 6, "• Review and strengthen loan approval criteria", 0, 1, 'L');
+    } elseif ($stats['default_rate'] > 5) {
+        $pdf->Cell(0, 6, "• Monitor high-risk groups closely and provide additional support", 0, 1, 'L');
+        $pdf->Cell(0, 6, "• Enhance field officer training on risk assessment", 0, 1, 'L');
+    } else {
+        $pdf->Cell(0, 6, "• Maintain current practices and consider portfolio expansion", 0, 1, 'L');
+        $pdf->Cell(0, 6, "• Share best practices across field officers", 0, 1, 'L');
     }
     
-    // Add officer totals
-    if ($pdf->GetY() > 175) {
-        $pdf->AddPage();
-    }
-    $pdf->Ln(3);
-    $pdf->TotalRow('FIELD OFFICERS', $officer_totals, [40, 167, 69]);
+    $pdf->Cell(0, 6, "• Regular monitoring and reporting of portfolio performance", 0, 1, 'L');
+    $pdf->Cell(0, 6, "• Implement early warning systems for potential defaults", 0, 1, 'L');
+    
+    // Clear the output buffer
+    ob_end_clean();
+    
+    // Generate filename
+    $officer_suffix = $selected_officer ? '_' . str_replace(' ', '', $officer_name) : '_AllOfficers';
+    $date_suffix = '_' . date('Y-m-d', strtotime($from_date)) . '_to_' . date('Y-m-d', strtotime($to_date));
+    $filename = 'Groups_Performance_Report' . $officer_suffix . $date_suffix . '.pdf';
+    
+    // Output PDF
+    $pdf->Output('D', $filename);
+    
+} catch (Exception $e) {
+    ob_end_clean();
+    die("PDF Generation Error: " . $e->getMessage());
 }
-
-// Performance Insights Section
-$pdf->AddPage();
-$pdf->SetFont('Arial','B', 14);
-$pdf->SetTextColor(81, 8, 126);
-$pdf->Cell(0, 10, 'PERFORMANCE INSIGHTS & RECOMMENDATIONS', 0, 1, 'L');
-$pdf->Ln(5);
-
-$pdf->SetFont('Arial','B', 10);
-$pdf->SetTextColor(0, 0, 0);
-
-// Portfolio Health Analysis
-$pdf->Cell(0, 8, '1. PORTFOLIO HEALTH ANALYSIS', 0, 1, 'L');
-$pdf->SetFont('Arial','', 9);
-$pdf->Ln(2);
-
-$health_status = 'HEALTHY';
-$health_color = [0, 128, 0];
-if ($stats['default_rate'] > 10) {
-    $health_status = 'HIGH RISK';
-    $health_color = [220, 53, 69];
-} elseif ($stats['default_rate'] > 5) {
-    $health_status = 'MODERATE RISK';
-    $health_color = [255, 140, 0];
-}
-
-$pdf->SetTextColor($health_color[0], $health_color[1], $health_color[2]);
-$pdf->Cell(0, 6, "Overall Portfolio Status: $health_status", 0, 1, 'L');
-$pdf->SetTextColor(0, 0, 0);
-
-$pdf->Cell(0, 6, "• Default Rate: " . number_format($stats['default_rate'], 2) . "% (" . ($stats['default_rate'] < 5 ? "Excellent" : ($stats['default_rate'] < 10 ? "Acceptable" : "Needs Attention")) . ")", 0, 1, 'L');
-$pdf->Cell(0, 6, "• Portfolio at Risk: " . number_format($stats['total_outstanding'] > 0 ? ($stats['defaulted_amount'] / $stats['total_outstanding']) * 100 : 0, 2) . "%", 0, 1, 'L');
-$pdf->Cell(0, 6, "• Total Exposure: KSh " . number_format($stats['outstanding_principal'], 0) . " (Principal)", 0, 1, 'L');
-$pdf->Ln(5);
-
-// Recommendations
-$pdf->SetFont('Arial','B', 10);
-$pdf->Cell(0, 8, '2. KEY RECOMMENDATIONS', 0, 1, 'L');
-$pdf->SetFont('Arial','', 9);
-$pdf->Ln(2);
-
-if ($stats['default_rate'] > 10) {
-    $pdf->Cell(0, 6, "• URGENT: Implement immediate recovery measures for high-risk groups", 0, 1, 'L');
-    $pdf->Cell(0, 6, "• Conduct field visits to assess defaulting members' situations", 0, 1, 'L');
-    $pdf->Cell(0, 6, "• Review and strengthen loan approval criteria", 0, 1, 'L');
-} elseif ($stats['default_rate'] > 5) {
-    $pdf->Cell(0, 6, "• Monitor high-risk groups closely and provide additional support", 0, 1, 'L');
-    $pdf->Cell(0, 6, "• Enhance field officer training on risk assessment", 0, 1, 'L');
-} else {
-    $pdf->Cell(0, 6, "• Maintain current practices and consider portfolio expansion", 0, 1, 'L');
-    $pdf->Cell(0, 6, "• Share best practices across field officers", 0, 1, 'L');
-}
-
-$pdf->Cell(0, 6, "• Regular monitoring and reporting of portfolio performance", 0, 1, 'L');
-$pdf->Cell(0, 6, "• Implement early warning systems for potential defaults", 0, 1, 'L');
-$pdf->Ln(5);
-
-// Risk Metrics
-$pdf->SetFont('Arial','B', 10);
-$pdf->Cell(0, 8, '3. RISK METRICS SUMMARY', 0, 1, 'L');
-$pdf->SetFont('Arial','', 9);
-$pdf->Ln(2);
-
-$portfolio_concentration = $stats['total_groups'] > 0 ? $stats['total_members'] / $stats['total_groups'] : 0;
-$avg_exposure_per_member = $stats['total_members'] > 0 ? $stats['outstanding_principal'] / $stats['total_members'] : 0;
-
-$pdf->Cell(0, 6, "• Average Members per Group: " . number_format($portfolio_concentration, 1), 0, 1, 'L');
-$pdf->Cell(0, 6, "• Average Exposure per Member: KSh " . number_format($avg_exposure_per_member, 0), 0, 1, 'L');
-$pdf->Cell(0, 6, "• Defaulter Concentration: " . number_format($stats['total_defaulters'], 0) . " out of " . number_format($stats['total_members'], 0) . " members", 0, 1, 'L');
-
-// Clear the output buffer
-ob_end_clean();
-
-// Generate filename
-$officer_suffix = $selected_officer ? '_' . str_replace(' ', '', $officer_name) : '_AllOfficers';
-$date_suffix = '_' . date('Y-m-d', strtotime($from_date)) . '_to_' . date('Y-m-d', strtotime($to_date));
-$filename = 'Groups_Performance_Report' . $officer_suffix . $date_suffix . '.pdf';
-
-// Output PDF
-$pdf->Output('D', $filename);
 ?>

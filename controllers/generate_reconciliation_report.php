@@ -230,7 +230,7 @@ class DailyReconciliationPDF extends FPDF {
         $headers = [
             ['text' => 'Date', 'width' => 25],
             ['text' => 'Transaction Type', 'width' => 35],
-            ['text' => 'Client/Group/Category', 'width' => 50],
+            ['text' => 'Client/Group Name', 'width' => 50],
             ['text' => 'Amount (KSh)', 'width' => 28],
             ['text' => 'Fee (KSh)', 'width' => 22],
             ['text' => 'Payment Mode', 'width' => 25],
@@ -431,11 +431,11 @@ function getFloatTransactions($db, $start, $end, $filter = 'all') {
     return $transactions;
 }
 
-// Get Money In transactions
+// Get Money In transactions with full names
 function getMoneyInTransactions($db, $start, $end) {
     $transactions = [];
     
-    // Group Savings
+    // Group Savings with full group names
     $query = "SELECT gs.*, lg.group_name, u.username as served_by_name
               FROM group_savings gs 
               LEFT JOIN lato_groups lg ON gs.group_id = lg.group_id 
@@ -458,7 +458,7 @@ function getMoneyInTransactions($db, $start, $end) {
         ];
     }
     
-    // Business Group Savings
+    // Business Group Savings with full business group names
     $query = "SELECT bgt.*, bg.group_name, u.username as served_by_name
               FROM business_group_transactions bgt
               LEFT JOIN business_groups bg ON bgt.group_id = bg.group_id
@@ -481,8 +481,10 @@ function getMoneyInTransactions($db, $start, $end) {
         ];
     }
     
-    // Individual Savings
-    $query = "SELECT s.*, a.first_name as account_name, u.username as served_by_name
+    // Individual Savings with full client names
+    $query = "SELECT s.*, 
+                     CONCAT(a.first_name, ' ', a.last_name) as client_full_name,
+                     u.username as served_by_name
               FROM savings s
               LEFT JOIN client_accounts a ON s.account_id = a.account_id
               LEFT JOIN user u ON s.served_by = u.user_id
@@ -496,7 +498,7 @@ function getMoneyInTransactions($db, $start, $end) {
         $transactions[] = [
             'date' => $row['date'],
             'type' => 'Individual Savings',
-            'client_name' => $row['account_name'] ?? 'Unknown Client',
+            'client_name' => $row['client_full_name'] ?? 'Unknown Client',
             'amount' => $row['amount'],
             'payment_mode' => $row['payment_mode'] ?? 'Cash',
             'receipt_no' => $row['receipt_number'] ?? 'N/A',
@@ -504,10 +506,14 @@ function getMoneyInTransactions($db, $start, $end) {
         ];
     }
     
-    // Loan Repayments
-    $query = "SELECT lr.*, l.ref_no, u.username as served_by_name
+    // Loan Repayments with borrower names and loan reference
+    $query = "SELECT lr.*, 
+                     l.ref_no,
+                     CONCAT(ca.first_name, ' ', ca.last_name) as borrower_name,
+                     u.username as served_by_name
               FROM loan_repayments lr 
               LEFT JOIN loan l ON lr.loan_id = l.loan_id 
+              LEFT JOIN client_accounts ca ON l.account_id = ca.account_id
               LEFT JOIN user u ON lr.served_by = u.user_id
               WHERE lr.date_paid BETWEEN ? AND ?
               ORDER BY lr.date_paid DESC";
@@ -516,14 +522,46 @@ function getMoneyInTransactions($db, $start, $end) {
     $stmt->execute();
     $result = $stmt->get_result();
     while ($row = $result->fetch_assoc()) {
+        $client_display = ($row['borrower_name'] ?? 'Unknown Borrower');
+        if (!empty($row['ref_no'])) {
+            $client_display .= ' [' . $row['ref_no'] . ']';
+        }
+        
         $transactions[] = [
             'date' => $row['date_paid'],
             'type' => 'Loan Repayment',
-            'client_name' => $row['ref_no'] ?? 'Unknown Loan',
+            'client_name' => $client_display,
             'amount' => $row['amount_repaid'],
             'payment_mode' => $row['payment_mode'] ?? 'Cash',
             'receipt_no' => $row['receipt_number'] ?? 'N/A',
             'served_by' => $row['served_by_name'] ?? 'Unknown'
+        ];
+    }
+    
+    // Money Received
+    $query = "SELECT e.*, u.username as created_by_name
+              FROM expenses e 
+              LEFT JOIN user u ON e.created_by = u.user_id
+              WHERE e.status = 'received' AND e.date BETWEEN ? AND ?
+              ORDER BY e.date DESC";
+    $stmt = $db->conn->prepare($query);
+    $stmt->bind_param("ss", $start, $end);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    while ($row = $result->fetch_assoc()) {
+        $client_display = ($row['category'] ?? 'Income');
+        if (!empty($row['description'])) {
+            $client_display .= ' - ' . substr($row['description'], 0, 30);
+        }
+        
+        $transactions[] = [
+            'date' => $row['date'],
+            'type' => 'Money Received',
+            'client_name' => $client_display,
+            'amount' => abs($row['amount']),
+            'payment_mode' => $row['payment_method'] ?? 'Cash',
+            'receipt_no' => $row['receipt_no'] ?? 'N/A',
+            'served_by' => $row['created_by_name'] ?? 'Unknown'
         ];
     }
     
@@ -535,11 +573,11 @@ function getMoneyInTransactions($db, $start, $end) {
     return $transactions;
 }
 
-// Get Money Out transactions
+// Get Money Out transactions with full names
 function getMoneyOutTransactions($db, $start, $end) {
     $transactions = [];
     
-    // Group Withdrawals
+    // Group Withdrawals with full group names
     $query = "SELECT gw.*, lg.group_name, u.username as served_by_name
               FROM group_withdrawals gw
               LEFT JOIN lato_groups lg ON gw.group_id = lg.group_id
@@ -563,7 +601,7 @@ function getMoneyOutTransactions($db, $start, $end) {
         ];
     }
     
-    // Business Group Withdrawals
+    // Business Group Withdrawals with full business group names
     $query = "SELECT bgt.*, bg.group_name, u.username as served_by_name
               FROM business_group_transactions bgt
               LEFT JOIN business_groups bg ON bgt.group_id = bg.group_id
@@ -599,8 +637,10 @@ function getMoneyOutTransactions($db, $start, $end) {
     }
     $transactions = array_merge($transactions, array_values($business_withdrawals));
     
-    // Individual Withdrawals
-    $query = "SELECT s.*, a.first_name as account_name, u.username as served_by_name
+    // Individual Withdrawals with full client names
+    $query = "SELECT s.*, 
+                     CONCAT(a.first_name, ' ', a.last_name) as client_full_name,
+                     u.username as served_by_name
               FROM savings s
               LEFT JOIN client_accounts a ON s.account_id = a.account_id
               LEFT JOIN user u ON s.served_by = u.user_id
@@ -614,7 +654,7 @@ function getMoneyOutTransactions($db, $start, $end) {
         $transactions[] = [
             'date' => $row['date'],
             'type' => 'Individual Withdrawal',
-            'client_name' => $row['account_name'] ?? 'Unknown Client',
+            'client_name' => $row['client_full_name'] ?? 'Unknown Client',
             'amount' => $row['amount'],
             'fee' => $row['withdrawal_fee'] ?? 0,
             'payment_mode' => $row['payment_mode'] ?? 'Cash',
@@ -623,10 +663,14 @@ function getMoneyOutTransactions($db, $start, $end) {
         ];
     }
     
-    // Loan Disbursements
-    $query = "SELECT p.*, l.ref_no, u.username as disbursed_by 
+    // Loan Disbursements with borrower names
+    $query = "SELECT p.*, 
+                     l.ref_no, 
+                     CONCAT(ca.first_name, ' ', ca.last_name) as borrower_name,
+                     u.username as disbursed_by 
               FROM payment p 
               LEFT JOIN loan l ON p.loan_id = l.loan_id 
+              LEFT JOIN client_accounts ca ON l.account_id = ca.account_id
               LEFT JOIN user u ON p.user_id = u.user_id
               WHERE p.date_created BETWEEN ? AND ?
               ORDER BY p.date_created DESC";
@@ -635,10 +679,15 @@ function getMoneyOutTransactions($db, $start, $end) {
     $stmt->execute();
     $result = $stmt->get_result();
     while ($row = $result->fetch_assoc()) {
+        $client_display = ($row['borrower_name'] ?? $row['payee'] ?? 'Unknown Borrower');
+        if (!empty($row['ref_no'])) {
+            $client_display .= ' [' . $row['ref_no'] . ']';
+        }
+        
         $transactions[] = [
             'date' => $row['date_created'],
             'type' => 'Loan Disbursement',
-            'client_name' => $row['payee'] ?? 'Unknown Payee',
+            'client_name' => $client_display,
             'amount' => $row['pay_amount'],
             'fee' => $row['withdrawal_fee'] ?? 0,
             'payment_mode' => 'Bank Transfer',
@@ -651,21 +700,26 @@ function getMoneyOutTransactions($db, $start, $end) {
     $query = "SELECT e.*, u.username as created_by_name
               FROM expenses e 
               LEFT JOIN user u ON e.created_by = u.user_id
-              WHERE e.date BETWEEN ? AND ?
+              WHERE (e.status = 'completed' OR e.status IS NULL) AND e.date BETWEEN ? AND ?
               ORDER BY e.date DESC";
     $stmt = $db->conn->prepare($query);
     $stmt->bind_param("ss", $start, $end);
     $stmt->execute();
     $result = $stmt->get_result();
     while ($row = $result->fetch_assoc()) {
+        $client_display = ($row['category'] ?? 'Expense');
+        if (!empty($row['description'])) {
+            $client_display .= ' - ' . substr($row['description'], 0, 20);
+        }
+        
         $transactions[] = [
             'date' => $row['date'],
             'type' => 'Expense',
-            'client_name' => $row['category'] . ' - ' . substr($row['description'], 0, 20),
-            'amount' => $row['amount'],
+            'client_name' => $client_display,
+            'amount' => abs($row['amount']),
             'fee' => 0,
             'payment_mode' => $row['payment_method'] ?? 'Cash',
-            'receipt_no' => $row['reference_no'] ?? 'N/A',
+            'receipt_no' => $row['receipt_no'] ?? 'N/A',
             'served_by' => $row['created_by_name'] ?? 'Unknown'
         ];
     }

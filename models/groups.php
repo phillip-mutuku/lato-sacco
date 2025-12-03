@@ -10,6 +10,9 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
     header('Location: ../views/index.php');
     exit();
 }
+
+// Get current tab
+$current_tab = isset($_GET['tab']) ? $_GET['tab'] : 'groups';
 ?>
 
 <!DOCTYPE html>
@@ -294,6 +297,91 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
             z-index: 2;
         }
 
+        /* Tab Styles */
+        .nav-tabs {
+            border-bottom: 2px solid #e3e6f0;
+        }
+        
+        .nav-tabs .nav-link {
+            color: #6c757d;
+            background-color: transparent;
+            border: none;
+            border-bottom: 3px solid transparent;
+            padding: 12px 20px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-tabs .nav-link:hover {
+            color: #51087E;
+            border-bottom-color: #51087E;
+            background-color: rgba(81, 8, 126, 0.05);
+        }
+        
+        .nav-tabs .nav-link.active {
+            color: #51087E;
+            border-bottom-color: #51087E;
+            background-color: transparent;
+            font-weight: 600;
+        }
+        
+        .nav-tabs .nav-link i {
+            margin-right: 8px;
+        }
+
+        /* DataTables Pagination Styling */
+        .dataTables_wrapper .dataTables_paginate {
+            padding-top: 15px;
+            text-align: right;
+        }
+
+        .dataTables_wrapper .dataTables_paginate .paginate_button {
+            padding: 6px 12px;
+            margin: 0 3px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            background: #fff;
+            color: #51087E !important;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+            background: #51087E;
+            color: #fff !important;
+            border-color: #51087E;
+        }
+
+        .dataTables_wrapper .dataTables_paginate .paginate_button.current {
+            background: #51087E !important;
+            color: #fff !important;
+            border-color: #51087E !important;
+            font-weight: bold;
+        }
+
+        .dataTables_wrapper .dataTables_paginate .paginate_button.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .dataTables_wrapper .dataTables_info {
+            padding-top: 15px;
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+
+        .dataTables_wrapper .dataTables_length {
+            margin-bottom: 15px;
+        }
+
+        .dataTables_wrapper .dataTables_length select {
+            padding: 5px 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 0 5px;
+        }
+
         /* Loading state for report button */
         .generate-report-btn.loading {
             opacity: 0.8;
@@ -326,6 +414,11 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                 padding: 20px;
                 margin-bottom: 25px;
             }
+            
+            .nav-tabs .nav-link {
+                padding: 10px 15px;
+                font-size: 0.9rem;
+            }
         }
     </style>
 </head>
@@ -335,142 +428,171 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
     <div id="wrapper">
         <!-- Include Sidebar -->
         <?php include '../components/includes/sidebar.php'; ?>
+
+            <!-- Main Content -->
+            <div id="content">
+
                 <!-- Begin Page Content -->
                 <div class="container-fluid">
-                    <!-- Report Generation Section -->
-                    <div class="report-generation-section">
-                        <div class="report-header">
-                            <div class="report-title-section">
-                                <i class="fas fa-chart-line report-icon"></i>
-                                <div>
-                                    <h3 class="report-title">Groups Performance Report</h3>
-                                    <p class="report-subtitle">Generate comprehensive portfolio analysis</p>
+                    <!-- Tab Navigation -->
+                    <ul class="nav nav-tabs mb-4" id="groupTabs" role="tablist">
+                        <li class="nav-item">
+                            <a class="nav-link <?php echo $current_tab == 'groups' ? 'active' : ''; ?>" 
+                               href="?tab=groups">
+                                <i class="fas fa-users"></i> Manage Wekeza Groups
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link <?php echo $current_tab == 'defaulters' ? 'active' : ''; ?>" 
+                               href="?tab=defaulters">
+                                <i class="fas fa-exclamation-triangle"></i> Manage Defaulters
+                            </a>
+                        </li>
+                    </ul>
+
+                    <!-- Tab Content -->
+                    <?php if ($current_tab == 'groups'): ?>
+                        <!-- Groups Tab Content -->
+                        <!-- Report Generation Section -->
+                        <div class="report-generation-section">
+                            <div class="report-header">
+                                <div class="report-title-section">
+                                    <i class="fas fa-chart-line report-icon"></i>
+                                    <div>
+                                        <h3 class="report-title">Groups Performance Report</h3>
+                                        <p class="report-subtitle">Generate comprehensive portfolio analysis</p>
+                                    </div>
                                 </div>
+                                <button class="btn generate-report-btn" id="generateReportBtn">
+                                    <i class="fas fa-file-pdf"></i> Generate Report
+                                </button>
                             </div>
-                            <button class="btn generate-report-btn" id="generateReportBtn">
-                                <i class="fas fa-file-pdf"></i> Generate Report
+                            <p class="report-description">
+                                Generate detailed performance reports including group analytics, loan portfolio status, 
+                                field officer performance metrics, and risk assessment with current filter settings.
+                            </p>
+                        </div>
+
+                        <!-- Include Groups Statistics -->
+                        <?php include '../components/groups/groups_stats.php'; ?>
+
+                        <!-- Page Heading -->
+                        <div class="d-sm-flex align-items-center justify-content-between mb-4">
+                            <h1 class="h3 mb-0 text-gray-800">Manage Wekeza Groups</h1>
+                            <button class="btn btn-warning" data-toggle="modal" data-target="#addGroupModal">
+                                <i class="fas fa-plus"></i> Add New Group
                             </button>
                         </div>
-                        <p class="report-description">
-                            Generate detailed performance reports including group analytics, loan portfolio status, 
-                            field officer performance metrics, and risk assessment with current filter settings.
-                        </p>
-                    </div>
 
-                    <!-- Include Groups Statistics -->
-                    <?php include '../components/groups/groups_stats.php'; ?>
-
-                    <!-- Page Heading -->
-                    <div class="d-sm-flex align-items-center justify-content-between mb-4">
-                        <h1 class="h3 mb-0 text-gray-800">Manage Wekeza Groups</h1>
-                        <button class="btn btn-warning" data-toggle="modal" data-target="#addGroupModal">
-                            <i class="fas fa-plus"></i> Add New Group
-                        </button>
-                    </div>
-
-                    <!-- Search Section -->
-                    <div class="search-container">
-                        <div class="row align-items-center">
-                            <div class="col-md-8">
-                                <div class="position-relative">
-                                    <i class="fas fa-search search-icon"></i>
-                                    <input type="text" 
-                                           id="groupSearch" 
-                                           class="form-control search-input" 
-                                           placeholder="Search by group reference, group name, or field officer..."
-                                           autocomplete="off">
-                                    <button type="button" class="clear-search" id="clearSearch">
-                                        <i class="fas fa-times"></i>
-                                    </button>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="search-actions">
-                                    <div class="search-stats" id="searchStats">
-                                        Showing all groups
+                        <!-- Search Section -->
+                        <div class="search-container">
+                            <div class="row align-items-center">
+                                <div class="col-md-8">
+                                    <div class="position-relative">
+                                        <i class="fas fa-search search-icon"></i>
+                                        <input type="text" 
+                                               id="groupSearch" 
+                                               class="form-control search-input" 
+                                               placeholder="Search by group reference, group name, or field officer..."
+                                               autocomplete="off">
+                                        <button type="button" class="clear-search" id="clearSearch">
+                                            <i class="fas fa-times"></i>
+                                        </button>
                                     </div>
-                                    <button class="btn btn-outline-success btn-sm export-btn" id="exportResults" title="Export search results">
-                                        <i class="fas fa-download"></i> Export
-                                    </button>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="search-actions">
+                                        <div class="search-stats" id="searchStats">
+                                            Showing all groups
+                                        </div>
+                                        <button class="btn btn-outline-success btn-sm export-btn" id="exportResults" title="Export search results">
+                                            <i class="fas fa-download"></i> Export
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Groups Table Card -->
-                    <div class="card mb-4">
-                        <div class="card-body">
-                            <div class="table-responsive">
-                                <table class="table table-bordered" id="dataTable" width="100%" cellspacing="0">
-                                    <thead>
-                                        <tr>
-                                            <th>#</th>
-                                            <th>Group Reference</th>
-                                            <th>Group Name</th>
-                                            <th>Area</th>
-                                            <th>Field Officer</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="groupsTableBody">
-                                        <?php
-                                        $query = "SELECT g.*, u.firstname, u.lastname 
-                                                 FROM lato_groups g 
-                                                 JOIN user u ON g.field_officer_id = u.user_id 
-                                                 ORDER BY g.group_id DESC";
-                                        $result = $db->conn->query($query);
-                                        $i = 1;
-                                        while ($row = $result->fetch_assoc()) {
-                                        ?>
-                                        <tr class="group-row" 
-                                            data-reference="<?php echo strtolower($row['group_reference']); ?>"
-                                            data-name="<?php echo strtolower($row['group_name']); ?>"
-                                            data-officer="<?php echo strtolower($row['firstname'] . ' ' . $row['lastname']); ?>"
-                                            data-area="<?php echo strtolower($row['area']); ?>">
-                                            <td class="row-number"><?php echo $i++; ?></td>
-                                            <td class="group-reference"><?php echo $row['group_reference']; ?></td>
-                                            <td class="group-name"><?php echo $row['group_name']; ?></td>
-                                            <td class="group-area"><?php echo $row['area']; ?></td>
-                                            <td class="field-officer"><?php echo $row['firstname'] . ' ' . $row['lastname']; ?></td>
-                                            <td>
-                                                <div class="btn-group">
-                                                    <button type="button" class="btn btn-secondary dropdown-toggle" data-toggle="dropdown" aria-expanded="false">
-                                                        Action
-                                                    </button>
-                                                    <div class="dropdown-menu">
-                                                        <a class="dropdown-item" href="manage_group.php?id=<?php echo $row['group_id']; ?>">
-                                                            <i class="fas fa-users fa-fw"></i> Manage Group
-                                                        </a>
-                                                        <button type="button" class="dropdown-item edit-group" data-id="<?php echo $row['group_id']; ?>">
-                                                            <i class="fas fa-edit fa-fw"></i> Edit
+                        <!-- Groups Table Card -->
+                        <div class="card mb-4">
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-bordered" id="dataTable" width="100%" cellspacing="0">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Group Reference</th>
+                                                <th>Group Name</th>
+                                                <th>Area</th>
+                                                <th>Field Officer</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="groupsTableBody">
+                                            <?php
+                                            $query = "SELECT g.*, u.firstname, u.lastname 
+                                                     FROM lato_groups g 
+                                                     JOIN user u ON g.field_officer_id = u.user_id 
+                                                     ORDER BY g.group_id DESC";
+                                            $result = $db->conn->query($query);
+                                            $i = 1;
+                                            while ($row = $result->fetch_assoc()) {
+                                            ?>
+                                            <tr class="group-row" 
+                                                data-reference="<?php echo strtolower($row['group_reference']); ?>"
+                                                data-name="<?php echo strtolower($row['group_name']); ?>"
+                                                data-officer="<?php echo strtolower($row['firstname'] . ' ' . $row['lastname']); ?>"
+                                                data-area="<?php echo strtolower($row['area']); ?>">
+                                                <td class="row-number"><?php echo $i++; ?></td>
+                                                <td class="group-reference"><?php echo $row['group_reference']; ?></td>
+                                                <td class="group-name"><?php echo $row['group_name']; ?></td>
+                                                <td class="group-area"><?php echo $row['area']; ?></td>
+                                                <td class="field-officer"><?php echo $row['firstname'] . ' ' . $row['lastname']; ?></td>
+                                                <td>
+                                                    <div class="btn-group">
+                                                        <button type="button" class="btn btn-secondary dropdown-toggle" data-toggle="dropdown" aria-expanded="false">
+                                                            Action
                                                         </button>
-                                                        <?php if ($_SESSION['role'] === 'admin'): ?>
-                                                        <button type="button" class="dropdown-item delete-group" 
-                                                                data-id="<?php echo $row['group_id']; ?>"
-                                                                data-name="<?php echo htmlspecialchars($row['group_name']); ?>">
-                                                            <i class="fas fa-trash fa-fw"></i> Delete
-                                                        </button>
-                                                        <?php endif; ?>
+                                                        <div class="dropdown-menu">
+                                                            <a class="dropdown-item" href="manage_group.php?id=<?php echo $row['group_id']; ?>">
+                                                                <i class="fas fa-users fa-fw"></i> Manage Group
+                                                            </a>
+                                                            <button type="button" class="dropdown-item edit-group" data-id="<?php echo $row['group_id']; ?>">
+                                                                <i class="fas fa-edit fa-fw"></i> Edit
+                                                            </button>
+                                                            <?php if ($_SESSION['role'] === 'admin'): ?>
+                                                            <button type="button" class="dropdown-item delete-group" 
+                                                                    data-id="<?php echo $row['group_id']; ?>"
+                                                                    data-name="<?php echo htmlspecialchars($row['group_name']); ?>">
+                                                                <i class="fas fa-trash fa-fw"></i> Delete
+                                                            </button>
+                                                            <?php endif; ?>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                        <?php } ?>
-                                    </tbody>
-                                </table>
-                                
-                                <!-- No results message -->
-                                <div id="noResults" class="no-results" style="display: none;">
-                                    <i class="fas fa-search"></i>
-                                    <h5>No groups found</h5>
-                                    <p>Try adjusting your search terms or clear the search to see all groups.</p>
-                                    <button class="btn btn-outline-primary" id="clearSearchBtn">
-                                        <i class="fas fa-times"></i> Clear Search
-                                    </button>
+                                                </td>
+                                            </tr>
+                                            <?php } ?>
+                                        </tbody>
+                                    </table>
+                                    
+                                    <!-- No results message -->
+                                    <div id="noResults" class="no-results" style="display: none;">
+                                        <i class="fas fa-search"></i>
+                                        <h5>No groups found</h5>
+                                        <p>Try adjusting your search terms or clear the search to see all groups.</p>
+                                        <button class="btn btn-outline-primary" id="clearSearchBtn">
+                                            <i class="fas fa-times"></i> Clear Search
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
+
+                    <?php else: ?>
+                        <!-- Defaulters Tab Content -->
+                        <?php include '../components/groups/defaulters_table.php'; ?>
+                    <?php endif; ?>
+
                 </div>
                 <!-- End of Main Content -->
 
@@ -655,412 +777,404 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
 
     <script>
     $(document).ready(function() {
-        // Initialize DataTable with pagination
-        $('#dataTable').DataTable({
-            "pageLength": 10,
-            "lengthChange": true,
-            "searching": false, // We'll use custom search
-            "ordering": true,
-            "info": true,
-            "autoWidth": false,
-            "responsive": true,
-            "language": {
-                "lengthMenu": "Show _MENU_ entries",
-                "zeroRecords": "No matching records found",
-                "info": "Showing _START_ to _END_ of _TOTAL_ entries",
-                "infoEmpty": "Showing 0 to 0 of 0 entries",
-                "infoFiltered": "(filtered from _MAX_ total entries)",
-                "paginate": {
-                    "first": "First",
-                    "last": "Last",
-                    "next": "Next",
-                    "previous": "Previous"
-                }
-            }
-        });
-
-        // Initialize Select2 for field officer dropdowns
-        $('select[name="field_officer_id"]').select2({
-            placeholder: 'Select Field Officer',
-            width: '100%',
-            dropdownParent: $('#addGroupModal')
-        });
-
-        $('#editGroupForm select[name="field_officer_id"]').select2({
-            placeholder: 'Select Field Officer',
-            width: '100%',
-            dropdownParent: $('#editGroupModal')
-        });
-
-        // Report Generation Functionality
-        $('#generateReportBtn').click(function() {
-            const btn = $(this);
-            const originalHtml = btn.html();
-            
-            // Get current filter values
-            const selectedOfficer = $('select[name="field_officer"]').val() || '';
-            const fromDate = $('input[name="from_date"]').val() || '';
-            const toDate = $('input[name="to_date"]').val() || '';
-            
-            // Add loading state
-            btn.addClass('loading').html('<i class="fas fa-spinner fa-spin"></i> Generating Report...');
-            btn.prop('disabled', true);
-            
-            // Build URL with current filters
-            let reportUrl = '../controllers/groups_performance_report.php?';
-            const params = [];
-            
-            if (selectedOfficer) {
-                params.push('field_officer=' + encodeURIComponent(selectedOfficer));
-            }
-            if (fromDate) {
-                params.push('from_date=' + encodeURIComponent(fromDate));
-            }
-            if (toDate) {
-                params.push('to_date=' + encodeURIComponent(toDate));
-            }
-            
-            reportUrl += params.join('&');
-            
-            // Show success message
-            showAlert('info', 'Generating report with current filter settings. Download will start automatically.');
-            
-            // Create hidden iframe for PDF download
-            const iframe = $('<iframe>', {
-                src: reportUrl,
-                style: 'display: none;'
-            }).appendTo('body');
-            
-            // Reset button after 3 seconds
-            setTimeout(function() {
-                btn.removeClass('loading').html(originalHtml);
-                btn.prop('disabled', false);
-                iframe.remove();
-                showAlert('success', 'Report generated successfully!');
-            }, 3000);
-        });
-
-        // Search functionality
-        let totalRows = $('.group-row').length;
-        let visibleRows = totalRows;
+        var currentTab = '<?php echo $current_tab; ?>';
         
-        function updateSearchStats(visible, total, searchTerm = '') {
-            const statsElement = $('#searchStats');
-            if (searchTerm) {
-                statsElement.html(`Showing ${visible} of ${total} groups for "<strong>${searchTerm}</strong>"`);
-            } else {
-                statsElement.html(`Showing all ${total} groups`);
-            }
-        }
-
-        function highlightText(text, searchTerm) {
-            if (!searchTerm) return text;
-            const regex = new RegExp(`(${searchTerm})`, 'gi');
-            return text.replace(regex, '<span class="highlight">$1</span>');
-        }
-
-        function performSearch(searchTerm) {
-            searchTerm = searchTerm.toLowerCase().trim();
-            visibleRows = 0;
-            let rowCounter = 1;
-
-            $('.group-row').each(function() {
-                const $row = $(this);
-                const reference = $row.data('reference');
-                const name = $row.data('name');
-                const officer = $row.data('officer');
-                const area = $row.data('area');
-                
-                const isVisible = !searchTerm || 
-                    reference.includes(searchTerm) || 
-                    name.includes(searchTerm) || 
-                    officer.includes(searchTerm) || 
-                    area.includes(searchTerm);
-
-                if (isVisible) {
-                    $row.show();
-                    $row.find('.row-number').text(rowCounter++);
-                    visibleRows++;
-                    
-                    // Highlight matching text
-                    if (searchTerm) {
-                        const originalReference = $row.find('.group-reference').data('original') || $row.find('.group-reference').text();
-                        const originalName = $row.find('.group-name').data('original') || $row.find('.group-name').text();
-                        const originalOfficer = $row.find('.field-officer').data('original') || $row.find('.field-officer').text();
-                        const originalArea = $row.find('.group-area').data('original') || $row.find('.group-area').text();
-                        
-                        if (!$row.find('.group-reference').data('original')) {
-                            $row.find('.group-reference').data('original', originalReference);
-                            $row.find('.group-name').data('original', originalName);
-                            $row.find('.field-officer').data('original', originalOfficer);
-                            $row.find('.group-area').data('original', originalArea);
-                        }
-                        
-                        $row.find('.group-reference').html(highlightText(originalReference, searchTerm));
-                        $row.find('.group-name').html(highlightText(originalName, searchTerm));
-                        $row.find('.field-officer').html(highlightText(originalOfficer, searchTerm));
-                        $row.find('.group-area').html(highlightText(originalArea, searchTerm));
-                    } else {
-                        // Remove highlighting
-                        if ($row.find('.group-reference').data('original')) {
-                            $row.find('.group-reference').html($row.find('.group-reference').data('original'));
-                            $row.find('.group-name').html($row.find('.group-name').data('original'));
-                            $row.find('.field-officer').html($row.find('.field-officer').data('original'));
-                            $row.find('.group-area').html($row.find('.group-area').data('original'));
-                        }
+        if (currentTab === 'groups') {
+            // ========== GROUPS TAB FUNCTIONALITY ==========
+            // Initialize DataTable with pagination
+            $('#dataTable').DataTable({
+                "pageLength": 10,
+                "lengthMenu": [[10, 25, 50, 100], ["10", "25", "50", "100"]],
+                "lengthChange": true,
+                "searching": false,
+                "ordering": true,
+                "info": true,
+                "autoWidth": false,
+                "responsive": true,
+                "paging": true,
+                "pagingType": "full_numbers",
+                "language": {
+                    "lengthMenu": "Show _MENU_ entries",
+                    "zeroRecords": "No matching records found",
+                    "info": "Showing _START_ to _END_ of _TOTAL_ entries",
+                    "infoEmpty": "Showing 0 to 0 of 0 entries",
+                    "infoFiltered": "(filtered from _MAX_ total entries)",
+                    "paginate": {
+                        "first": "First",
+                        "last": "Last",
+                        "next": "Next",
+                        "previous": "Previous"
                     }
-                } else {
-                    $row.hide();
+                },
+                "drawCallback": function(settings) {
+                    var api = this.api();
+                    var startIndex = api.context[0]._iDisplayStart;
+                    api.column(0, {page: 'current'}).nodes().each(function(cell, i) {
+                        cell.innerHTML = startIndex + i + 1;
+                    });
                 }
             });
 
-            // Show/hide no results message
-            if (visibleRows === 0 && searchTerm) {
-                $('#noResults').show();
-                $('#dataTable').hide();
-            } else {
-                $('#noResults').hide();
-                $('#dataTable').show();
+            // Initialize Select2 for field officer dropdowns
+            $('select[name="field_officer_id"]').select2({
+                placeholder: 'Select Field Officer',
+                width: '100%',
+                dropdownParent: $('#addGroupModal')
+            });
+
+            $('#editGroupForm select[name="field_officer_id"]').select2({
+                placeholder: 'Select Field Officer',
+                width: '100%',
+                dropdownParent: $('#editGroupModal')
+            });
+
+            // Report Generation Functionality
+            $('#generateReportBtn').click(function() {
+                const btn = $(this);
+                const originalHtml = btn.html();
+                
+                const selectedOfficer = $('select[name="field_officer"]').val() || '';
+                const fromDate = $('input[name="from_date"]').val() || '';
+                const toDate = $('input[name="to_date"]').val() || '';
+                
+                btn.addClass('loading').html('<i class="fas fa-spinner fa-spin"></i> Generating Report...');
+                btn.prop('disabled', true);
+                
+                let reportUrl = '../controllers/groups_performance_report.php?';
+                const params = [];
+                
+                if (selectedOfficer) {
+                    params.push('field_officer=' + encodeURIComponent(selectedOfficer));
+                }
+                if (fromDate) {
+                    params.push('from_date=' + encodeURIComponent(fromDate));
+                }
+                if (toDate) {
+                    params.push('to_date=' + encodeURIComponent(toDate));
+                }
+                
+                reportUrl += params.join('&');
+                
+                showAlert('info', 'Generating report with current filter settings. Download will start automatically.');
+                
+                const iframe = $('<iframe>', {
+                    src: reportUrl,
+                    style: 'display: none;'
+                }).appendTo('body');
+                
+                setTimeout(function() {
+                    btn.removeClass('loading').html(originalHtml);
+                    btn.prop('disabled', false);
+                    iframe.remove();
+                    showAlert('success', 'Report generated successfully!');
+                }, 3000);
+            });
+
+            // Search functionality
+            let totalRows = $('.group-row').length;
+            let visibleRows = totalRows;
+            
+            function updateSearchStats(visible, total, searchTerm = '') {
+                const statsElement = $('#searchStats');
+                if (searchTerm) {
+                    statsElement.html(`Showing ${visible} of ${total} groups for "<strong>${searchTerm}</strong>"`);
+                } else {
+                    statsElement.html(`Showing all ${total} groups`);
+                }
             }
 
-            // Update search stats
-            updateSearchStats(visibleRows, totalRows, searchTerm);
-            
-            // Show/hide clear button
-            if (searchTerm) {
-                $('#clearSearch').show();
-            } else {
-                $('#clearSearch').hide();
+            function highlightText(text, searchTerm) {
+                if (!searchTerm) return text;
+                const regex = new RegExp(`(${searchTerm})`, 'gi');
+                return text.replace(regex, '<span class="highlight">$1</span>');
             }
-        }
 
-        // Search input handler with debounce
-        let searchTimeout;
-        $('#groupSearch').on('input', function() {
-            const searchTerm = $(this).val();
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(() => {
-                performSearch(searchTerm);
-            }, 150);
-        });
+            function performSearch(searchTerm) {
+                searchTerm = searchTerm.toLowerCase().trim();
+                visibleRows = 0;
+                let rowCounter = 1;
 
-        // Clear search handlers
-        $('#clearSearch, #clearSearchBtn').on('click', function() {
-            $('#groupSearch').val('');
-            performSearch('');
-            $('#groupSearch').focus();
-        });
+                $('.group-row').each(function() {
+                    const $row = $(this);
+                    const reference = $row.data('reference');
+                    const name = $row.data('name');
+                    const officer = $row.data('officer');
+                    const area = $row.data('area');
+                    
+                    const isVisible = !searchTerm || 
+                        reference.includes(searchTerm) || 
+                        name.includes(searchTerm) || 
+                        officer.includes(searchTerm) || 
+                        area.includes(searchTerm);
 
-        // Export functionality
-        function exportSearchResults() {
-            const visibleRows = $('.group-row:visible');
-            const exportData = [];
-            
-            visibleRows.each(function() {
-                const row = $(this);
-                exportData.push({
-                    'Group Reference': row.find('.group-reference').text().trim(),
-                    'Group Name': row.find('.group-name').text().trim(),
-                    'Area': row.find('.group-area').text().trim(),
-                    'Field Officer': row.find('.field-officer').text().trim()
+                    if (isVisible) {
+                        $row.show();
+                        $row.find('.row-number').text(rowCounter++);
+                        visibleRows++;
+                        
+                        if (searchTerm) {
+                            const originalReference = $row.find('.group-reference').data('original') || $row.find('.group-reference').text();
+                            const originalName = $row.find('.group-name').data('original') || $row.find('.group-name').text();
+                            const originalOfficer = $row.find('.field-officer').data('original') || $row.find('.field-officer').text();
+                            const originalArea = $row.find('.group-area').data('original') || $row.find('.group-area').text();
+                            
+                            if (!$row.find('.group-reference').data('original')) {
+                                $row.find('.group-reference').data('original', originalReference);
+                                $row.find('.group-name').data('original', originalName);
+                                $row.find('.field-officer').data('original', originalOfficer);
+                                $row.find('.group-area').data('original', originalArea);
+                            }
+                            
+                            $row.find('.group-reference').html(highlightText(originalReference, searchTerm));
+                            $row.find('.group-name').html(highlightText(originalName, searchTerm));
+                            $row.find('.field-officer').html(highlightText(originalOfficer, searchTerm));
+                            $row.find('.group-area').html(highlightText(originalArea, searchTerm));
+                        } else {
+                            if ($row.find('.group-reference').data('original')) {
+                                $row.find('.group-reference').html($row.find('.group-reference').data('original'));
+                                $row.find('.group-name').html($row.find('.group-name').data('original'));
+                                $row.find('.field-officer').html($row.find('.field-officer').data('original'));
+                                $row.find('.group-area').html($row.find('.group-area').data('original'));
+                            }
+                        }
+                    } else {
+                        $row.hide();
+                    }
+                });
+
+                if (visibleRows === 0 && searchTerm) {
+                    $('#noResults').show();
+                    $('#dataTable').hide();
+                } else {
+                    $('#noResults').hide();
+                    $('#dataTable').show();
+                }
+
+                updateSearchStats(visibleRows, totalRows, searchTerm);
+                
+                if (searchTerm) {
+                    $('#clearSearch').show();
+                } else {
+                    $('#clearSearch').hide();
+                }
+            }
+
+            let searchTimeout;
+            $('#groupSearch').on('input', function() {
+                const searchTerm = $(this).val();
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    performSearch(searchTerm);
+                }, 150);
+            });
+
+            $('#clearSearch, #clearSearchBtn').on('click', function() {
+                $('#groupSearch').val('');
+                performSearch('');
+                $('#groupSearch').focus();
+            });
+
+            function exportSearchResults() {
+                const visibleRows = $('.group-row:visible');
+                const exportData = [];
+                
+                visibleRows.each(function() {
+                    const row = $(this);
+                    exportData.push({
+                        'Group Reference': row.find('.group-reference').text().trim(),
+                        'Group Name': row.find('.group-name').text().trim(),
+                        'Area': row.find('.group-area').text().trim(),
+                        'Field Officer': row.find('.field-officer').text().trim()
+                    });
+                });
+
+                if (exportData.length === 0) {
+                    showAlert('warning', 'No data to export');
+                    return;
+                }
+
+                const headers = Object.keys(exportData[0]);
+                const csv = [
+                    headers.join(','),
+                    ...exportData.map(row => headers.map(header => `"${row[header]}"`).join(','))
+                ].join('\n');
+
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `wekeza_groups_${new Date().toISOString().split('T')[0]}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+                showAlert('success', `Exported ${exportData.length} groups to CSV`);
+            }
+
+            $('#exportResults').on('click', exportSearchResults);
+
+            function getNextReference(input) {
+                $.ajax({
+                    url: '../controllers/groupController.php',
+                    method: 'GET',
+                    data: { action: 'getNextReference' },
+                    success: function(response) {
+                        try {
+                            const result = JSON.parse(response);
+                            if (result.status === 'success' && result.reference) {
+                                input.val(result.reference);
+                            } else {
+                                showAlert('error', 'Error getting reference number');
+                            }
+                        } catch (e) {
+                            console.error('Error parsing response:', e);
+                            showAlert('error', 'Error processing reference number');
+                        }
+                    },
+                    error: function() {
+                        showAlert('error', 'Error fetching reference number');
+                    }
+                });
+            }
+
+            $('#suggestReference').click(function(e) {
+                e.preventDefault();
+                getNextReference($('#addGroupForm input[name="group_reference"]'));
+            });
+
+            $('#editSuggestReference').click(function(e) {
+                e.preventDefault();
+                getNextReference($('#editGroupForm input[name="group_reference"]'));
+            });
+
+            function validateReferenceFormat(reference) {
+                return /^wekeza-\d{3}$/.test(reference);
+            }
+
+            function validateForm(form) {
+                let isValid = true;
+                const reference = form.find('input[name="group_reference"]').val();
+
+                if (!validateReferenceFormat(reference)) {
+                    showAlert('error', 'Invalid reference format. Please use format: wekeza-XXX (e.g., wekeza-001)');
+                    isValid = false;
+                }
+
+                form.find('input[required], select[required]').each(function() {
+                    if (!$(this).val()) {
+                        isValid = false;
+                        $(this).addClass('is-invalid');
+                    } else {
+                        $(this).removeClass('is-invalid');
+                    }
+                });
+
+                return isValid;
+            }
+
+            $('#addGroupForm').on('submit', function(e) {
+                e.preventDefault();
+                if (!validateForm($(this))) return;
+
+                const submitBtn = $(this).find('button[type="submit"]');
+                submitBtn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Saving...');
+
+                $.ajax({
+                    url: '../controllers/groupController.php',
+                    method: 'POST',
+                    data: $(this).serialize() + '&action=create',
+                    success: function(response) {
+                        try {
+                            const result = JSON.parse(response);
+                            if (result.status === 'success') {
+                                showAlert('success', result.message);
+                                setTimeout(() => location.reload(), 1500);
+                            } else {
+                                showAlert('error', result.message);
+                                submitBtn.prop('disabled', false).text('Save Group');
+                            }
+                        } catch (e) {
+                            showAlert('error', 'Error processing response');
+                            submitBtn.prop('disabled', false).text('Save Group');
+                        }
+                    },
+                    error: function() {
+                        showAlert('error', 'Error saving group');
+                        submitBtn.prop('disabled', false).text('Save Group');
+                    }
                 });
             });
 
-            if (exportData.length === 0) {
-                showAlert('warning', 'No data to export');
-                return;
-            }
+            $('#editGroupForm').on('submit', function(e) {
+                e.preventDefault();
+                if (!validateForm($(this))) return;
 
-            // Convert to CSV
-            const headers = Object.keys(exportData[0]);
-            const csv = [
-                headers.join(','),
-                ...exportData.map(row => headers.map(header => `"${row[header]}"`).join(','))
-            ].join('\n');
+                const submitBtn = $(this).find('button[type="submit"]');
+                submitBtn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Updating...');
 
-            // Download CSV
-            const blob = new Blob([csv], { type: 'text/csv' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `wekeza_groups_${new Date().toISOString().split('T')[0]}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
-            
-            showAlert('success', `Exported ${exportData.length} groups to CSV`);
-        }
-
-        $('#exportResults').on('click', exportSearchResults);
-
-        // Reference suggestion handlers
-        function getNextReference(input) {
-            $.ajax({
-                url: '../controllers/groupController.php',
-                method: 'GET',
-                data: { action: 'getNextReference' },
-                success: function(response) {
-                    try {
-                        const result = JSON.parse(response);
-                        if (result.status === 'success' && result.reference) {
-                            input.val(result.reference);
-                        } else {
-                            showAlert('error', 'Error getting reference number');
-                        }
-                    } catch (e) {
-                        console.error('Error parsing response:', e);
-                        showAlert('error', 'Error processing reference number');
-                    }
-                },
-                error: function() {
-                    showAlert('error', 'Error fetching reference number');
-                }
-            });
-        }
-
-        $('#suggestReference').click(function(e) {
-            e.preventDefault();
-            getNextReference($('#addGroupForm input[name="group_reference"]'));
-        });
-
-        $('#editSuggestReference').click(function(e) {
-            e.preventDefault();
-            getNextReference($('#editGroupForm input[name="group_reference"]'));
-        });
-
-        // Form validation
-        function validateReferenceFormat(reference) {
-            return /^wekeza-\d{3}$/.test(reference);
-        }
-
-        function validateForm(form) {
-            let isValid = true;
-            const reference = form.find('input[name="group_reference"]').val();
-
-            if (!validateReferenceFormat(reference)) {
-                showAlert('error', 'Invalid reference format. Please use format: wekeza-XXX (e.g., wekeza-001)');
-                isValid = false;
-            }
-
-            form.find('input[required], select[required]').each(function() {
-                if (!$(this).val()) {
-                    isValid = false;
-                    $(this).addClass('is-invalid');
-                } else {
-                    $(this).removeClass('is-invalid');
-                }
-            });
-
-            return isValid;
-        }
-
-        // Add Group Form Handler
-        $('#addGroupForm').on('submit', function(e) {
-            e.preventDefault();
-            if (!validateForm($(this))) return;
-
-            const submitBtn = $(this).find('button[type="submit"]');
-            submitBtn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Saving...');
-
-            $.ajax({
-                url: '../controllers/groupController.php',
-                method: 'POST',
-                data: $(this).serialize() + '&action=create',
-                success: function(response) {
-                    try {
-                        const result = JSON.parse(response);
-                        if (result.status === 'success') {
-                            showAlert('success', result.message);
-                            setTimeout(() => location.reload(), 1500);
-                        } else {
-                            showAlert('error', result.message);
-                            submitBtn.prop('disabled', false).text('Save Group');
-                        }
-                    } catch (e) {
-                        showAlert('error', 'Error processing response');
-                        submitBtn.prop('disabled', false).text('Save Group');
-                    }
-                },
-                error: function() {
-                    showAlert('error', 'Error saving group');
-                    submitBtn.prop('disabled', false).text('Save Group');
-                }
-            });
-        });
-
-        // Edit Group Form Handler
-        $('#editGroupForm').on('submit', function(e) {
-            e.preventDefault();
-            if (!validateForm($(this))) return;
-
-            const submitBtn = $(this).find('button[type="submit"]');
-            submitBtn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Updating...');
-
-            $.ajax({
-                url: '../controllers/groupController.php',
-                method: 'POST',
-                data: $(this).serialize() + '&action=update',
-                success: function(response) {
-                    try {
-                        const result = JSON.parse(response);
-                        if (result.status === 'success') {
-                            showAlert('success', result.message);
-                            setTimeout(() => location.reload(), 1500);
-                        } else {
-                            showAlert('error', result.message);
+                $.ajax({
+                    url: '../controllers/groupController.php',
+                    method: 'POST',
+                    data: $(this).serialize() + '&action=update',
+                    success: function(response) {
+                        try {
+                            const result = JSON.parse(response);
+                            if (result.status === 'success') {
+                                showAlert('success', result.message);
+                                setTimeout(() => location.reload(), 1500);
+                            } else {
+                                showAlert('error', result.message);
+                                submitBtn.prop('disabled', false).text('Update Group');
+                            }
+                        } catch (e) {
+                            showAlert('error', 'Error processing response');
                             submitBtn.prop('disabled', false).text('Update Group');
                         }
-                    } catch (e) {
-                        showAlert('error', 'Error processing response');
+                    },
+                    error: function() {
+                        showAlert('error', 'Error updating group');
                         submitBtn.prop('disabled', false).text('Update Group');
                     }
-                },
-                error: function() {
-                    showAlert('error', 'Error updating group');
-                    submitBtn.prop('disabled', false).text('Update Group');
-                }
+                });
             });
-        });
 
-        // Edit Group Button Click Handler
-        $('.edit-group').click(function() {
-            const groupId = $(this).data('id');
-            $.ajax({
-                url: '../controllers/groupController.php',
-                method: 'POST',
-                data: {
-                    action: 'get',
-                    group_id: groupId
-                },
-                success: function(response) {
-                    try {
-                        const result = JSON.parse(response);
-                        if (result.status === 'success') {
-                            const group = result.data;
-                            $('#edit_group_id').val(group.group_id);
-                            $('#editGroupForm input[name="group_reference"]').val(group.group_reference);
-                            $('#editGroupForm input[name="group_name"]').val(group.group_name);
-                            $('#editGroupForm input[name="area"]').val(group.area);
-                            $('#editGroupForm select[name="field_officer_id"]')
-                                .val(group.field_officer_id)
-                                .trigger('change');
-                            $('#editGroupModal').modal('show');
-                        } else {
-                            showAlert('error', result.message || 'Error fetching group details');
+            $('.edit-group').click(function() {
+                const groupId = $(this).data('id');
+                $.ajax({
+                    url: '../controllers/groupController.php',
+                    method: 'POST',
+                    data: {
+                        action: 'get',
+                        group_id: groupId
+                    },
+                    success: function(response) {
+                        try {
+                            const result = JSON.parse(response);
+                            if (result.status === 'success') {
+                                const group = result.data;
+                                $('#edit_group_id').val(group.group_id);
+                                $('#editGroupForm input[name="group_reference"]').val(group.group_reference);
+                                $('#editGroupForm input[name="group_name"]').val(group.group_name);
+                                $('#editGroupForm input[name="area"]').val(group.area);
+                                $('#editGroupForm select[name="field_officer_id"]')
+                                    .val(group.field_officer_id)
+                                    .trigger('change');
+                                $('#editGroupModal').modal('show');
+                            } else {
+                                showAlert('error', result.message || 'Error fetching group details');
+                            }
+                        } catch (e) {
+                            showAlert('error', 'Error processing group details');
                         }
-                    } catch (e) {
-                        showAlert('error', 'Error processing group details');
+                    },
+                    error: function() {
+                        showAlert('error', 'Error fetching group details');
                     }
-                },
-                error: function() {
-                    showAlert('error', 'Error fetching group details');
-                }
+                });
             });
-        });
 
-        // Delete Group Button Click Handler
-        $(document).on('click', '.delete-group', function() {
+            $(document).on('click', '.delete-group', function() {
                 const groupId = $(this).data('id');
                 const groupName = $(this).data('name');
                 $('#deleteGroupModal .modal-body').html(
@@ -1072,54 +1186,164 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                 $('#deleteGroupModal').modal('show');
             });
 
-        // Confirm Delete Handler
-        $('#confirmDelete').click(function() {
-            const groupId = $(this).data('id');
-            const btn = $(this);
-            btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Deleting...');
+            $('#confirmDelete').click(function() {
+                const groupId = $(this).data('id');
+                const btn = $(this);
+                btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Deleting...');
 
-            $.ajax({
-                url: '../controllers/groupController.php',
-                method: 'POST',
-                data: {
-                    action: 'delete',
-                    group_id: groupId
-                },
-                success: function(response) {
-                    try {
-                        const result = JSON.parse(response);
-                        if (result.status === 'success') {
-                            showAlert('success', result.message);
-                            setTimeout(() => location.reload(), 1500);
-                        } else {
-                            showAlert('error', result.message);
+                $.ajax({
+                    url: '../controllers/groupController.php',
+                    method: 'POST',
+                    data: {
+                        action: 'delete',
+                        group_id: groupId
+                    },
+                    success: function(response) {
+                        try {
+                            const result = JSON.parse(response);
+                            if (result.status === 'success') {
+                                showAlert('success', result.message);
+                                setTimeout(() => location.reload(), 1500);
+                            } else {
+                                showAlert('error', result.message);
+                                btn.prop('disabled', false).text('Delete');
+                            }
+                        } catch (e) {
+                            console.error('Error parsing response:', e);
+                            showAlert('error', 'Error processing response');
                             btn.prop('disabled', false).text('Delete');
                         }
-                    } catch (e) {
-                        console.error('Error parsing response:', e);
-                        showAlert('error', 'Error processing response');
+                    },
+                    error: function() {
+                        showAlert('error', 'Error deleting group');
                         btn.prop('disabled', false).text('Delete');
                     }
-                },
-                error: function() {
-                    showAlert('error', 'Error deleting group');
-                    btn.prop('disabled', false).text('Delete');
+                });
+            });
+
+            $('#addGroupModal').on('hidden.bs.modal', function() {
+                $('#addGroupForm').trigger('reset');
+                $('#addGroupForm').find('select').val('').trigger('change');
+                $('#addGroupForm').find('.is-invalid').removeClass('is-invalid');
+            });
+
+            $('#editGroupModal').on('hidden.bs.modal', function() {
+                $('#editGroupForm').find('.is-invalid').removeClass('is-invalid');
+            });
+
+            updateSearchStats(totalRows, totalRows);
+
+            $('input[name="group_reference"]').on('input', function() {
+                const input = $(this);
+                const reference = input.val().trim();
+                
+                if (reference && !reference.match(/^wekeza-\d{3}$/)) {
+                    input.addClass('is-invalid');
+                    if (!input.next('.invalid-feedback').length) {
+                        input.after('<div class="invalid-feedback">Reference must be in format wekeza-XXX (e.g., wekeza-001)</div>');
+                    }
+                } else {
+                    input.removeClass('is-invalid');
+                    input.next('.invalid-feedback').remove();
                 }
             });
-        });
 
-        // Modal Reset Handlers
-        $('#addGroupModal').on('hidden.bs.modal', function() {
-            $('#addGroupForm').trigger('reset');
-            $('#addGroupForm').find('select').val('').trigger('change');
-            $('#addGroupForm').find('.is-invalid').removeClass('is-invalid');
-        });
+            $('.dropdown-toggle').dropdown();
 
-        $('#editGroupModal').on('hidden.bs.modal', function() {
-            $('#editGroupForm').find('.is-invalid').removeClass('is-invalid');
-        });
+            $(document).on('keydown', function(e) {
+                if ((e.ctrlKey || e.metaKey) && e.keyCode === 70) {
+                    e.preventDefault();
+                    $('#groupSearch').focus();
+                }
+                if (e.keyCode === 27 && $('#groupSearch').is(':focus')) {
+                    $('#groupSearch').val('');
+                    performSearch('');
+                }
+                if ((e.ctrlKey || e.metaKey) && e.keyCode === 82) {
+                    e.preventDefault();
+                    $('#generateReportBtn').click();
+                }
+            });
 
-        // Helper Functions
+        } else if (currentTab === 'defaulters') {
+            // ========== DEFAULTERS TAB FUNCTIONALITY ==========
+            // Initialize DataTable for defaulters with pagination - 10 entries per page
+            const defaultersDataTable = $('#defaultersTable').DataTable({
+                "pageLength": 10,
+                "lengthMenu": [[10, 25, 50, 100], ["10", "25", "50", "100"]],
+                "lengthChange": true,
+                "searching": true,
+                "ordering": true,
+                "info": true,
+                "autoWidth": false,
+                "responsive": true,
+                "paging": true,
+                "pagingType": "full_numbers",
+                "order": [[5, 'desc']],
+                "columnDefs": [
+                    { "orderable": false, "targets": [0, 9] },
+                    { "className": "text-center", "targets": [0, 6] }
+                ],
+                "language": {
+                    "lengthMenu": "Show _MENU_ defaulters per page",
+                    "zeroRecords": "No defaulters found",
+                    "info": "Showing _START_ to _END_ of _TOTAL_ defaulters",
+                    "infoEmpty": "Showing 0 to 0 of 0 defaulters",
+                    "infoFiltered": "(filtered from _MAX_ total defaulters)",
+                    "search": "Search defaulters:",
+                    "paginate": {
+                        "first": "First",
+                        "last": "Last",
+                        "next": "Next",
+                        "previous": "Previous"
+                    }
+                },
+                "drawCallback": function(settings) {
+                    var api = this.api();
+                    var startIndex = api.context[0]._iDisplayStart;
+                    api.column(0, {page: 'current'}).nodes().each(function(cell, i) {
+                        cell.innerHTML = startIndex + i + 1;
+                    });
+                }
+            });
+
+            // View member details - Using event delegation for DataTables pagination
+            $(document).on('click', '.view-member-details', function() {
+                var memberId = $(this).data('member-id');
+                window.open('../views/view_account.php?id=' + memberId, '_blank');
+            });
+
+            // Excel Export
+            $('#exportDefaultersExcel').on('click', function() {
+                const btn = $(this);
+                const originalHtml = btn.html();
+                
+                btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Exporting...');
+                
+                const groupFilter = $('#groupFilter').val() || '';
+                const fromDate = $('#fromDateFilter').val() || '';
+                const toDate = $('#toDateFilter').val() || '';
+                
+                let exportUrl = '../controllers/export_defaulters_excel.php?';
+                const params = [];
+                
+                if (groupFilter) params.push('group_filter=' + encodeURIComponent(groupFilter));
+                if (fromDate) params.push('from_date_filter=' + encodeURIComponent(fromDate));
+                if (toDate) params.push('to_date_filter=' + encodeURIComponent(toDate));
+                
+                exportUrl += params.join('&');
+                
+                const iframe = $('<iframe>', { src: exportUrl, style: 'display: none;' }).appendTo('body');
+                
+                setTimeout(function() {
+                    btn.prop('disabled', false).html(originalHtml);
+                    iframe.remove();
+                    showAlert('success', 'Excel file exported successfully!');
+                }, 2000);
+            });
+        }
+
+        // Helper function for alerts (works for both tabs)
         function showAlert(type, message) {
             const alertDiv = $('<div>')
                 .addClass('alert alert-' + (type === 'success' ? 'success' : (type === 'info' ? 'info' : (type === 'warning' ? 'warning' : 'danger'))) + ' alert-dismissible fade show')
@@ -1141,48 +1365,6 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
             $('body').append(alertDiv);
             setTimeout(() => alertDiv.alert('close'), 5000);
         }
-
-        // Initialize search stats
-        updateSearchStats(totalRows, totalRows);
-
-        // Reference number validation on input
-        $('input[name="group_reference"]').on('input', function() {
-            const input = $(this);
-            const reference = input.val().trim();
-            
-            if (reference && !reference.match(/^wekeza-\d{3}$/)) {
-                input.addClass('is-invalid');
-                if (!input.next('.invalid-feedback').length) {
-                    input.after('<div class="invalid-feedback">Reference must be in format wekeza-XXX (e.g., wekeza-001)</div>');
-                }
-            } else {
-                input.removeClass('is-invalid');
-                input.next('.invalid-feedback').remove();
-            }
-        });
-
-        // Initialize all dropdowns
-        $('.dropdown-toggle').dropdown();
-
-        // Keyboard shortcuts
-        $(document).on('keydown', function(e) {
-            // Ctrl+F or Cmd+F to focus search
-            if ((e.ctrlKey || e.metaKey) && e.keyCode === 70) {
-                e.preventDefault();
-                $('#groupSearch').focus();
-            }
-            // Escape to clear search
-            if (e.keyCode === 27 && $('#groupSearch').is(':focus')) {
-                $('#groupSearch').val('');
-                performSearch('');
-            }
-            // Ctrl+R or Cmd+R to generate report
-            if ((e.ctrlKey || e.metaKey) && e.keyCode === 82) {
-                e.preventDefault();
-                $('#generateReportBtn').click();
-            }
-        });
-
     });
     </script>
 </body>

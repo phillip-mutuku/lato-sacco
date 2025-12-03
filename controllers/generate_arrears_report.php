@@ -29,7 +29,7 @@ class PDF extends FPDF {
         $this->SetFont('Arial', 'I', 8);
         
         // Generation info
-        $this->Cell(0, 5, 'Generated on: ' . date('M d, Y \a\t H:i A'), 0,1, 'L');
+        $this->Cell(0, 5, 'Generated on: ' . date('M d, Y \a\t H:i A'), 0, 1, 'L');
         $this->Ln(5);
         
         // Page number
@@ -41,23 +41,23 @@ class PDF extends FPDF {
         $this->Line(10, $this->GetY(), 200, $this->GetY());
     }
     
-    function AddSummarySection($total_defaulters, $total_amount, $period_start, $period_end, $filter_type) {
+    function AddSummarySection($total_defaulters, $total_amount, $period_start, $period_end) {
         // Summary box
         $this->SetFillColor(245, 245, 245);
         $this->SetDrawColor(200, 200, 200);
-        $this->Rect(10, $this->GetY(), 190, 35, 'FD');
+        $this->Rect(10, $this->GetY(), 190, 30, 'FD');
         
         $y_start = $this->GetY() + 5;
         
         // Period information
         $this->SetXY(15, $y_start);
         $this->SetFont('Arial', 'B', 11);
-        $this->Cell(0, 6, 'REPORT PERIOD: ' . strtoupper($filter_type), 0, 1);
+        $this->Cell(0, 6, 'REPORT PERIOD', 0, 1);
         
         $this->SetX(15);
         $this->SetFont('Arial', '', 10);
         $period_text = date('M d, Y', strtotime($period_start)) . ' to ' . date('M d, Y', strtotime($period_end));
-        $this->Cell(0, 5, 'From: ' . $period_text, 0, 1);
+        $this->Cell(0, 5, $period_text, 0, 1);
         
         // Summary statistics
         $this->SetXY(15, $y_start + 15);
@@ -195,32 +195,13 @@ class PDF extends FPDF {
 // Initialize database connection
 $db = new db_class();
 
-// Get filter parameters
-$filter_type = $_GET['filter_type'] ?? 'month';
-$custom_start = $_GET['start_date'] ?? '';
-$custom_end = $_GET['end_date'] ?? '';
+// Get filter parameters - simplified
+$start_date = isset($_GET['start_date']) ? $_GET['start_date'] : date('Y-m-01');
+$end_date = isset($_GET['end_date']) ? $_GET['end_date'] : date('Y-m-t');
 
-// Initialize dates based on filter type
-switch($filter_type) {
-    case 'week':
-        $start_date = date('Y-m-d', strtotime('monday this week'));
-        $end_date = date('Y-m-d', strtotime('sunday this week'));
-        break;
-    case 'month':
-        $start_date = date('Y-m-01');
-        $end_date = date('Y-m-t');
-        break;
-    case 'year':
-        $start_date = date('Y-01-01');
-        $end_date = date('Y-12-31');
-        break;
-    case 'custom':
-        $start_date = !empty($custom_start) ? $custom_start : date('Y-m-01');
-        $end_date = !empty($custom_end) ? $custom_end : date('Y-m-t');
-        break;
-    default:
-        $start_date = date('Y-m-01');
-        $end_date = date('Y-m-t');
+// Validate dates
+if (empty($start_date) || empty($end_date)) {
+    die('Error: Start date and end date are required');
 }
 
 // Get arrears data with proper filtering
@@ -230,11 +211,7 @@ $query = "SELECT
     ca.phone_number,
     ls.amount as expected_amount,
     COALESCE(ls.repaid_amount, 0) as repaid_amount,
-    CASE 
-        WHEN ls.status = 'unpaid' THEN ls.amount
-        WHEN ls.status = 'partial' THEN (ls.amount - COALESCE(ls.repaid_amount, 0))
-        ELSE 0
-    END as default_amount,
+    ls.default_amount,
     ls.due_date,
     ls.status,
     DATEDIFF(CURDATE(), ls.due_date) as days_overdue,
@@ -244,7 +221,8 @@ JOIN loan l ON ls.loan_id = l.loan_id
 JOIN client_accounts ca ON l.account_id = ca.account_id
 WHERE ls.due_date < CURDATE() 
 AND ls.status IN ('unpaid', 'partial')
-AND l.status IN (1, 2)
+AND l.status >= 2
+AND ls.default_amount > 0
 AND ls.due_date BETWEEN ? AND ?
 ORDER BY ls.due_date ASC, ca.last_name ASC";
 
@@ -276,7 +254,7 @@ $pdf->AliasNbPages();
 $pdf->AddPage();
 
 // Add summary section
-$pdf->AddSummarySection($total_defaulters, $total_overdue, $start_date, $end_date, $filter_type);
+$pdf->AddSummarySection($total_defaulters, $total_overdue, $start_date, $end_date);
 
 // Add main table
 if(!empty($data)) {
@@ -320,11 +298,10 @@ $pdf->SetY(-35);
 $pdf->SetFont('Arial', 'I', 8);
 $pdf->Cell(0, 5, 'Report Parameters:', 0, 1, 'L');
 $pdf->Cell(0, 4, '- Period: ' . date('M d, Y', strtotime($start_date)) . ' to ' . date('M d, Y', strtotime($end_date)), 0, 1, 'L');
-$pdf->Cell(0, 4, '- Filter Type: ' . ucfirst($filter_type), 0, 1, 'L');
 $pdf->Cell(0, 4, '- Total Records: ' . count($data), 0, 1, 'L');
 
 // Generate filename
-$filename = 'Arrears_Report_' . ucfirst($filter_type) . '_' . date('Y-m-d') . '.pdf';
+$filename = 'Arrears_Report_' . date('Y-m-d') . '.pdf';
 
 // Output PDF
 $pdf->Output($filename, 'D');

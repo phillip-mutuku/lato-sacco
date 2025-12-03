@@ -12,32 +12,15 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
 
 $db = new db_class();
 
-// Get filter parameters (same as the main page)
-$filter_type = isset($_GET['filter_type']) ? $_GET['filter_type'] : 'month';
-$custom_start = isset($_GET['start_date']) ? $_GET['start_date'] : '';
-$custom_end = isset($_GET['end_date']) ? $_GET['end_date'] : '';
+// Get filter parameters
+$start_date = isset($_GET['start_date']) ? $_GET['start_date'] : date('Y-m-01');
+$end_date = isset($_GET['end_date']) ? $_GET['end_date'] : date('Y-m-t');
 
-// Initialize dates based on filter type
-switch($filter_type) {
-    case 'week':
-        $start_date = date('Y-m-d', strtotime('monday this week'));
-        $end_date = date('Y-m-d', strtotime('sunday this week'));
-        break;
-    case 'month':
-        $start_date = date('Y-m-01');
-        $end_date = date('Y-m-t');
-        break;
-    case 'year':
-        $start_date = date('Y-01-01');
-        $end_date = date('Y-12-31');
-        break;
-    case 'custom':
-        $start_date = !empty($custom_start) ? $custom_start : date('Y-m-01');
-        $end_date = !empty($custom_end) ? $custom_end : date('Y-m-t');
-        break;
-    default:
-        $start_date = date('Y-m-01');
-        $end_date = date('Y-m-t');
+// Validate dates
+if (empty($start_date) || empty($end_date)) {
+    $_SESSION['error_msg'] = "Please select both start and end dates";
+    header('Location: ' . $_SERVER['HTTP_REFERER']);
+    exit();
 }
 
 // Get the arrears data with filters
@@ -81,224 +64,349 @@ while ($row = $result->fetch_assoc()) {
     $total_defaulted += $row['default_amount'];
 }
 
-// Create Excel file using openpyxl via Python
-$python_script = <<<'PYTHON'
-import sys
-import json
-from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from openpyxl.utils import get_column_letter
-from datetime import datetime
+$total_clients = count(array_unique(array_column($data, 'client_name')));
 
-# Read data from stdin
-input_data = json.loads(sys.stdin.read())
-data = input_data['data']
-start_date = input_data['start_date']
-end_date = input_data['end_date']
-filter_type = input_data['filter_type']
-total_defaulted = input_data['total_defaulted']
-total_clients = input_data['total_clients']
+// Set headers for Excel download
+$filename = 'LATO_Arrears_Report_' . date('Y-m-d_His') . '.xls';
+header('Content-Type: application/vnd.ms-excel');
+header('Content-Disposition: attachment; filename="' . $filename . '"');
+header('Cache-Control: max-age=0');
 
-# Create workbook
-wb = Workbook()
-ws = wb.active
-ws.title = 'Arrears Report'
-
-# Define styles
-header_fill = PatternFill(start_color='51087E', end_color='51087E', fill_type='solid')
-header_font = Font(bold=True, color='FFFFFF', size=12)
-title_font = Font(bold=True, size=14, color='51087E')
-border = Border(
-    left=Side(style='thin'),
-    right=Side(style='thin'),
-    top=Side(style='thin'),
-    bottom=Side(style='thin')
-)
-
-# Add title
-ws['A1'] = 'LATO SACCO - ARREARS MANAGEMENT REPORT'
-ws['A1'].font = title_font
-ws.merge_cells('A1:O1')
-ws['A1'].alignment = Alignment(horizontal='center')
-
-# Add report metadata
-ws['A2'] = f'Period: {start_date} to {end_date} ({filter_type.title()})'
-ws['A2'].font = Font(bold=True, size=11)
-ws.merge_cells('A2:O2')
-
-ws['A3'] = f'Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'
-ws['A3'].font = Font(size=10, italic=True)
-ws.merge_cells('A3:O3')
-
-# Add summary
-ws['A4'] = f'Total Defaulters: {total_clients}'
-ws['A4'].font = Font(bold=True, size=11)
-ws['G4'] = f'Total Amount in Arrears: KSh {total_defaulted:,.2f}'
-ws['G4'].font = Font(bold=True, size=11, color='FF0000')
-
-# Headers starting at row 6
-headers = [
-    'Loan Reference',
-    'Client Name',
-    'Shareholder No',
-    'Phone Number',
-    'Location',
-    'Village',
-    'Principal',
-    'Interest',
-    'Expected Amount',
-    'Repaid Amount',
-    'Overdue Amount',
-    'Due Date',
-    'Days Overdue',
-    'Status',
-    'Loan Amount'
-]
-
-# Write headers
-for col_num, header in enumerate(headers, 1):
-    cell = ws.cell(row=6, column=col_num)
-    cell.value = header
-    cell.font = header_font
-    cell.fill = header_fill
-    cell.alignment = Alignment(horizontal='center', vertical='center')
-    cell.border = border
-
-# Write data
-row_num = 7
-for record in data:
-    ws.cell(row=row_num, column=1, value=record['ref_no'])
-    ws.cell(row=row_num, column=2, value=record['client_name'])
-    ws.cell(row=row_num, column=3, value=record['shareholder_no'])
-    ws.cell(row=row_num, column=4, value=record['phone_number'] or 'N/A')
-    ws.cell(row=row_num, column=5, value=record['location'] or 'N/A')
-    ws.cell(row=row_num, column=6, value=record['village'] or 'N/A')
-    
-    # Currency cells with formulas
-    ws.cell(row=row_num, column=7, value=float(record['principal']))
-    ws.cell(row=row_num, column=8, value=float(record['interest']))
-    ws.cell(row=row_num, column=9, value=float(record['expected_amount']))
-    ws.cell(row=row_num, column=10, value=float(record['repaid_amount']))
-    ws.cell(row=row_num, column=11, value=float(record['default_amount']))
-    
-    ws.cell(row=row_num, column=12, value=record['due_date'])
-    ws.cell(row=row_num, column=13, value=int(record['days_overdue']))
-    ws.cell(row=row_num, column=14, value=record['status'].title())
-    ws.cell(row=row_num, column=15, value=float(record['loan_amount']))
-    
-    # Apply borders
-    for col in range(1, 16):
-        ws.cell(row=row_num, column=col).border = border
-        
-    # Format currency columns
-    for col in [7, 8, 9, 10, 11, 15]:
-        ws.cell(row=row_num, column=col).number_format = '#,##0.00'
-        
-    # Highlight overdue amount in red
-    ws.cell(row=row_num, column=11).font = Font(color='FF0000', bold=True)
-    
-    row_num += 1
-
-# Add totals row
-total_row = row_num
-ws.cell(row=total_row, column=1, value='TOTAL')
-ws.cell(row=total_row, column=1).font = Font(bold=True)
-ws.cell(row=total_row, column=11).value = f'=SUM(K7:K{row_num-1})')
-ws.cell(row=total_row, column=11).font = Font(bold=True, color='FF0000')
-ws.cell(row=total_row, column=11).number_format = '#,##0.00'
-
-for col in range(1, 16):
-    ws.cell(row=total_row, column=col).border = border
-    ws.cell(row=total_row, column=col).fill = PatternFill(start_color='E0E0E0', end_color='E0E0E0', fill_type='solid')
-
-# Auto-adjust column widths
-for col_num in range(1, 16):
-    col_letter = get_column_letter(col_num)
-    max_length = 0
-    
-    for row in ws[col_letter]:
-        try:
-            if row.value:
-                max_length = max(max_length, len(str(row.value)))
-        except:
-            pass
-    
-    adjusted_width = min(max_length + 2, 50)
-    ws.column_dimensions[col_letter].width = adjusted_width
-
-# Save file
-output_file = '/home/claude/arrears_export.xlsx'
-wb.save(output_file)
-print(output_file)
-PYTHON;
-
-// Prepare JSON data for Python
-$export_data = [
-    'data' => $data,
-    'start_date' => date('M d, Y', strtotime($start_date)),
-    'end_date' => date('M d, Y', strtotime($end_date)),
-    'filter_type' => $filter_type,
-    'total_defaulted' => $total_defaulted,
-    'total_clients' => count(array_unique(array_column($data, 'client_name')))
-];
-
-$json_data = json_encode($export_data);
-
-// Write Python script to temp file
-$temp_script = tempnam(sys_get_temp_dir(), 'export_') . '.py';
-file_put_contents($temp_script, $python_script);
-
-// Execute Python script
-$descriptors = [
-    0 => ['pipe', 'r'], // stdin
-    1 => ['pipe', 'w'], // stdout
-    2 => ['pipe', 'w']  // stderr
-];
-
-$process = proc_open("python3 $temp_script", $descriptors, $pipes);
-
-if (is_resource($process)) {
-    // Send data to Python script
-    fwrite($pipes[0], $json_data);
-    fclose($pipes[0]);
-    
-    // Get output
-    $output = stream_get_contents($pipes[1]);
-    $errors = stream_get_contents($pipes[2]);
-    fclose($pipes[1]);
-    fclose($pipes[2]);
-    
-    $return_value = proc_close($process);
-    
-    if ($return_value === 0 && !empty($output)) {
-        $file_path = trim($output);
-        
-        if (file_exists($file_path)) {
-            // Set headers for download
-            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            header('Content-Disposition: attachment; filename="Arrears_Report_' . date('Y-m-d_His') . '.xlsx"');
-            header('Cache-Control: max-age=0');
-            
-            // Output file
-            readfile($file_path);
-            
-            // Clean up
-            unlink($file_path);
-            unlink($temp_script);
-            exit();
-        } else {
-            error_log("Export file not found: $file_path");
-        }
-    } else {
-        error_log("Python script error: $errors");
-    }
-    
-    // Clean up temp script
-    unlink($temp_script);
-}
-
-// If we get here, something went wrong
-$_SESSION['error_msg'] = "Failed to generate export file";
-header('Location: ' . $_SERVER['HTTP_REFERER']);
-exit();
 ?>
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        /* Excel will interpret these styles */
+        body { font-family: Calibri, Arial, sans-serif; }
+        
+        .title {
+            font-size: 18pt;
+            font-weight: bold;
+            color: #51087E;
+            text-align: center;
+            background-color: #FFFFFF;
+            height: 35px;
+        }
+        
+        .subtitle {
+            font-size: 12pt;
+            font-weight: bold;
+            color: #333333;
+            text-align: center;
+            background-color: #FFFFFF;
+            height: 20px;
+        }
+        
+        .metadata {
+            font-size: 10pt;
+            font-style: italic;
+            color: #666666;
+            text-align: center;
+        }
+        
+        .summary-box {
+            background-color: #F8F9FA;
+            border: 1px solid #D1D3E2;
+            padding: 10px;
+        }
+        
+        .summary-header {
+            font-size: 12pt;
+            font-weight: bold;
+            color: #51087E;
+            background-color: #F8F9FA;
+        }
+        
+        .summary-label {
+            font-size: 11pt;
+            font-weight: bold;
+            background-color: #F8F9FA;
+        }
+        
+        .summary-value {
+            font-size: 11pt;
+            font-weight: bold;
+            color: #51087E;
+            background-color: #F8F9FA;
+        }
+        
+        .summary-amount {
+            font-size: 12pt;
+            font-weight: bold;
+            color: #DC3545;
+            background-color: #F8F9FA;
+        }
+        
+        .alert-box {
+            background-color: #FFF3CD;
+            color: #856404;
+            font-weight: bold;
+            text-align: center;
+            border: 1px solid #FFEAA7;
+            padding: 5px;
+        }
+        
+        .table-header {
+            background-color: #51087E;
+            color: #FFFFFF;
+            font-weight: bold;
+            font-size: 11pt;
+            text-align: center;
+            border: 2px solid #51087E;
+            height: 30px;
+        }
+        
+        .data-cell {
+            font-size: 10pt;
+            border: 1px solid #D1D3E2;
+            padding: 5px;
+        }
+        
+        .data-cell-center {
+            font-size: 10pt;
+            border: 1px solid #D1D3E2;
+            text-align: center;
+            padding: 5px;
+        }
+        
+        .data-cell-right {
+            font-size: 10pt;
+            border: 1px solid #D1D3E2;
+            text-align: right;
+            padding: 5px;
+        }
+        
+        .loan-ref {
+            font-weight: bold;
+            color: #51087E;
+            font-size: 10pt;
+            border: 1px solid #D1D3E2;
+            text-align: center;
+        }
+        
+        .overdue-amount {
+            font-weight: bold;
+            color: #DC3545;
+            font-size: 10pt;
+            border: 1px solid #D1D3E2;
+            text-align: right;
+        }
+        
+        .status-unpaid {
+            background-color: #DC3545;
+            color: #FFFFFF;
+            font-weight: bold;
+            text-align: center;
+            border: 1px solid #D1D3E2;
+        }
+        
+        .status-partial {
+            background-color: #FFC107;
+            color: #FFFFFF;
+            font-weight: bold;
+            text-align: center;
+            border: 1px solid #D1D3E2;
+        }
+        
+        .days-green {
+            font-weight: bold;
+            color: #28A745;
+            text-align: center;
+            border: 1px solid #D1D3E2;
+        }
+        
+        .days-yellow {
+            font-weight: bold;
+            color: #FFC107;
+            text-align: center;
+            border: 1px solid #D1D3E2;
+        }
+        
+        .days-orange {
+            font-weight: bold;
+            color: #FD7E14;
+            text-align: center;
+            border: 1px solid #D1D3E2;
+        }
+        
+        .days-red {
+            font-weight: bold;
+            color: #DC3545;
+            text-align: center;
+            border: 1px solid #D1D3E2;
+        }
+        
+        .alt-row {
+            background-color: #F8F9FA;
+        }
+        
+        .unpaid-row {
+            background-color: #FFEBEE;
+        }
+        
+        .partial-row {
+            background-color: #FFF9E6;
+        }
+        
+        .total-row {
+            background-color: #51087E;
+            color: #FFFFFF;
+            font-weight: bold;
+            font-size: 11pt;
+            text-align: center;
+            border: 2px solid #51087E;
+            height: 25px;
+        }
+        
+        .footer-info {
+            font-size: 9pt;
+            font-style: italic;
+            color: #666666;
+            padding-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+        <!-- TITLE -->
+        <tr>
+            <td colspan="15" class="title">LATO SACCO - ARREARS MANAGEMENT REPORT</td>
+        </tr>
+        
+        <!-- PERIOD -->
+        <tr>
+            <td colspan="15" class="subtitle">Report Period: <?php echo date('M d, Y', strtotime($start_date)) . ' to ' . date('M d, Y', strtotime($end_date)); ?></td>
+        </tr>
+        
+        <!-- GENERATED DATE -->
+        <tr>
+            <td colspan="15" class="metadata">Generated: <?php echo date('F d, Y \a\t h:i A'); ?></td>
+        </tr>
+        
+        <!-- EMPTY ROW -->
+        <tr><td colspan="15" style="height: 10px;"></td></tr>
+        
+        <!-- SUMMARY HEADER -->
+        <tr>
+            <td colspan="7" class="summary-header">📊 SUMMARY STATISTICS</td>
+            <td colspan="8" class="summary-box"></td>
+        </tr>
+        
+        <!-- SUMMARY DATA -->
+        <tr>
+            <td colspan="3" class="summary-label">Total Defaulting Clients:</td>
+            <td colspan="2" class="summary-value"><?php echo number_format($total_clients); ?></td>
+            <td colspan="2" class="summary-box"></td>
+            <td colspan="3" class="summary-label">Total Amount in Arrears:</td>
+            <td colspan="5" class="summary-amount">KSh <?php echo number_format($total_defaulted, 2); ?></td>
+        </tr>
+        
+        <!-- ALERT IF HIGH ARREARS -->
+        <?php if ($total_defaulted > 100000): ?>
+        <tr>
+            <td colspan="15" class="alert-box">⚠️ HIGH ARREARS ALERT - Immediate action required</td>
+        </tr>
+        <?php endif; ?>
+        
+        <!-- EMPTY ROW -->
+        <tr><td colspan="15" style="height: 10px;"></td></tr>
+        
+        <!-- TABLE HEADER -->
+        <tr>
+            <td class="table-header">Loan Reference</td>
+            <td class="table-header">Client Name</td>
+            <td class="table-header">Shareholder No</td>
+            <td class="table-header">Phone Number</td>
+            <td class="table-header">Location</td>
+            <td class="table-header">Village</td>
+            <td class="table-header">Principal</td>
+            <td class="table-header">Interest</td>
+            <td class="table-header">Expected Amount</td>
+            <td class="table-header">Repaid Amount</td>
+            <td class="table-header">Overdue Amount</td>
+            <td class="table-header">Due Date</td>
+            <td class="table-header">Days Overdue</td>
+            <td class="table-header">Status</td>
+            <td class="table-header">Loan Amount</td>
+        </tr>
+        
+        <!-- DATA ROWS -->
+        <?php 
+        $row_num = 0;
+        foreach ($data as $row): 
+            $row_num++;
+            
+            // Determine row background class
+            $row_class = '';
+            if ($row['status'] == 'unpaid') {
+                $row_class = 'unpaid-row';
+            } elseif ($row['status'] == 'partial') {
+                $row_class = 'partial-row';
+            } elseif ($row_num % 2 == 0) {
+                $row_class = 'alt-row';
+            }
+            
+            // Determine days overdue color
+            $days_overdue = intval($row['days_overdue']);
+            if ($days_overdue > 90) {
+                $days_class = 'days-red';
+            } elseif ($days_overdue > 60) {
+                $days_class = 'days-orange';
+            } elseif ($days_overdue > 30) {
+                $days_class = 'days-yellow';
+            } else {
+                $days_class = 'days-green';
+            }
+            
+            // Status class
+            $status_class = $row['status'] == 'unpaid' ? 'status-unpaid' : 'status-partial';
+        ?>
+        <tr class="<?php echo $row_class; ?>">
+            <td class="loan-ref"><?php echo htmlspecialchars($row['ref_no']); ?></td>
+            <td class="data-cell"><?php echo htmlspecialchars($row['client_name']); ?></td>
+            <td class="data-cell-center"><?php echo htmlspecialchars($row['shareholder_no']); ?></td>
+            <td class="data-cell-center"><?php echo htmlspecialchars($row['phone_number'] ?? 'N/A'); ?></td>
+            <td class="data-cell"><?php echo htmlspecialchars($row['location'] ?? 'N/A'); ?></td>
+            <td class="data-cell"><?php echo htmlspecialchars($row['village'] ?? 'N/A'); ?></td>
+            <td class="data-cell-right"><?php echo number_format($row['principal'], 2); ?></td>
+            <td class="data-cell-right"><?php echo number_format($row['interest'], 2); ?></td>
+            <td class="data-cell-right"><?php echo number_format($row['expected_amount'], 2); ?></td>
+            <td class="data-cell-right"><?php echo number_format($row['repaid_amount'], 2); ?></td>
+            <td class="overdue-amount"><?php echo number_format($row['default_amount'], 2); ?></td>
+            <td class="data-cell-center"><?php echo date('d/m/Y', strtotime($row['due_date'])); ?></td>
+            <td class="<?php echo $days_class; ?>"><?php echo $days_overdue; ?></td>
+            <td class="<?php echo $status_class; ?>"><?php echo strtoupper($row['status']); ?></td>
+            <td class="data-cell-right"><?php echo number_format($row['loan_amount'], 2); ?></td>
+        </tr>
+        <?php endforeach; ?>
+        
+        <!-- TOTAL ROW -->
+        <?php if (!empty($data)): ?>
+        <tr>
+            <td colspan="6" class="total-row">TOTAL</td>
+            <td class="total-row"></td>
+            <td class="total-row"></td>
+            <td class="total-row"></td>
+            <td class="total-row"></td>
+            <td class="total-row" style="text-align: right;">KSh <?php echo number_format($total_defaulted, 2); ?></td>
+            <td class="total-row"></td>
+            <td class="total-row"></td>
+            <td class="total-row"></td>
+            <td class="total-row"></td>
+        </tr>
+        <?php endif; ?>
+        
+        <!-- EMPTY ROW -->
+        <tr><td colspan="15" style="height: 10px;"></td></tr>
+        
+        <!-- FOOTER INFO -->
+        <tr>
+            <td colspan="15" class="footer-info">
+                📄 Report contains <?php echo count($data); ?> overdue installment(s) from <?php echo $total_clients; ?> client(s)
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

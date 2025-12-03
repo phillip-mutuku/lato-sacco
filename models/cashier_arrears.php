@@ -15,130 +15,132 @@
     $is_admin = ($_SESSION['role'] === 'admin');
 
     // Get filter parameters
-    $filter_type = isset($_GET['filter_type']) ? $_GET['filter_type'] : 'month';
-    $custom_start = isset($_GET['start_date']) ? $_GET['start_date'] : '';
-    $custom_end = isset($_GET['end_date']) ? $_GET['end_date'] : '';
+    $start_date = isset($_GET['start_date']) ? $_GET['start_date'] : '';
+    $end_date = isset($_GET['end_date']) ? $_GET['end_date'] : '';
 
-    // Initialize dates based on filter type
-    switch($filter_type) {
-        case 'week':
-            $start_date = date('Y-m-d', strtotime('monday this week'));
-            $end_date = date('Y-m-d', strtotime('sunday this week'));
-            break;
-        case 'month':
-            $start_date = date('Y-m-01');
-            $end_date = date('Y-m-t');
-            break;
-        case 'year':
-            $start_date = date('Y-01-01');
-            $end_date = date('Y-12-31');
-            break;
-        case 'custom':
-            $start_date = !empty($custom_start) ? $custom_start : date('Y-m-01');
-            $end_date = !empty($custom_end) ? $custom_end : date('Y-m-t');
-            break;
-        default:
-            $start_date = date('Y-m-01');
-            $end_date = date('Y-m-t');
+    // Set default date range if not provided (current month)
+    if (empty($start_date)) {
+        $start_date = date('Y-m-01');
+    }
+    if (empty($end_date)) {
+        $end_date = date('Y-m-t');
     }
 
     // Function to update loan schedules and calculate defaults properly
     function updateLoanSchedules($db) {
-    // Get only DISBURSED loans (status >= 2)
-    $loans_query = "SELECT l.loan_id, l.amount, l.loan_term, l.meeting_date, l.date_created, lp.interest_rate, l.status
-                    FROM loan l
-                    JOIN loan_products lp ON l.loan_product_id = lp.id
-                    WHERE l.status >= 2"; // Only disbursed loans
-    
-    $loans_result = $db->conn->query($loans_query);
-    
-    if ($loans_result && $loans_result->num_rows > 0) {
-        while ($loan = $loans_result->fetch_assoc()) {
-            $loan_id = $loan['loan_id'];
-            $total_amount = floatval($loan['amount']);
-            $term = intval($loan['loan_term']);
-            $interest_rate = floatval($loan['interest_rate']);
-            $monthly_principal = round($total_amount / $term, 2);
+        // Get only DISBURSED loans (status >= 2)
+        $loans_query = "SELECT l.loan_id, l.amount, l.loan_term, l.meeting_date, l.date_created, lp.interest_rate, l.status
+                        FROM loan l
+                        JOIN loan_products lp ON l.loan_product_id = lp.id
+                        WHERE l.status >= 2"; // Only disbursed loans
+        
+        $loans_result = $db->conn->query($loans_query);
+        
+        if ($loans_result && $loans_result->num_rows > 0) {
+            while ($loan = $loans_result->fetch_assoc()) {
+                $loan_id = $loan['loan_id'];
+                $total_amount = floatval($loan['amount']);
+                $term = intval($loan['loan_term']);
+                $interest_rate = floatval($loan['interest_rate']);
+                $monthly_principal = round($total_amount / $term, 2);
 
-            // Get existing repayments
-            $repayment_query = "SELECT due_date, repaid_amount, paid_date FROM loan_schedule WHERE loan_id = ?";
-            $repayment_stmt = $db->conn->prepare($repayment_query);
-            $repayment_stmt->bind_param("i", $loan_id);
-            $repayment_stmt->execute();
-            $repayment_result = $repayment_stmt->get_result();
-            $repayments = $repayment_result->fetch_all(MYSQLI_ASSOC);
+                // Get existing repayments
+                $repayment_query = "SELECT due_date, repaid_amount, paid_date, status FROM loan_schedule WHERE loan_id = ?";
+                $repayment_stmt = $db->conn->prepare($repayment_query);
+                $repayment_stmt->bind_param("i", $loan_id);
+                $repayment_stmt->execute();
+                $repayment_result = $repayment_stmt->get_result();
+                $repayments = $repayment_result->fetch_all(MYSQLI_ASSOC);
 
-            // Start from meeting date or loan date
-            $payment_date = new DateTime($loan['meeting_date'] ?? $loan['date_created']);
-            $payment_date->modify('+1 month');
-
-            // Generate schedule
-            $remaining_principal = $total_amount;
-
-            for ($i = 0; $i < $term; $i++) {
-                $interest = round($remaining_principal * ($interest_rate / 100), 2);
-                $due_amount = $monthly_principal + $interest;
-                $due_date = $payment_date->format('Y-m-d');
-
-                // Check if this payment has been made
-                $repaid_amount = 0;
-                $paid_date = null;
-                $status = 'unpaid';
-
-                foreach ($repayments as $repayment) {
-                    if ($repayment['due_date'] == $due_date) {
-                        $repaid_amount = floatval($repayment['repaid_amount']);
-                        $paid_date = $repayment['paid_date'];
-                        $status = (abs($repaid_amount - $due_amount) <= 0.50) ? 'paid' : (($repaid_amount > 0) ? 'partial' : 'unpaid');
-                        break;
-                    }
-                }
-
-                // Calculate default amount - only if past due date AND loan is disbursed
-                $default_amount = 0;
-                $today = new DateTime();
-                if ($today > new DateTime($due_date) && $status !== 'paid') {
-                    $default_amount = max(0, $due_amount - $repaid_amount);
-                }
-
-                // Update or insert schedule entry
-                $upsert_stmt = $db->conn->prepare("
-                    INSERT INTO loan_schedule 
-                    (loan_id, due_date, principal, interest, amount, repaid_amount, default_amount, status, paid_date) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON DUPLICATE KEY UPDATE 
-                    principal = VALUES(principal),
-                    interest = VALUES(interest),
-                    amount = VALUES(amount),
-                    default_amount = VALUES(default_amount),
-                    status = CASE 
-                        WHEN status = 'paid' THEN 'paid' 
-                        ELSE VALUES(status) 
-                    END
-                ");
-                
-                $upsert_stmt->bind_param(
-                    "isddddss",
-                    $loan_id,
-                    $due_date,
-                    $monthly_principal,
-                    $interest,
-                    $due_amount,
-                    $repaid_amount,
-                    $default_amount,
-                    $status,
-                    $paid_date
-                );
-                
-                $upsert_stmt->execute();
-
-                // Update balances for next iteration
-                $remaining_principal -= $monthly_principal;
+                // Start from meeting date or loan date
+                $payment_date = new DateTime($loan['meeting_date'] ?? $loan['date_created']);
                 $payment_date->modify('+1 month');
+
+                // Generate schedule
+                $remaining_principal = $total_amount;
+
+                for ($i = 0; $i < $term; $i++) {
+                    $interest = round($remaining_principal * ($interest_rate / 100), 2);
+                    $due_amount = $monthly_principal + $interest;
+                    $due_date = $payment_date->format('Y-m-d');
+
+                    // Check if this payment exists in the schedule
+                    $repaid_amount = 0;
+                    $paid_date = null;
+                    $existing_status = 'unpaid';
+
+                    foreach ($repayments as $repayment) {
+                        if ($repayment['due_date'] == $due_date) {
+                            $repaid_amount = floatval($repayment['repaid_amount']);
+                            $paid_date = $repayment['paid_date'];
+                            $existing_status = $repayment['status'];
+                            break;
+                        }
+                    }
+
+                    // CRITICAL: Do not override status if it's already marked as 'paid'
+                    // This prevents deleted arrears from coming back
+                    if ($existing_status === 'paid') {
+                        $status = 'paid';
+                        $default_amount = 0;
+                    } else {
+                        // Calculate status for non-paid entries
+                        $status = (abs($repaid_amount - $due_amount) <= 0.50) ? 'paid' : (($repaid_amount > 0) ? 'partial' : 'unpaid');
+                        
+                        // Calculate default amount - only if past due date AND not paid
+                        $default_amount = 0;
+                        $today = new DateTime();
+                        if ($today > new DateTime($due_date) && $status !== 'paid') {
+                            $default_amount = max(0, $due_amount - $repaid_amount);
+                        }
+                    }
+
+                    // Update or insert schedule entry
+                    $upsert_stmt = $db->conn->prepare("
+                        INSERT INTO loan_schedule 
+                        (loan_id, due_date, principal, interest, amount, repaid_amount, default_amount, status, paid_date) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON DUPLICATE KEY UPDATE 
+                        principal = VALUES(principal),
+                        interest = VALUES(interest),
+                        amount = VALUES(amount),
+                        repaid_amount = VALUES(repaid_amount),
+                        default_amount = CASE 
+                            WHEN status = 'paid' THEN 0 
+                            ELSE VALUES(default_amount) 
+                        END,
+                        status = CASE 
+                            WHEN status = 'paid' THEN 'paid' 
+                            ELSE VALUES(status) 
+                        END,
+                        paid_date = CASE 
+                            WHEN status = 'paid' THEN paid_date 
+                            ELSE VALUES(paid_date) 
+                        END
+                    ");
+                    
+                    $upsert_stmt->bind_param(
+                        "isdddddss",
+                        $loan_id,
+                        $due_date,
+                        $monthly_principal,
+                        $interest,
+                        $due_amount,
+                        $repaid_amount,
+                        $default_amount,
+                        $status,
+                        $paid_date
+                    );
+                    
+                    $upsert_stmt->execute();
+
+                    // Update balances for next iteration
+                    $remaining_principal -= $monthly_principal;
+                    $payment_date->modify('+1 month');
+                }
             }
         }
     }
-}
 
     // Update loan schedules before calculating statistics
     try {
@@ -153,48 +155,48 @@
         JOIN loan l ON ls.loan_id = l.loan_id
         WHERE ls.due_date < CURDATE() 
         AND ls.status IN ('unpaid', 'partial')
-        AND l.status >= 2  -- Only disbursed loans
+        AND l.status >= 2
         AND ls.default_amount > 0";
 
-        $total_defaulters = $db->conn->query($defaulters_query)->fetch_assoc()['total_defaulters'];
+    $total_defaulters = $db->conn->query($defaulters_query)->fetch_assoc()['total_defaulters'];
 
-        // Updated total defaulted amount query - only from DISBURSED loans
-        $total_defaulted_query = "SELECT 
-            COALESCE(SUM(ls.default_amount), 0) as total_defaulted
-        FROM loan_schedule ls
-        JOIN loan l ON ls.loan_id = l.loan_id
-        WHERE ls.due_date < CURDATE() 
-        AND ls.status IN ('unpaid', 'partial')
-        AND l.status >= 2  -- Only disbursed loans
-        AND ls.default_amount > 0";
+    // Total defaulted amount query
+    $total_defaulted_query = "SELECT 
+        COALESCE(SUM(ls.default_amount), 0) as total_defaulted
+    FROM loan_schedule ls
+    JOIN loan l ON ls.loan_id = l.loan_id
+    WHERE ls.due_date < CURDATE() 
+    AND ls.status IN ('unpaid', 'partial')
+    AND l.status >= 2
+    AND ls.default_amount > 0";
 
-        $total_defaulted = $db->conn->query($total_defaulted_query)->fetch_assoc()['total_defaulted'];
+    $total_defaulted = $db->conn->query($total_defaulted_query)->fetch_assoc()['total_defaulted'];
 
-    // Get defaulted loans with client details - showing overdue installments for the filtered period
-        $arrears_query = "SELECT 
-                        l.ref_no, 
-                        CONCAT(ca.first_name, ' ', ca.last_name) as client_name,
-                        ls.amount as expected_amount,
-                        COALESCE(ls.repaid_amount, 0) as repaid_amount,
-                        ls.default_amount,
-                        ls.due_date,
-                        l.loan_id,
-                        ls.status,
-                        DATEDIFF(CURDATE(), ls.due_date) as days_overdue,
-                        l.amount as loan_amount,
-                        ca.phone_number,
-                        ls.principal,
-                        ls.interest,
-                        l.status as loan_status  -- Add loan status for verification
-                    FROM loan_schedule ls
-                    JOIN loan l ON ls.loan_id = l.loan_id
-                    JOIN client_accounts ca ON l.account_id = ca.account_id
-                    WHERE ls.due_date < CURDATE() 
-                    AND ls.status IN ('unpaid', 'partial')
-                    AND l.status >= 2  -- Only disbursed loans
-                    AND ls.default_amount > 0
-                    AND ls.due_date BETWEEN ? AND ?
-                    ORDER BY ls.due_date DESC, ls.default_amount DESC";
+    // Get defaulted loans with client details
+    $arrears_query = "SELECT 
+                    l.ref_no, 
+                    CONCAT(ca.first_name, ' ', ca.last_name) as client_name,
+                    ls.amount as expected_amount,
+                    COALESCE(ls.repaid_amount, 0) as repaid_amount,
+                    ls.default_amount,
+                    ls.due_date,
+                    l.loan_id,
+                    ls.status,
+                    DATEDIFF(CURDATE(), ls.due_date) as days_overdue,
+                    l.amount as loan_amount,
+                    ca.phone_number,
+                    ls.principal,
+                    ls.interest,
+                    l.status as loan_status
+                FROM loan_schedule ls
+                JOIN loan l ON ls.loan_id = l.loan_id
+                JOIN client_accounts ca ON l.account_id = ca.account_id
+                WHERE ls.due_date < CURDATE() 
+                AND ls.status IN ('unpaid', 'partial')
+                AND l.status >= 2
+                AND ls.default_amount > 0
+                AND ls.due_date BETWEEN ? AND ?
+                ORDER BY ls.due_date DESC, ls.default_amount DESC";
 
     $stmt = $db->conn->prepare($arrears_query);
     $stmt->bind_param("ss", $start_date, $end_date);
@@ -205,7 +207,6 @@
 
     $arrears_result = $stmt->get_result();
 
-
     // Calculate filtered period statistics
     $filtered_defaulters_query = "SELECT 
     COUNT(DISTINCT l.account_id) as filtered_defaulters,
@@ -214,7 +215,7 @@
     JOIN loan l ON ls.loan_id = l.loan_id
     WHERE ls.due_date < CURDATE() 
     AND ls.status IN ('unpaid', 'partial')
-    AND l.status >= 2  -- Only disbursed loans
+    AND l.status >= 2
     AND ls.default_amount > 0
     AND ls.due_date BETWEEN ? AND ?";
 
@@ -288,15 +289,6 @@
             padding: 4px 8px;
         }
         
-        .date-range-group {
-            display: none;
-        }
-        
-        .date-range-group.show {
-            display: inline-block;
-        }
-        
-        /* DataTable Custom Styling */
         .dataTables_wrapper {
             margin-top: 20px;
         }
@@ -345,7 +337,6 @@
             font-size: 0.75rem;
         }
         
-        /* Toast Container Styles */
         #toast-container {
             position: fixed;
             top: 80px;
@@ -521,34 +512,17 @@
             <!-- Filter Section -->
             <div class="filter-section">
                 <form method="GET" id="filterForm" class="row align-items-end">
-                    <div class="col-md-3 mb-3">
-                        <label class="mb-2"><strong>Filter Period:</strong></label>
-                        <select class="form-control" name="filter_type" id="filter_type">
-                            <option value="week" <?php echo $filter_type == 'week' ? 'selected' : ''; ?>>
-                                This Week
-                            </option>
-                            <option value="month" <?php echo $filter_type == 'month' ? 'selected' : ''; ?>>
-                                This Month
-                            </option>
-                            <option value="year" <?php echo $filter_type == 'year' ? 'selected' : ''; ?>>
-                                This Year
-                            </option>
-                            <option value="custom" <?php echo $filter_type == 'custom' ? 'selected' : ''; ?>>
-                                Custom Range
-                            </option>
-                        </select>
+                    <div class="col-md-4 mb-3">
+                        <label class="mb-2"><strong>Start Date:</strong></label>
+                        <input type="date" class="form-control" name="start_date" id="start_date"
+                               value="<?php echo htmlspecialchars($start_date); ?>" required>
                     </div>
-                    <div class="col-md-3 mb-3 date-range-group <?php echo $filter_type == 'custom' ? 'show' : ''; ?>">
-                        <label class="mb-2">Start Date:</label>
-                        <input type="date" class="form-control" name="start_date" 
-                               value="<?php echo $filter_type == 'custom' ? $start_date : ''; ?>">
+                    <div class="col-md-4 mb-3">
+                        <label class="mb-2"><strong>End Date:</strong></label>
+                        <input type="date" class="form-control" name="end_date" id="end_date"
+                               value="<?php echo htmlspecialchars($end_date); ?>" required>
                     </div>
-                    <div class="col-md-3 mb-3 date-range-group <?php echo $filter_type == 'custom' ? 'show' : ''; ?>">
-                        <label class="mb-2">End Date:</label>
-                        <input type="date" class="form-control" name="end_date" 
-                               value="<?php echo $filter_type == 'custom' ? $end_date : ''; ?>">
-                    </div>
-                    <div class="col-md-3 mb-3">
+                    <div class="col-md-4 mb-3">
                         <button type="submit" class="btn btn-warning btn-block">
                             <i class="fas fa-filter"></i> Apply Filter
                         </button>
@@ -710,7 +684,7 @@
                     <button class="close" type="button" data-dismiss="modal" aria-label="Close">
                         <span aria-hidden="true">×</span>
                     </button>
-                    </div>
+                </div>
                 <div class="modal-body">Select "Logout" below if you are ready to end your current session.</div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" type="button" data-dismiss="modal">Cancel</button>
@@ -731,10 +705,10 @@
                     </button>
                 </div>
                 <div class="modal-body">
-                    <p>Are you sure you want to delete this arrear?</p>
+                    <p>Are you sure you want to permanently delete this arrear?</p>
                     <div class="alert alert-warning">
                         <i class="fas fa-exclamation-triangle"></i>
-                        <strong>Warning:</strong> This will mark the payment as paid and remove it from the arrears list.
+                        <strong>Warning:</strong> This will mark the payment as paid and remove it permanently from the arrears list.
                     </div>
                     <p><strong>Loan Reference:</strong> <span id="delete-loan-ref"></span></p>
                     <p><strong>Client:</strong> <span id="delete-client-name"></span></p>
@@ -742,7 +716,7 @@
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" type="button" data-dismiss="modal">Cancel</button>
-                    <button class="btn btn-danger" id="confirmDeleteArrear">Delete Arrear</button>
+                    <button class="btn btn-danger" id="confirmDeleteArrear">Delete Permanently</button>
                 </div>
             </div>
         </div>
@@ -765,7 +739,6 @@
         function showToast(type, title, message, duration = 5000) {
             const toastContainer = $('#toast-container');
             
-            // Icon selection based on type
             const icons = {
                 'success': 'fa-check-circle',
                 'error': 'fa-exclamation-circle',
@@ -775,7 +748,6 @@
             
             const icon = icons[type] || icons['info'];
             
-            // Create toast element
             const toastId = 'toast-' + Date.now();
             const toast = $(`
                 <div id="${toastId}" class="toast-notification ${type}">
@@ -792,15 +764,12 @@
                 </div>
             `);
             
-            // Add to container
             toastContainer.append(toast);
             
-            // Close button handler
             toast.find('.toast-close').click(function() {
                 removeToast(toastId);
             });
             
-            // Auto-remove after duration
             if (duration > 0) {
                 setTimeout(function() {
                     removeToast(toastId);
@@ -816,7 +785,7 @@
                 toast.addClass('removing');
                 setTimeout(function() {
                     toast.remove();
-                }, 300); // Match animation duration
+                }, 300);
             }
         }
         
@@ -837,7 +806,7 @@
         }
 
         $(document).ready(function() {
-            // Check for PHP session messages and display as toasts
+            // Check for PHP session messages
             <?php if (isset($_SESSION['success_msg'])): ?>
                 showSuccessToast('<?php echo addslashes($_SESSION['success_msg']); ?>', 5000);
                 <?php unset($_SESSION['success_msg']); ?>
@@ -860,7 +829,7 @@
             
             // Initialize DataTable
             var arrearsTable = $('#arrearsTable').DataTable({
-                "order": [[8, "asc"]], // Order by due date ascending (oldest first)
+                "order": [[8, "asc"]],
                 "pageLength": 25,
                 "responsive": true,
                 "language": {
@@ -871,41 +840,21 @@
                 ]
             });
 
-            // Handle filter type change
-            $('#filter_type').change(function() {
-                var filterType = $(this).val();
-                if (filterType === 'custom') {
-                    $('.date-range-group').addClass('show');
-                    $('input[name="start_date"]').attr('required', true);
-                    $('input[name="end_date"]').attr('required', true);
-                } else {
-                    $('.date-range-group').removeClass('show');
-                    $('input[name="start_date"]').removeAttr('required').val('');
-                    $('input[name="end_date"]').removeAttr('required').val('');
-                    // Auto-submit for non-custom filters
-                    setTimeout(function() {
-                        $('#filterForm').submit();
-                    }, 100);
-                }
-            });
-
-            // Handle form submission with validation
+            // Form validation
             $('#filterForm').submit(function(e) {
-                if ($('#filter_type').val() === 'custom') {
-                    var startDate = $('input[name="start_date"]').val();
-                    var endDate = $('input[name="end_date"]').val();
-                    
-                    if (!startDate || !endDate) {
-                        e.preventDefault();
-                        showWarningToast('Please select both start and end dates for custom range', 5000);
-                        return false;
-                    }
-                    
-                    if (new Date(startDate) > new Date(endDate)) {
-                        e.preventDefault();
-                        showErrorToast('Start date cannot be later than end date', 5000);
-                        return false;
-                    }
+                var startDate = $('#start_date').val();
+                var endDate = $('#end_date').val();
+                
+                if (!startDate || !endDate) {
+                    e.preventDefault();
+                    showWarningToast('Please select both start and end dates', 5000);
+                    return false;
+                }
+                
+                if (new Date(startDate) > new Date(endDate)) {
+                    e.preventDefault();
+                    showErrorToast('Start date cannot be later than end date', 5000);
+                    return false;
                 }
             });
 
@@ -913,41 +862,24 @@
             $('#exportExcelBtn').click(function(e) {
                 e.preventDefault();
                 
-                var filterType = $('#filter_type').val();
-                var startDate = '';
-                var endDate = '';
+                var startDate = $('#start_date').val();
+                var endDate = $('#end_date').val();
                 
-                if (filterType === 'custom') {
-                    startDate = $('input[name="start_date"]').val();
-                    endDate = $('input[name="end_date"]').val();
-                    
-                    if (!startDate || !endDate) {
-                        showWarningToast('Please select both start and end dates for custom range', 5000);
-                        return;
-                    }
-                    
-                    if (new Date(startDate) > new Date(endDate)) {
-                        showErrorToast('Start date cannot be later than end date', 5000);
-                        return;
-                    }
+                if (!startDate || !endDate) {
+                    showWarningToast('Please select date range first', 5000);
+                    return;
                 }
                 
-                var url = '../controllers/export_arrears.php?filter_type=' + filterType;
-                if (filterType === 'custom' && startDate && endDate) {
-                    url += '&start_date=' + startDate + '&end_date=' + endDate;
-                }
+                var url = '../controllers/export_arrears.php?start_date=' + startDate + '&end_date=' + endDate;
                 
                 var btn = $(this);
                 var originalText = btn.html();
                 btn.html('<i class="fas fa-spinner fa-spin"></i> Exporting...').prop('disabled', true);
                 
-                // Show info toast
                 showInfoToast('Generating Excel file... Your download will begin shortly.', 3000);
                 
-                // Trigger download
                 window.location.href = url;
                 
-                // Reset button and show success after delay
                 setTimeout(function() {
                     btn.html(originalText).prop('disabled', false);
                     showSuccessToast('Excel file has been generated and downloaded successfully', 4000);
@@ -958,44 +890,24 @@
             $('#generateReportBtn').click(function(e) {
                 e.preventDefault();
                 
-                // Get current filter parameters
-                var filterType = $('#filter_type').val();
-                var startDate = '';
-                var endDate = '';
+                var startDate = $('#start_date').val();
+                var endDate = $('#end_date').val();
                 
-                if (filterType === 'custom') {
-                    startDate = $('input[name="start_date"]').val();
-                    endDate = $('input[name="end_date"]').val();
-                    
-                    if (!startDate || !endDate) {
-                        showWarningToast('Please select both start and end dates for custom range', 5000);
-                        return;
-                    }
-                    
-                    if (new Date(startDate) > new Date(endDate)) {
-                        showErrorToast('Start date cannot be later than end date', 5000);
-                        return;
-                    }
+                if (!startDate || !endDate) {
+                    showWarningToast('Please select date range first', 5000);
+                    return;
                 }
                 
-                // Build URL with parameters
-                var url = '../controllers/generate_arrears_report.php?filter_type=' + filterType;
-                if (filterType === 'custom' && startDate && endDate) {
-                    url += '&start_date=' + startDate + '&end_date=' + endDate;
-                }
+                var url = '../controllers/generate_arrears_report.php?start_date=' + startDate + '&end_date=' + endDate;
                 
-                // Show loading state
                 var btn = $(this);
                 var originalText = btn.html();
                 btn.html('<i class="fas fa-spinner fa-spin"></i> Generating...').prop('disabled', true);
                 
-                // Show info toast
                 showInfoToast('Generating report... Please wait.', 3000);
                 
-                // Trigger download
                 window.location.href = url;
                 
-                // Reset button after short delay
                 setTimeout(function() {
                     btn.html(originalText).prop('disabled', false);
                     showSuccessToast('Report has been generated successfully', 4000);
@@ -1003,11 +915,9 @@
             });
 
             <?php if ($is_admin): ?>
-            // Delete arrear functionality - USING EVENT DELEGATION
-            // This is the KEY fix - attach handler to the table instead of individual buttons
+            // Delete arrear functionality
             var deleteLoanId, deleteDueDate;
             
-            // Use event delegation by attaching to the table (parent element)
             $('#arrearsTable').on('click', '.btn-delete-arrear', function() {
                 deleteLoanId = $(this).data('loan-id');
                 deleteDueDate = $(this).data('due-date');
@@ -1017,90 +927,77 @@
                 $('#delete-loan-ref').text(refNo);
                 $('#delete-client-name').text(clientName);
                 $('#delete-due-date').text(deleteDueDate);
-                
                 $('#deleteArrearModal').modal('show');
             });
             
             $('#confirmDeleteArrear').click(function() {
-                var btn = $(this);
-                var originalText = btn.html();
-                btn.html('<i class="fas fa-spinner fa-spin"></i> Deleting...').prop('disabled', true);
-                
-                $.ajax({
-                    url: '../controllers/delete_arrear.php',
-                    type: 'POST',
-                    data: {
-                        loan_id: deleteLoanId,
-                        due_date: deleteDueDate
-                    },
-                    dataType: 'json',
-                    success: function(response) {
-                        $('#deleteArrearModal').modal('hide');
-                        
-                        if (response.status === 'success') {
-                            showSuccessToast(
-                                response.message || 'Arrear successfully deleted and marked as paid',
-                                5000
-                            );
+                    var btn = $(this);
+                    var originalText = btn.html();
+                    btn.html('<i class="fas fa-spinner fa-spin"></i> Deleting...').prop('disabled', true);
+                    
+                    $.ajax({
+                        url: '../controllers/delete_arrear.php',
+                        type: 'POST',
+                        data: {
+                            loan_id: deleteLoanId,
+                            due_date: deleteDueDate
+                        },
+                        dataType: 'json',
+                        success: function(response) {
+                            $('#deleteArrearModal').modal('hide');
                             
-                            // Reload page after a short delay to show the toast
-                            setTimeout(function() {
-                                location.reload();
-                            }, 1500);
-                        } else {
-                            showErrorToast(
-                                response.message || 'Failed to delete arrear. Please try again.',
-                                7000
-                            );
+                            if (response.status === 'success') {
+                                showSuccessToast(
+                                    response.message || 'Arrear permanently deleted and marked as paid',
+                                    5000
+                                );
+                                
+                                setTimeout(function() {
+                                    location.reload();
+                                }, 1500);
+                            } else {
+                                showErrorToast(
+                                    response.message || 'Failed to delete arrear. Please try again.',
+                                    7000
+                                );
+                                btn.html(originalText).prop('disabled', false);
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            $('#deleteArrearModal').modal('hide');
+                            
+                            let errorMessage = 'Failed to delete arrear. Please try again.';
+                            
+                            console.log('XHR Status:', xhr.status);
+                            console.log('Response Text:', xhr.responseText);
+                            console.log('Error:', error);
+                            
+                            try {
+                                const errorResponse = JSON.parse(xhr.responseText);
+                                if (errorResponse.message) {
+                                    errorMessage = errorResponse.message;
+                                }
+                            } catch (e) {
+                                // If response is not JSON, show part of the response
+                                if (xhr.responseText) {
+                                    // Extract meaningful error from HTML if present
+                                    const tempDiv = document.createElement('div');
+                                    tempDiv.innerHTML = xhr.responseText;
+                                    const errorText = tempDiv.textContent || tempDiv.innerText || '';
+                                    if (errorText.length > 0 && errorText.length < 200) {
+                                        errorMessage = errorText.substring(0, 150);
+                                    } else {
+                                        errorMessage = 'Server error occurred. Please check console for details.';
+                                    }
+                                }
+                            }
+                            
+                            showErrorToast(errorMessage, 7000);
                             btn.html(originalText).prop('disabled', false);
                         }
-                    },
-                    error: function(xhr, status, error) {
-                        $('#deleteArrearModal').modal('hide');
-                        
-                        let errorMessage = 'Failed to delete arrear. Please try again.';
-                        
-                        // Try to parse error response
-                        try {
-                            const errorResponse = JSON.parse(xhr.responseText);
-                            if (errorResponse.message) {
-                                errorMessage = errorResponse.message;
-                            }
-                        } catch (e) {
-                            // Use default error message
-                        }
-                        
-                        showErrorToast(errorMessage, 7000);
-                        console.error('Delete error:', error);
-                        btn.html(originalText).prop('disabled', false);
-                    }
+                    });
                 });
-            });
             <?php endif; ?>
-
-            // Auto-update defaulters list every 5 minutes
-            function updateDefaulters() {
-                $.ajax({
-                    url: '../controllers/check_defaults.php',
-                    type: 'GET',
-                    success: function(response) {
-                        try {
-                            if(typeof response === 'string') {
-                                response = JSON.parse(response);
-                            }
-                            if(response.refresh) {
-                                location.reload();
-                            }
-                        } catch(e) {
-                            // Silent fail for auto-update
-                        }
-                    },
-                    error: function() {
-                        // Silent fail for auto-update
-                    }
-                });
-            }
-            setInterval(updateDefaulters, 300000); // 5 minutes
 
             // Initialize tooltips
             $('[data-toggle="tooltip"]').tooltip();

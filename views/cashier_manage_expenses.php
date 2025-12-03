@@ -280,7 +280,7 @@
     </div>
 
     <!-- Modals Section Component -->
-    <?php require_once '../components/manage_expenses/modals_section.php'; ?>
+    <?php require_once '../components/manage_expenses/cashier_modals_section.php'; ?>
 
     <!-- Toast Container -->
     <div class="toast-container" id="toastContainer"></div>
