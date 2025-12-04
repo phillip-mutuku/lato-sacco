@@ -7,10 +7,9 @@ require_once '../config/class.php';
 require_once '../helpers/fpdf/fpdf.php';
 require_once '../helpers/session.php';
 
-// Check if user is logged in
-if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'manager')) {
-    ob_end_clean();
-    die('Unauthorized access');
+// Check if user is logged in and is either an admin or manager
+if (!isset($_SESSION['user_id'])) {
+    exit(json_encode(['error' => 'Unauthorized']));
 }
 
 class DailyReconciliationPDF extends FPDF {

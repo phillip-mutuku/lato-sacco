@@ -514,10 +514,14 @@ body.sidebar-toggled .topbar {
                 <a class="collapse-item" href="../views/daily-reconciliation.php">
                     Daily Reconciliation
                 </a>
-                <!-- Expenses Tracking - Admin Only (Hidden for managers) -->
+                <!-- Expenses Tracking - Admin Only -->
                 <?php if ($is_admin): ?>
                 <a class="collapse-item" href="../views/expenses_tracking.php">
                     Expenses Tracking
+                </a>
+                <!-- General Reporting - Admin Only -->
+                <a class="collapse-item" href="../views/general_reporting.php">
+                    General Reports
                 </a>
                 <?php endif; ?>
                 <a class="collapse-item" href="../views/manage_expenses.php">Manage Expenses</a>
@@ -567,7 +571,7 @@ body.sidebar-toggled .topbar {
         </a>
         <div id="collapseSystem" class="collapse" aria-labelledby="headingSystem" data-parent="#accordionSidebar">
             <div class="bg-white py-2 collapse-inner rounded">
-                <!-- Users - Admin Only (Hidden for managers) -->
+                <!-- Users - Admin Only -->
                 <?php if ($is_admin): ?>
                 <a class="collapse-item" href="../models/user.php">Users</a>
                 <?php endif; ?>

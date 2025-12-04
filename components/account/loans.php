@@ -150,6 +150,179 @@
     border-radius: 0.2rem;
 }
 
+/* Recalculate Button Styles */
+.btn-warning {
+    background-color: #f6c23e;
+    border-color: #f6c23e;
+    color: #fff;
+}
+
+.btn-warning:hover {
+    background-color: #e0a800;
+    border-color: #d39e00;
+    color: #fff;
+}
+
+.btn-warning:focus {
+    box-shadow: 0 0 0 0.2rem rgba(246, 194, 62, 0.5);
+}
+
+/* Custom Confirmation Dialog Styles */
+.custom-confirm-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.custom-confirm-overlay.show {
+    opacity: 1;
+}
+
+.custom-confirm-dialog {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    width: 90%;
+    max-width: 500px;
+    overflow: hidden;
+    transform: scale(0.9);
+    transition: transform 0.3s ease;
+}
+
+.custom-confirm-overlay.show .custom-confirm-dialog {
+    transform: scale(1);
+}
+
+.custom-confirm-header {
+    background: linear-gradient(135deg, #51087E 0%, #6B1FA0 100%);
+    color: #fff;
+    padding: 24px 30px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.custom-confirm-header i {
+    font-size: 32px;
+    color: #ffd700;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.8; transform: scale(1.1); }
+}
+
+.custom-confirm-header h4 {
+    margin: 0;
+    font-size: 1.4rem;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+}
+
+.custom-confirm-body {
+    padding: 30px;
+    color: #333;
+}
+
+.custom-confirm-body > p:first-child {
+    font-size: 1rem;
+    line-height: 1.6;
+    color: #555;
+    margin-bottom: 20px;
+}
+
+.custom-confirm-details {
+    background: #f8f9fc;
+    border-left: 4px solid #51087E;
+    padding: 20px;
+    margin: 20px 0;
+    border-radius: 6px;
+}
+
+.detail-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+    font-size: 0.95rem;
+    color: #555;
+}
+
+.detail-item i {
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+.confirm-question {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #51087E;
+    margin-top: 20px;
+    margin-bottom: 0;
+    text-align: center;
+}
+
+.custom-confirm-footer {
+    padding: 20px 30px;
+    background: #f8f9fc;
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    border-top: 1px solid #e3e6f0;
+}
+
+.btn-confirm-cancel,
+.btn-confirm-ok {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-confirm-cancel {
+    background: #6c757d;
+    color: #fff;
+}
+
+.btn-confirm-cancel:hover {
+    background: #5a6268;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(108, 117, 125, 0.3);
+}
+
+.btn-confirm-ok {
+    background: linear-gradient(135deg, #1cc88a 0%, #13855c 100%);
+    color: #fff;
+}
+
+.btn-confirm-ok:hover {
+    background: linear-gradient(135deg, #13855c 0%, #0e6b47 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(28, 200, 138, 0.4);
+}
+
+.btn-confirm-cancel:active,
+.btn-confirm-ok:active {
+    transform: translateY(0);
+}
+
 /* Empty State */
 .empty-state {
     text-align: center;
@@ -239,14 +412,20 @@
     padding: 1rem;
 }
 
-/* Remove any custom variables that might cause issues */
-.loans-section .table-modern {
-    width: 100%;
-    margin: 0;
-    border-collapse: collapse;
+/* Alert Styles */
+.alert-info {
+    background-color: #d1ecf1;
+    border-color: #bee5eb;
+    color: #0c5460;
 }
 
-/* Responsive adjustments */
+.alert-success {
+    background-color: #d4edda;
+    border-color: #c3e6cb;
+    color: #155724;
+}
+
+/* Responsive Design */
 @media (max-width: 768px) {
     .loans-section .table {
         font-size: 0.8rem;
@@ -260,6 +439,52 @@
     .btn-sm {
         padding: 0.125rem 0.25rem;
         font-size: 0.75rem;
+    }
+    
+    .modal-header .d-flex {
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 0.5rem;
+    }
+    
+    #recalculateScheduleBtn {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+}
+
+/* Responsive Design for Confirmation Dialog */
+@media (max-width: 576px) {
+    .custom-confirm-dialog {
+        width: 95%;
+        margin: 10px;
+    }
+    
+    .custom-confirm-header {
+        padding: 20px;
+    }
+    
+    .custom-confirm-header h4 {
+        font-size: 1.2rem;
+    }
+    
+    .custom-confirm-header i {
+        font-size: 28px;
+    }
+    
+    .custom-confirm-body {
+        padding: 20px;
+    }
+    
+    .custom-confirm-footer {
+        flex-direction: column;
+        padding: 15px 20px;
+    }
+    
+    .btn-confirm-cancel,
+    .btn-confirm-ok {
+        width: 100%;
+        justify-content: center;
     }
 }
 
@@ -360,11 +585,20 @@
                 <h5 class="modal-title text-white">
                     <i class="fas fa-calendar-alt mr-2"></i>Loan Schedule
                 </h5>
-                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
-                </button>
+                <div class="d-flex align-items-center">
+                    <button type="button" class="btn btn-warning btn-sm mr-3" id="recalculateScheduleBtn" title="Recalculate loan schedule based on actual repayments">
+                        <i class="fas fa-sync-alt"></i> Recalculate Schedule
+                    </button>
+                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
             </div>
             <div class="modal-body">
+                <div class="alert alert-info" id="scheduleInfoAlert" style="display: none;">
+                    <i class="fas fa-info-circle"></i>
+                    <span id="scheduleInfoMessage"></span>
+                </div>
                 <div class="table-responsive">
                     <table class="table table-bordered" id="scheduleTable" width="100%" cellspacing="0">
                         <thead>
@@ -395,6 +629,8 @@
 
 <script>
 $(document).ready(function() {
+    let currentLoanId = null; // Store current loan ID for recalculation
+    
     // Initialize DataTable for loans when section becomes active
     $(document).on('sectionChanged', function(event, section) {
         if (section === 'loans') {
@@ -426,9 +662,20 @@ $(document).ready(function() {
         }
     });
 
-    // View Loan Schedule
-    $(document).on('click', '.view-schedule', function() {
+    // View Loan Schedule - USE EVENT DELEGATION FOR DYNAMICALLY LOADED CONTENT
+    $(document).on('click', '.view-schedule', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
         const loanId = $(this).data('loan-id');
+        currentLoanId = loanId; // Store for recalculation
+        loadLoanSchedule(loanId);
+    });
+
+    // Function to load loan schedule
+    function loadLoanSchedule(loanId) {
+        // Hide any previous info alerts
+        $('#scheduleInfoAlert').hide();
         
         $.ajax({
             url: '../controllers/get_loan_schedule.php',
@@ -468,8 +715,198 @@ $(document).ready(function() {
                 console.error('AJAX Error:', xhr.responseText);
             }
         });
+    }
+
+    // Recalculate Schedule Button - USE EVENT DELEGATION
+    $(document).on('click', '#recalculateScheduleBtn', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        if (!currentLoanId) {
+            showToast('No loan selected for recalculation', 'warning');
+            return;
+        }
+        
+        const $button = $(this);
+        const originalHtml = $button.html();
+        
+        // Show custom styled confirmation dialog
+        showRecalculateConfirmation($button, originalHtml);
     });
 
+    // Function to show custom confirmation dialog
+    function showRecalculateConfirmation($button, originalHtml) {
+        const confirmHtml = `
+            <div class="custom-confirm-overlay" id="recalculateConfirmOverlay">
+                <div class="custom-confirm-dialog">
+                    <div class="custom-confirm-header">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <h4>Recalculate Loan Schedule</h4>
+                    </div>
+                    <div class="custom-confirm-body">
+                        <p>This will recalculate the loan schedule based on actual repayments from the database.</p>
+                        <div class="custom-confirm-details">
+                            <div class="detail-item">
+                                <i class="fas fa-check-circle text-success"></i>
+                                <span>Updates status (paid/unpaid/partial)</span>
+                            </div>
+                            <div class="detail-item">
+                                <i class="fas fa-check-circle text-success"></i>
+                                <span>Recalculates repaid amounts</span>
+                            </div>
+                            <div class="detail-item">
+                                <i class="fas fa-check-circle text-success"></i>
+                                <span>Sets correct paid dates</span>
+                            </div>
+                            <div class="detail-item">
+                                <i class="fas fa-check-circle text-success"></i>
+                                <span>Updates default amounts</span>
+                            </div>
+                        </div>
+                        <p class="confirm-question">Do you want to continue?</p>
+                    </div>
+                    <div class="custom-confirm-footer">
+                        <button class="btn-confirm-cancel" id="confirmCancelBtn">
+                            <i class="fas fa-times"></i> Cancel
+                        </button>
+                        <button class="btn-confirm-ok" id="confirmOkBtn">
+                            <i class="fas fa-check"></i> Yes, Recalculate
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Add to body
+        $('body').append(confirmHtml);
+        
+        // Animate in
+        setTimeout(() => {
+            $('#recalculateConfirmOverlay').addClass('show');
+        }, 10);
+        
+        // Handle cancel - close on cancel button or overlay click
+        $(document).on('click', '#confirmCancelBtn, #recalculateConfirmOverlay', function(e) {
+            if (e.target === this) {
+                $('#recalculateConfirmOverlay').removeClass('show');
+                setTimeout(() => {
+                    $('#recalculateConfirmOverlay').remove();
+                }, 300);
+            }
+        });
+        
+        // Handle OK - proceed with recalculation
+        $(document).on('click', '#confirmOkBtn', function() {
+            $('#recalculateConfirmOverlay').removeClass('show');
+            setTimeout(() => {
+                $('#recalculateConfirmOverlay').remove();
+            }, 300);
+            
+            // Proceed with recalculation
+            proceedWithRecalculation($button, originalHtml);
+        });
+    }
+
+    // Function to handle the actual recalculation
+    function proceedWithRecalculation($button, originalHtml) {
+        // Disable button and show loading state
+        $button.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Recalculating...');
+        
+        // Hide previous alerts
+        $('#scheduleInfoAlert').hide();
+        
+        $.ajax({
+            url: '../controllers/recalculate_loan_schedule.php',
+            type: 'POST',
+            data: { loan_id: currentLoanId },
+            dataType: 'json',
+            timeout: 20000, // 20 second timeout
+            success: function(response) {
+                if (response.status === 'success') {
+                    // Show success message with details
+                    const details = response.details || {};
+                    let message = `Schedule recalculated successfully! `;
+                    message += `Updated ${details.entries_updated || 0} entries. `;
+                    message += `${details.paid_installments || 0}/${details.total_installments || 0} installments paid. `;
+                    
+                    if (details.fully_paid) {
+                        message += `Loan is now marked as FULLY PAID.`;
+                    } else {
+                        message += `Remaining: KSh ${formatCurrency(details.remaining_amount || 0)}.`;
+                    }
+                    
+                    // Show info alert
+                    $('#scheduleInfoMessage').text(message);
+                    $('#scheduleInfoAlert').removeClass('alert-info alert-warning alert-success')
+                                           .addClass('alert-success')
+                                           .show();
+                    
+                    showToast('Loan schedule recalculated successfully!', 'success');
+                    
+                    // Reload the schedule to show updated values
+                    setTimeout(() => {
+                        loadLoanSchedule(currentLoanId);
+                    }, 1000);
+                    
+                    // Optionally reload the page to update loan status in main table
+                    setTimeout(() => {
+                        location.reload();
+                    }, 3000);
+                    
+                } else {
+                    throw new Error(response.message || 'Recalculation failed');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Recalculate schedule error:', {
+                    status: status,
+                    error: error,
+                    responseText: xhr.responseText
+                });
+                
+                let errorMessage = 'Error recalculating schedule. ';
+                
+                if (status === 'timeout') {
+                    errorMessage += 'Request timed out. Please try again.';
+                } else if (xhr.status === 400) {
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        errorMessage += response.message || 'Invalid request.';
+                    } catch (e) {
+                        errorMessage += 'Invalid request.';
+                    }
+                } else if (xhr.status === 403) {
+                    errorMessage += 'Unauthorized. Please log in again.';
+                } else if (xhr.status === 404) {
+                    errorMessage += 'Loan not found.';
+                } else if (xhr.status === 500) {
+                    errorMessage += 'Server error. Please contact support.';
+                } else {
+                    errorMessage += 'Please try again.';
+                }
+                
+                // Show error alert
+                $('#scheduleInfoMessage').text(errorMessage);
+                $('#scheduleInfoAlert').removeClass('alert-info alert-success')
+                                       .addClass('alert-warning')
+                                       .show();
+                
+                showToast(errorMessage, 'error');
+            },
+            complete: function() {
+                // Re-enable button
+                $button.prop('disabled', false).html(originalHtml);
+            }
+        });
+    }
+
+    // Reset current loan ID when modal is closed
+    $('#loanScheduleModal').on('hidden.bs.modal', function() {
+        currentLoanId = null;
+        $('#scheduleInfoAlert').hide();
+    });
+
+    // Helper function to get status badge class
     function getStatusBadgeClass(status) {
         switch(status.toLowerCase()) {
             case 'paid': return 'badge-success';
@@ -477,6 +914,15 @@ $(document).ready(function() {
             case 'unpaid': return 'badge-danger';
             default: return 'badge-secondary';
         }
+    }
+    
+    // Helper function to format currency
+    function formatCurrency(amount) {
+        if (isNaN(amount)) return '0.00';
+        return parseFloat(amount).toLocaleString('en-KE', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
     }
 });
 </script>

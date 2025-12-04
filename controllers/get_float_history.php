@@ -22,9 +22,10 @@ $response = array(
 );
 
 try {
-    if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'manager')) {
-        throw new Exception('Unauthorized access. Please log in with appropriate permissions.');
-    }
+    // Check if user is logged in 
+if (!isset($_SESSION['user_id'])) {
+    exit(json_encode(['error' => 'Unauthorized']));
+}
 
     $db = new db_class();
     

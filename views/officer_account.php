@@ -366,7 +366,7 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
                                                     Action
                                                 </button>
                                                 <div class="dropdown-menu" aria-labelledby="dropdownMenuButton<?php echo $fetch['account_id']; ?>">
-                                                    <a class="dropdown-item" style="display: none"; href="#" onclick="viewAccount(<?php echo $fetch['account_id']; ?>)">View</a>
+                                                    <a class="dropdown-item" href="#" onclick="viewAccount(<?php echo $fetch['account_id']; ?>)">View</a>
                                                     <a class="dropdown-item bg-warning text-white" href="#" onclick="editAccount(<?php echo $fetch['account_id']; ?>)">Edit</a>
                                                     <?php if ($_SESSION['role'] === 'admin'): ?>
                                                     <a class="dropdown-item bg-danger text-white" href="#" onclick="deleteAccount(<?php echo $fetch['account_id']; ?>)">Delete</a>

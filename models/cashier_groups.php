@@ -587,7 +587,7 @@ $current_tab = isset($_GET['tab']) ? $_GET['tab'] : 'groups';
 
                     <?php else: ?>
                         <!-- Defaulters Tab Content -->
-                        <?php include '../components/groups/cashier_defaulters_table.php'; ?>
+                        <?php include '../components/groups/defaulters_table.php'; ?>
                     <?php endif; ?>
 
                 </div>

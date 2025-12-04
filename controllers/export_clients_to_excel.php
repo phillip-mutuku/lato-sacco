@@ -7,10 +7,8 @@ require_once '../helpers/session.php';
 require_once '../config/class.php';
 
 // Check if user is logged in and is either an admin or manager
-if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'manager')) {
-    $_SESSION['error_msg'] = "Unauthorized access";
-    header('Location: ../pages/index.php');
-    exit();
+if (!isset($_SESSION['user_id'])) {
+    exit(json_encode(['error' => 'Unauthorized']));
 }
 
 // Initialize database connection

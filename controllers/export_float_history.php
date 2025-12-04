@@ -274,9 +274,9 @@ class FloatHistoryPDF extends FPDF {
 session_start();
 date_default_timezone_set("Africa/Nairobi");
 
-if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION['role'] !== 'manager')) {
-    http_response_code(403);
-    die('Unauthorized access');
+// Check if user is logged in and is either an admin or manager
+if (!isset($_SESSION['user_id'])) {
+    exit(json_encode(['error' => 'Unauthorized']));
 }
 
 $start_date = isset($_GET['start_date']) ? $_GET['start_date'] : null;
