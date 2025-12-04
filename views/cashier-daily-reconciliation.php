@@ -44,15 +44,33 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
             $today_start = date('Y-m-d 00:00:00');
             $today_end = date('Y-m-d 23:59:59');
             
+            // FIXED: Check for reset today and only count transactions AFTER the reset
+            $reset_check_query = "SELECT MAX(date_created) as last_reset 
+                                  FROM float_management 
+                                  WHERE (type = 'reset_add' OR type = 'reset_off') 
+                                  AND date_created BETWEEN ? AND ?";
+            $stmt = $db->conn->prepare($reset_check_query);
+            $stmt->bind_param("ss", $today_start, $today_end);
+            $stmt->execute();
+            $reset_result = $stmt->get_result()->fetch_assoc();
+            $last_reset = $reset_result['last_reset'];
+            $stmt->close();
+            
+            // If there was a reset today, only count transactions AFTER the reset
+            if ($last_reset) {
+                $count_from = $last_reset;
+            } else {
+                $count_from = $today_start;
+            }
+            
+            // FIXED: Get float totals EXCLUDING reset entries
             $float_query = "SELECT 
-                        COALESCE(SUM(CASE WHEN type = 'add' THEN amount 
-                                         WHEN type = 'reset_add' THEN amount 
-                                         ELSE 0 END), 0) as total_added,
-                        COALESCE(SUM(CASE WHEN type = 'offload' THEN amount 
-                                         WHEN type = 'reset_off' THEN amount 
-                                         ELSE 0 END), 0) as total_offloaded
+                        COALESCE(SUM(CASE WHEN type = 'add' THEN amount ELSE 0 END), 0) as total_added,
+                        COALESCE(SUM(CASE WHEN type = 'offload' THEN amount ELSE 0 END), 0) as total_offloaded
                       FROM float_management 
-                      WHERE date_created BETWEEN ? AND ?";
+                      WHERE date_created >= ? 
+                      AND date_created <= ?
+                      AND type NOT IN ('reset_add', 'reset_off')";
             
             $stmt = $db->conn->prepare($float_query);
             if (!$stmt) {
@@ -60,7 +78,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                 return 0;
             }
             
-            $stmt->bind_param("ss", $today_start, $today_end);
+            $stmt->bind_param("ss", $count_from, $today_end);
             $stmt->execute();
             $float_result = $stmt->get_result()->fetch_assoc();
             $stmt->close();
@@ -68,96 +86,96 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
             $opening = $float_result['total_added'];
             $offloaded = $float_result['total_offloaded'];
             
-            // Get today's transaction totals
+            // Get today's transaction totals (AFTER reset if applicable)
             $total_money_in = 0;
             $total_money_out = 0;
             $total_fees = 0;
             
             // Group savings
-            $query = "SELECT COALESCE(SUM(amount), 0) as total FROM group_savings WHERE date_saved BETWEEN ? AND ?";
+            $query = "SELECT COALESCE(SUM(amount), 0) as total FROM group_savings WHERE date_saved >= ? AND date_saved <= ?";
             $stmt = $db->conn->prepare($query);
             if ($stmt) {
-                $stmt->bind_param("ss", $today_start, $today_end);
+                $stmt->bind_param("ss", $count_from, $today_end);
                 $stmt->execute();
                 $total_money_in += $stmt->get_result()->fetch_assoc()['total'];
                 $stmt->close();
             }
             
             // Business savings
-            $query = "SELECT COALESCE(SUM(amount), 0) as total FROM business_group_transactions WHERE type = 'Savings' AND date BETWEEN ? AND ?";
+            $query = "SELECT COALESCE(SUM(amount), 0) as total FROM business_group_transactions WHERE type = 'Savings' AND date >= ? AND date <= ?";
             $stmt = $db->conn->prepare($query);
             if ($stmt) {
-                $stmt->bind_param("ss", $today_start, $today_end);
+                $stmt->bind_param("ss", $count_from, $today_end);
                 $stmt->execute();
                 $total_money_in += $stmt->get_result()->fetch_assoc()['total'];
                 $stmt->close();
             }
             
             // Individual savings
-            $query = "SELECT COALESCE(SUM(amount), 0) as total FROM savings WHERE type = 'Savings' AND date BETWEEN ? AND ?";
+            $query = "SELECT COALESCE(SUM(amount), 0) as total FROM savings WHERE type = 'Savings' AND date >= ? AND date <= ?";
             $stmt = $db->conn->prepare($query);
             if ($stmt) {
-                $stmt->bind_param("ss", $today_start, $today_end);
+                $stmt->bind_param("ss", $count_from, $today_end);
                 $stmt->execute();
                 $total_money_in += $stmt->get_result()->fetch_assoc()['total'];
                 $stmt->close();
             }
             
             // Loan repayments
-            $query = "SELECT COALESCE(SUM(amount_repaid), 0) as total FROM loan_repayments WHERE date_paid BETWEEN ? AND ?";
+            $query = "SELECT COALESCE(SUM(amount_repaid), 0) as total FROM loan_repayments WHERE date_paid >= ? AND date_paid <= ?";
             $stmt = $db->conn->prepare($query);
             if ($stmt) {
-                $stmt->bind_param("ss", $today_start, $today_end);
+                $stmt->bind_param("ss", $count_from, $today_end);
                 $stmt->execute();
                 $total_money_in += $stmt->get_result()->fetch_assoc()['total'];
                 $stmt->close();
             }
             
             // FIXED: Money Received (status = 'received')
-            $query = "SELECT COALESCE(SUM(ABS(amount)), 0) as total FROM expenses WHERE status = 'received' AND date BETWEEN ? AND ?";
+            $query = "SELECT COALESCE(SUM(ABS(amount)), 0) as total FROM expenses WHERE status = 'received' AND date >= ? AND date <= ?";
             $stmt = $db->conn->prepare($query);
             if ($stmt) {
-                $stmt->bind_param("ss", $today_start, $today_end);
+                $stmt->bind_param("ss", $count_from, $today_end);
                 $stmt->execute();
                 $total_money_in += $stmt->get_result()->fetch_assoc()['total'];
                 $stmt->close();
             }
             
             // FIXED: Calculate ALL withdrawal fees - Business transactions
-            $query = "SELECT COALESCE(SUM(amount), 0) as total FROM business_group_transactions WHERE type = 'Withdrawal Fee' AND date BETWEEN ? AND ?";
+            $query = "SELECT COALESCE(SUM(amount), 0) as total FROM business_group_transactions WHERE type = 'Withdrawal Fee' AND date >= ? AND date <= ?";
             $stmt = $db->conn->prepare($query);
             if ($stmt) {
-                $stmt->bind_param("ss", $today_start, $today_end);
+                $stmt->bind_param("ss", $count_from, $today_end);
                 $stmt->execute();
                 $total_fees += $stmt->get_result()->fetch_assoc()['total'];
                 $stmt->close();
             }
             
             // Individual withdrawal fees
-            $query = "SELECT COALESCE(SUM(withdrawal_fee), 0) as total FROM savings WHERE type = 'Withdrawal' AND date BETWEEN ? AND ?";
+            $query = "SELECT COALESCE(SUM(withdrawal_fee), 0) as total FROM savings WHERE type = 'Withdrawal' AND date >= ? AND date <= ?";
             $stmt = $db->conn->prepare($query);
             if ($stmt) {
-                $stmt->bind_param("ss", $today_start, $today_end);
+                $stmt->bind_param("ss", $count_from, $today_end);
                 $stmt->execute();
                 $total_fees += $stmt->get_result()->fetch_assoc()['total'];
                 $stmt->close();
             }
             
             // Loan disbursement fees
-            $query = "SELECT COALESCE(SUM(withdrawal_fee), 0) as total FROM payment WHERE date_created BETWEEN ? AND ?";
+            $query = "SELECT COALESCE(SUM(withdrawal_fee), 0) as total FROM payment WHERE date_created >= ? AND date_created <= ?";
             $stmt = $db->conn->prepare($query);
             if ($stmt) {
-                $stmt->bind_param("ss", $today_start, $today_end);
+                $stmt->bind_param("ss", $count_from, $today_end);
                 $stmt->execute();
                 $total_fees += $stmt->get_result()->fetch_assoc()['total'];
                 $stmt->close();
             }
             
             // Group withdrawal fees
-            $query = "SELECT COALESCE(SUM(withdrawal_fee), 0) as total FROM group_withdrawals WHERE date_withdrawn BETWEEN ? AND ?";
+            $query = "SELECT COALESCE(SUM(withdrawal_fee), 0) as total FROM group_withdrawals WHERE date_withdrawn >= ? AND date_withdrawn <= ?";
             $stmt = $db->conn->prepare($query);
             if ($stmt) {
-                $stmt->bind_param("ss", $today_start, $today_end);
+                $stmt->bind_param("ss", $count_from, $today_end);
                 $stmt->execute();
                 $total_fees += $stmt->get_result()->fetch_assoc()['total'];
                 $stmt->close();
@@ -167,50 +185,50 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
             $total_money_in += $total_fees;
             
             // Calculate money out - Group withdrawals
-            $query = "SELECT COALESCE(SUM(amount), 0) as total FROM group_withdrawals WHERE date_withdrawn BETWEEN ? AND ?";
+            $query = "SELECT COALESCE(SUM(amount), 0) as total FROM group_withdrawals WHERE date_withdrawn >= ? AND date_withdrawn <= ?";
             $stmt = $db->conn->prepare($query);
             if ($stmt) {
-                $stmt->bind_param("ss", $today_start, $today_end);
+                $stmt->bind_param("ss", $count_from, $today_end);
                 $stmt->execute();
                 $total_money_out += $stmt->get_result()->fetch_assoc()['total'];
                 $stmt->close();
             }
             
             // Business withdrawals
-            $query = "SELECT COALESCE(SUM(amount), 0) as total FROM business_group_transactions WHERE type = 'Withdrawal' AND date BETWEEN ? AND ?";
+            $query = "SELECT COALESCE(SUM(amount), 0) as total FROM business_group_transactions WHERE type = 'Withdrawal' AND date >= ? AND date <= ?";
             $stmt = $db->conn->prepare($query);
             if ($stmt) {
-                $stmt->bind_param("ss", $today_start, $today_end);
+                $stmt->bind_param("ss", $count_from, $today_end);
                 $stmt->execute();
                 $total_money_out += $stmt->get_result()->fetch_assoc()['total'];
                 $stmt->close();
             }
             
             // Individual withdrawals
-            $query = "SELECT COALESCE(SUM(amount), 0) as total FROM savings WHERE type = 'Withdrawal' AND date BETWEEN ? AND ?";
+            $query = "SELECT COALESCE(SUM(amount), 0) as total FROM savings WHERE type = 'Withdrawal' AND date >= ? AND date <= ?";
             $stmt = $db->conn->prepare($query);
             if ($stmt) {
-                $stmt->bind_param("ss", $today_start, $today_end);
+                $stmt->bind_param("ss", $count_from, $today_end);
                 $stmt->execute();
                 $total_money_out += $stmt->get_result()->fetch_assoc()['total'];
                 $stmt->close();
             }
             
             // Loan disbursements (payments)
-            $query = "SELECT COALESCE(SUM(pay_amount), 0) as total FROM payment WHERE date_created BETWEEN ? AND ?";
+            $query = "SELECT COALESCE(SUM(pay_amount), 0) as total FROM payment WHERE date_created >= ? AND date_created <= ?";
             $stmt = $db->conn->prepare($query);
             if ($stmt) {
-                $stmt->bind_param("ss", $today_start, $today_end);
+                $stmt->bind_param("ss", $count_from, $today_end);
                 $stmt->execute();
                 $total_money_out += $stmt->get_result()->fetch_assoc()['total'];
                 $stmt->close();
             }
             
             // FIXED: Expenses only (not money received)
-            $query = "SELECT COALESCE(SUM(ABS(amount)), 0) as total FROM expenses WHERE (status = 'completed' OR status IS NULL) AND date BETWEEN ? AND ?";
+            $query = "SELECT COALESCE(SUM(ABS(amount)), 0) as total FROM expenses WHERE (status = 'completed' OR status IS NULL) AND date >= ? AND date <= ?";
             $stmt = $db->conn->prepare($query);
             if ($stmt) {
-                $stmt->bind_param("ss", $today_start, $today_end);
+                $stmt->bind_param("ss", $count_from, $today_end);
                 $stmt->execute();
                 $total_money_out += $stmt->get_result()->fetch_assoc()['total'];
                 $stmt->close();
@@ -265,15 +283,12 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
             // Calculate current closing float before reset (THIS INCLUDES ALL FEES)
             $closing_float = calculateCurrentClosingFloat($db);
             
-            // Get current totals
+            // Get current totals (EXCLUDING previous reset entries)
             $query = "SELECT 
-                        COALESCE(SUM(CASE WHEN type = 'add' THEN amount 
-                                         WHEN type = 'reset_add' THEN amount 
-                                         ELSE 0 END), 0) as total_added,
-                        COALESCE(SUM(CASE WHEN type = 'offload' THEN amount 
-                                         WHEN type = 'reset_off' THEN amount 
-                                         ELSE 0 END), 0) as total_offloaded
-                      FROM float_management";
+                        COALESCE(SUM(CASE WHEN type = 'add' THEN amount ELSE 0 END), 0) as total_added,
+                        COALESCE(SUM(CASE WHEN type = 'offload' THEN amount ELSE 0 END), 0) as total_offloaded
+                      FROM float_management
+                      WHERE type NOT IN ('reset_add', 'reset_off')";
             $stmt = $db->conn->prepare($query);
             $stmt->execute();
             $current_totals = $stmt->get_result()->fetch_assoc();
@@ -283,24 +298,43 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
             $today_start = date('Y-m-d 00:00:00');
             $today_end = date('Y-m-d 23:59:59');
             
-            // Calculate transaction totals for history record
+            // Check for last reset today
+            $reset_check_query = "SELECT MAX(date_created) as last_reset 
+                                  FROM float_management 
+                                  WHERE (type = 'reset_add' OR type = 'reset_off') 
+                                  AND date_created BETWEEN ? AND ?";
+            $stmt = $db->conn->prepare($reset_check_query);
+            $stmt->bind_param("ss", $today_start, $today_end);
+            $stmt->execute();
+            $reset_result = $stmt->get_result()->fetch_assoc();
+            $last_reset = $reset_result['last_reset'];
+            $stmt->close();
+            
+            // If there was a reset today, only count transactions AFTER the reset
+            if ($last_reset) {
+                $count_from = $last_reset;
+            } else {
+                $count_from = $today_start;
+            }
+            
+            // Calculate transaction totals for history record (AFTER last reset if applicable)
             $total_money_in = 0;
             $total_money_out = 0;
             $total_fees = 0;
             
             // Money in calculations
             $money_in_queries = [
-                "SELECT COALESCE(SUM(amount), 0) as total FROM group_savings WHERE date_saved BETWEEN ? AND ?",
-                "SELECT COALESCE(SUM(amount), 0) as total FROM business_group_transactions WHERE type = 'Savings' AND date BETWEEN ? AND ?",
-                "SELECT COALESCE(SUM(amount), 0) as total FROM savings WHERE type = 'Savings' AND date BETWEEN ? AND ?",
-                "SELECT COALESCE(SUM(amount_repaid), 0) as total FROM loan_repayments WHERE date_paid BETWEEN ? AND ?",
-                "SELECT COALESCE(SUM(ABS(amount)), 0) as total FROM expenses WHERE status = 'received' AND date BETWEEN ? AND ?"
+                "SELECT COALESCE(SUM(amount), 0) as total FROM group_savings WHERE date_saved >= ? AND date_saved <= ?",
+                "SELECT COALESCE(SUM(amount), 0) as total FROM business_group_transactions WHERE type = 'Savings' AND date >= ? AND date <= ?",
+                "SELECT COALESCE(SUM(amount), 0) as total FROM savings WHERE type = 'Savings' AND date >= ? AND date <= ?",
+                "SELECT COALESCE(SUM(amount_repaid), 0) as total FROM loan_repayments WHERE date_paid >= ? AND date_paid <= ?",
+                "SELECT COALESCE(SUM(ABS(amount)), 0) as total FROM expenses WHERE status = 'received' AND date >= ? AND date <= ?"
             ];
             
             foreach ($money_in_queries as $query) {
                 $stmt = $db->conn->prepare($query);
                 if ($stmt) {
-                    $stmt->bind_param("ss", $today_start, $today_end);
+                    $stmt->bind_param("ss", $count_from, $today_end);
                     $stmt->execute();
                     $total_money_in += $stmt->get_result()->fetch_assoc()['total'];
                     $stmt->close();
@@ -309,16 +343,16 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
             
             // FIXED: Comprehensive fees calculation
             $fees_queries = [
-                "SELECT COALESCE(SUM(amount), 0) as total FROM business_group_transactions WHERE type = 'Withdrawal Fee' AND date BETWEEN ? AND ?",
-                "SELECT COALESCE(SUM(withdrawal_fee), 0) as total FROM savings WHERE type = 'Withdrawal' AND date BETWEEN ? AND ?",
-                "SELECT COALESCE(SUM(withdrawal_fee), 0) as total FROM payment WHERE date_created BETWEEN ? AND ?",
-                "SELECT COALESCE(SUM(withdrawal_fee), 0) as total FROM group_withdrawals WHERE date_withdrawn BETWEEN ? AND ?"
+                "SELECT COALESCE(SUM(amount), 0) as total FROM business_group_transactions WHERE type = 'Withdrawal Fee' AND date >= ? AND date <= ?",
+                "SELECT COALESCE(SUM(withdrawal_fee), 0) as total FROM savings WHERE type = 'Withdrawal' AND date >= ? AND date <= ?",
+                "SELECT COALESCE(SUM(withdrawal_fee), 0) as total FROM payment WHERE date_created >= ? AND date_created <= ?",
+                "SELECT COALESCE(SUM(withdrawal_fee), 0) as total FROM group_withdrawals WHERE date_withdrawn >= ? AND date_withdrawn <= ?"
             ];
             
             foreach ($fees_queries as $query) {
                 $stmt = $db->conn->prepare($query);
                 if ($stmt) {
-                    $stmt->bind_param("ss", $today_start, $today_end);
+                    $stmt->bind_param("ss", $count_from, $today_end);
                     $stmt->execute();
                     $total_fees += $stmt->get_result()->fetch_assoc()['total'];
                     $stmt->close();
@@ -327,22 +361,36 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
             
             // Money out calculations
             $money_out_queries = [
-                "SELECT COALESCE(SUM(amount), 0) as total FROM group_withdrawals WHERE date_withdrawn BETWEEN ? AND ?",
-                "SELECT COALESCE(SUM(amount), 0) as total FROM business_group_transactions WHERE type = 'Withdrawal' AND date BETWEEN ? AND ?",
-                "SELECT COALESCE(SUM(amount), 0) as total FROM savings WHERE type = 'Withdrawal' AND date BETWEEN ? AND ?",
-                "SELECT COALESCE(SUM(pay_amount), 0) as total FROM payment WHERE date_created BETWEEN ? AND ?",
-                "SELECT COALESCE(SUM(ABS(amount)), 0) as total FROM expenses WHERE (status = 'completed' OR status IS NULL) AND date BETWEEN ? AND ?"
+                "SELECT COALESCE(SUM(amount), 0) as total FROM group_withdrawals WHERE date_withdrawn >= ? AND date_withdrawn <= ?",
+                "SELECT COALESCE(SUM(amount), 0) as total FROM business_group_transactions WHERE type = 'Withdrawal' AND date >= ? AND date <= ?",
+                "SELECT COALESCE(SUM(amount), 0) as total FROM savings WHERE type = 'Withdrawal' AND date >= ? AND date <= ?",
+                "SELECT COALESCE(SUM(pay_amount), 0) as total FROM payment WHERE date_created >= ? AND date_created <= ?",
+                "SELECT COALESCE(SUM(ABS(amount)), 0) as total FROM expenses WHERE (status = 'completed' OR status IS NULL) AND date >= ? AND date <= ?"
             ];
             
             foreach ($money_out_queries as $query) {
                 $stmt = $db->conn->prepare($query);
                 if ($stmt) {
-                    $stmt->bind_param("ss", $today_start, $today_end);
+                    $stmt->bind_param("ss", $count_from, $today_end);
                     $stmt->execute();
                     $total_money_out += $stmt->get_result()->fetch_assoc()['total'];
                     $stmt->close();
                 }
             }
+            
+            // Get the current float amounts BEFORE reset (excluding previous resets)
+            $current_float_query = "SELECT 
+                        COALESCE(SUM(CASE WHEN type = 'add' THEN amount ELSE 0 END), 0) as opening_for_history,
+                        COALESCE(SUM(CASE WHEN type = 'offload' THEN amount ELSE 0 END), 0) as offloaded_for_history
+                      FROM float_management
+                      WHERE type NOT IN ('reset_add', 'reset_off')
+                      AND date_created >= ? 
+                      AND date_created <= ?";
+            $stmt = $db->conn->prepare($current_float_query);
+            $stmt->bind_param("ss", $count_from, $today_end);
+            $stmt->execute();
+            $current_float = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
             
             // Save to history with CORRECT closing float (including fees)
             $history_query = "INSERT INTO float_history (
@@ -355,18 +403,18 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
             $stmt->bind_param("sdddddsis", 
                 $current_date, 
                 $closing_float,  // This now includes all fees
-                $current_totals['total_added'],
+                $current_float['opening_for_history'],
                 $total_money_in,
                 $total_money_out,
                 $total_fees,
-                $current_totals['total_offloaded'],
+                $current_float['offloaded_for_history'],
                 $user_id,
                 $current_datetime
             );
             $stmt->execute();
             $stmt->close();
             
-            // Add negative entries to neutralize current totals
+            // FIXED: Add negative entries to neutralize ALL historical float records (not just today's)
             if ($current_totals['total_added'] > 0) {
                 $neutralize_add = "INSERT INTO float_management (receipt_no, amount, type, user_id, date_created) 
                                   VALUES (?, ?, 'reset_add', ?, ?)";
@@ -389,7 +437,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
                 $stmt->close();
             }
             
-            $_SESSION['success_msg'] = "Float has been reset successfully! Closing amount of KSh " . number_format($closing_float, 2) . " saved to history. All transaction records preserved for audit and filtering.";
+            $_SESSION['success_msg'] = "Float has been reset successfully! Closing amount of KSh " . number_format($closing_float, 2) . " saved to history. All cards will now show zero. Transaction records preserved for audit and filtering.";
             
         } catch (Exception $e) {
             error_log("Error in float reset: " . $e->getMessage());
@@ -400,12 +448,13 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
         exit();
     }
 
-    // Get float totals for the filtered period
+    // Get float totals for the filtered period - FIXED
     $float_query = "SELECT 
                 COALESCE(SUM(CASE WHEN type = 'add' THEN amount ELSE 0 END), 0) as total_added,
                 COALESCE(SUM(CASE WHEN type = 'offload' THEN amount ELSE 0 END), 0) as total_offloaded
               FROM float_management 
-              WHERE date_created BETWEEN ? AND ?";
+              WHERE date_created BETWEEN ? AND ?
+              AND type NOT IN ('reset_add', 'reset_off')";
     
     if ($float_type !== 'all') {
         $float_query .= " AND type = ?";
@@ -423,7 +472,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
     $filtered_opening_float = $float_result['total_added'];
     $filtered_total_offloaded = $float_result['total_offloaded'];
 
-    // Get float transactions with filtering
+    // Get float transactions with filtering - MARK reset entries differently
     $float_transactions_query = "SELECT f.*, u.username as served_by,
                                 CASE 
                                     WHEN f.type = 'reset_add' THEN 'RESET (Add)'
@@ -437,7 +486,7 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
               WHERE f.date_created BETWEEN ? AND ?";
     
     if ($float_type !== 'all') {
-        $float_transactions_query .= " AND (f.type = ? OR f.type IN ('reset_add', 'reset_off'))";
+        $float_transactions_query .= " AND f.type = ?";
     }
     
     $float_transactions_query .= " ORDER BY f.date_created DESC";
@@ -451,29 +500,48 @@ if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'admin' && $_SESSION[
     $stmt->execute();
     $float_transactions = $stmt->get_result();
 
-    // For current day float totals
+    // For current day float totals - FIXED to properly handle resets
     $today_start = date('Y-m-d 00:00:00');
     $today_end = date('Y-m-d 23:59:59');
     
-    $query = "SELECT 
-                COALESCE(SUM(CASE WHEN type = 'add' THEN amount 
-                                 WHEN type = 'reset_add' THEN amount 
-                                 ELSE 0 END), 0) as total_added,
-                COALESCE(SUM(CASE WHEN type = 'offload' THEN amount 
-                                 WHEN type = 'reset_off' THEN amount 
-                                 ELSE 0 END), 0) as total_offloaded
-              FROM float_management 
-              WHERE date_created BETWEEN ? AND ?";
-    $stmt = $db->conn->prepare($query);
+    // Get the last reset time today (if any)
+    $reset_check_query = "SELECT MAX(date_created) as last_reset 
+                          FROM float_management 
+                          WHERE (type = 'reset_add' OR type = 'reset_off') 
+                          AND date_created BETWEEN ? AND ?";
+    $stmt = $db->conn->prepare($reset_check_query);
     $stmt->bind_param("ss", $today_start, $today_end);
     $stmt->execute();
+    $reset_result = $stmt->get_result()->fetch_assoc();
+    $last_reset = $reset_result['last_reset'];
+    $stmt->close();
+    
+    // If there was a reset today, only count transactions AFTER the reset
+    if ($last_reset) {
+        $count_from = $last_reset;
+    } else {
+        $count_from = $today_start;
+    }
+    
+    // Now get float totals, EXCLUDING reset entries (they're just neutralization records)
+    $query = "SELECT 
+                COALESCE(SUM(CASE WHEN type = 'add' THEN amount ELSE 0 END), 0) as total_added,
+                COALESCE(SUM(CASE WHEN type = 'offload' THEN amount ELSE 0 END), 0) as total_offloaded
+              FROM float_management 
+              WHERE date_created >= ? 
+              AND date_created <= ?
+              AND type NOT IN ('reset_add', 'reset_off')";
+    $stmt = $db->conn->prepare($query);
+    $stmt->bind_param("ss", $count_from, $today_end);
+    $stmt->execute();
     $today_float_result = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
     
     $opening_float = $today_float_result['total_added'];
     $total_offloaded = $today_float_result['total_offloaded'];
 
     // Handle transaction filtering
-    $start_date = isset($_GET['start_date']) ? $_GET['start_date'] . " 00:00:00" : $today_start;
+    $start_date = isset($_GET['start_date']) ? $_GET['start_date'] . " 00:00:00" : $count_from;
     $end_date = isset($_GET['end_date']) ? $_GET['end_date'] . " 23:59:59" : $today_end;
 
     // UPDATED: Group Savings Query with proper name display

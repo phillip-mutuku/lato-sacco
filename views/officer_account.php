@@ -308,7 +308,7 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
                             <form class="form-inline" method="GET">
                                 <input type="text" class="form-control mr-2" name="search_query" placeholder="Search by Shareholder No or National ID" value="<?php echo isset($_GET['search_query']) ? $_GET['search_query'] : ''; ?>">
                                 <button style="background-color: #51087E; color: white;" type="submit" class="btn">Search</button>
-                                <a href="account.php" class="btn btn-warning ml-2">Refresh</a>
+                                <a href="officer_account.php" class="btn btn-warning ml-2">Refresh</a>
                                 <a href="../controllers/export_clients_to_excel.php" class="btn btn-export ml-2">
                                     <i class="fas fa-file-excel mr-1"></i> Export to Excel
                                 </a>
@@ -366,7 +366,7 @@ $next_shareholder_no = str_pad(($row['max_no'] + 1), 3, '0', STR_PAD_LEFT);
                                                     Action
                                                 </button>
                                                 <div class="dropdown-menu" aria-labelledby="dropdownMenuButton<?php echo $fetch['account_id']; ?>">
-                                                    <a class="dropdown-item" href="#" onclick="viewAccount(<?php echo $fetch['account_id']; ?>)">View</a>
+                                                    <a class="dropdown-item" style="display: none"; href="#" onclick="viewAccount(<?php echo $fetch['account_id']; ?>)">View</a>
                                                     <a class="dropdown-item bg-warning text-white" href="#" onclick="editAccount(<?php echo $fetch['account_id']; ?>)">Edit</a>
                                                     <?php if ($_SESSION['role'] === 'admin'): ?>
                                                     <a class="dropdown-item bg-danger text-white" href="#" onclick="deleteAccount(<?php echo $fetch['account_id']; ?>)">Delete</a>

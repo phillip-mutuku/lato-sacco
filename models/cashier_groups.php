@@ -587,7 +587,7 @@ $current_tab = isset($_GET['tab']) ? $_GET['tab'] : 'groups';
 
                     <?php else: ?>
                         <!-- Defaulters Tab Content -->
-                        <?php include '../components/groups/defaulters_table.php'; ?>
+                        <?php include '../components/groups/cashier_defaulters_table.php'; ?>
                     <?php endif; ?>
 
                 </div>
@@ -1307,7 +1307,7 @@ $current_tab = isset($_GET['tab']) ? $_GET['tab'] : 'groups';
             // View member details - Using event delegation for DataTables pagination
             $(document).on('click', '.view-member-details', function() {
                 var memberId = $(this).data('member-id');
-                window.open('../views/view_account.php?id=' + memberId, '_blank');
+                window.open('../views/cashier_view_account.php?id=' + memberId, '_blank');
             });
 
             // Excel Export

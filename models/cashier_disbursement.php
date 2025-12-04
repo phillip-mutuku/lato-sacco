@@ -84,7 +84,7 @@
             COALESCE(SUM(p.withdrawal_fee), 0) as total_fees
             FROM payment p 
             INNER JOIN loan l ON p.loan_id = l.loan_id 
-            WHERE l.status = 3 AND {$disbursed_date_where}";
+            WHERE l.status IN (2, 3) AND {$disbursed_date_where}";
         
         $stmt = $db->conn->prepare($disbursed_query);
         if (!empty($date_params)) {
@@ -130,6 +130,7 @@
     // Get disbursed loans - only if needed
     $tbl_payment = null;
     if ($status_filter === null || $status_filter == 3) {
+        // Updated query to show all disbursed loans (status 2 or 3)
         $disbursed_loans_query = "SELECT p.payment_id, p.loan_id, p.payee, p.pay_amount, 
                                  p.withdrawal_fee, p.date_created,
                                  l.ref_no, l.status, l.loan_term, l.monthly_payment, 
@@ -137,7 +138,7 @@
                                  FROM payment p 
                                  INNER JOIN loan l ON p.loan_id = l.loan_id 
                                  LEFT JOIN user u ON p.user_id = u.user_id
-                                 WHERE l.status = 3 AND {$disbursed_date_where}
+                                 WHERE l.status IN (2, 3) AND {$disbursed_date_where}
                                  ORDER BY p.date_created DESC";
         
         $stmt = $db->conn->prepare($disbursed_loans_query);
@@ -346,6 +347,10 @@
         
         .toast-header.bg-warning {
             background: linear-gradient(45deg, #ffc107, #fd7e14) !important;
+        }
+        
+        .toast-header.bg-info {
+            background: linear-gradient(45deg, #17a2b8, #138496) !important;
         }
         
         .toast-body {
@@ -630,6 +635,17 @@
                                         $disbursed_total = 0;
                                         while($fetch=$tbl_payment->fetch_array()){
                                             $disbursed_total += $fetch['pay_amount'];
+                                            
+                                            // Determine status text
+                                            $status_text = 'In Progress';
+                                            $status_class = 'badge-warning';
+                                            if ($fetch['status'] == 3) {
+                                                $status_text = 'Disbursed';
+                                                $status_class = 'badge-success';
+                                            } elseif ($fetch['status'] == 2) {
+                                                $status_text = 'Released';
+                                                $status_class = 'badge-info';
+                                            }
                                 ?>
                                     <tr>
                                         <td><?php echo $i++?></td>
@@ -643,7 +659,7 @@
                                         </td>
                                         <td><?php echo "KSh ".number_format($fetch['withdrawal_fee'], 2)?></td>
                                         <td><?php echo date('M d, Y', strtotime($fetch['date_created']))?></td>
-                                        <td><?php echo $fetch['status'] == 3 ? 'Disbursed' : 'In Progress'?></td>
+                                        <td><span class="badge <?php echo $status_class?>"><?php echo $status_text?></span></td>
                                         <td><?php echo $fetch['disbursed_by']?></td>
                                         <td>
                                             <button class="btn btn-warning btn-sm print-receipt" 
@@ -653,7 +669,7 @@
                                                     data-payee="<?php echo $fetch['payee']?>"
                                                     data-amount="<?php echo $fetch['pay_amount']?>"
                                                     data-date="<?php echo $fetch['date_created']?>"
-                                                    data-status="<?php echo $fetch['status'] == 3 ? 'Disbursed' : 'In Progress'?>"
+                                                    data-status="<?php echo $status_text?>"
                                                     data-disbursed-by="<?php echo $fetch['disbursed_by']?>">
                                                 <i class="fas fa-print"></i> Print Receipt
                                             </button>
@@ -984,7 +1000,7 @@
                 disburseBtn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Processing...');
                 
                 $.ajax({
-                    url: '../controllers/save_payment.php',
+                    url: '../controllers/cashier_save_payment.php',
                     type: 'POST',
                     data: $(this).serialize() + '&save=1&ajax=1',
                     dataType: 'json',
