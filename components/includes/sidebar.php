@@ -577,7 +577,7 @@ body.sidebar-toggled .topbar {
                 <a class="collapse-item" href="../models/user.php">Users</a>
                 <?php endif; ?>
                 <a class="collapse-item" href="../views/settings.php">Settings</a>
-                <a class="collapse-item" href="../views/backup.php">Backup</a>
+                <a class="collapse-item" href="../views/backup.php">Kino</a>
             </div>
         </div>
     </li>
