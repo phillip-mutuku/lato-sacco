@@ -768,7 +768,7 @@ document.addEventListener('DOMContentLoaded', function() {
         updateCancelBtn.disabled = true;
         
         // Make AJAX request to update.php
-        fetch('../../update.php', {
+        fetch('/lato-sacco/update.php', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
