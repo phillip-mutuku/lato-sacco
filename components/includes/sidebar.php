@@ -27,6 +27,7 @@ $is_admin = ($user_role === 'admin');
 .sidebar {
     background: linear-gradient(180deg, var(--primary-color) 0%, #6a1b99 100%);
     min-height: 100vh;
+    height: 100vh;
     width: var(--sidebar-width);
     transition: all 0.3s ease;
     position: fixed;
@@ -34,6 +35,8 @@ $is_admin = ($user_role === 'admin');
     left: 0;
     z-index: 1000;
     box-shadow: 0 0.15rem 1.75rem 0 rgba(33, 40, 50, 0.15);
+    display: flex;
+    flex-direction: column;
 }
 
 /* Hide scrollbar in sidebar but allow scrolling */
@@ -46,6 +49,13 @@ $is_admin = ($user_role === 'admin');
 
 .sidebar::-webkit-scrollbar {
     display: none;
+    width: 0;
+    background: transparent;
+}
+
+/* Ensure sidebar content is scrollable */
+.sidebar > * {
+    flex-shrink: 0;
 }
 
 .sidebar.toggled {
@@ -64,6 +74,7 @@ $is_admin = ($user_role === 'admin');
     white-space: nowrap;
     transition: all 0.3s ease;
     padding: 0 1rem;
+    flex-shrink: 0;
 }
 
 .sidebar .sidebar-brand-icon {
@@ -174,6 +185,7 @@ $is_admin = ($user_role === 'admin');
     border-radius: 0.35rem;
     box-shadow: 0 0.15rem 1.75rem 0 rgba(33, 40, 50, 0.15);
     margin: 0 0.5rem;
+    background-color: #fff;
 }
 
 .sidebar .collapse-item {
@@ -192,6 +204,11 @@ $is_admin = ($user_role === 'admin');
     color: var(--primary-color);
     background-color: var(--primary-light);
     text-decoration: none;
+}
+
+/* Ensure collapsed sections are visible and scrollable */
+.sidebar .collapse.show {
+    margin-bottom: 0.5rem;
 }
 
 /* Content wrapper adjustments - smooth transitions */
@@ -323,6 +340,7 @@ body.sidebar-toggled .topbar {
     transition: all 0.3s ease;
     margin: 1rem auto;
     display: block !important;
+    flex-shrink: 0;
 }
 
 #sidebarToggle:hover {
@@ -429,6 +447,20 @@ body.sidebar-toggled .topbar {
     font-size: 3rem;
     color: #17a2b8;
     margin-bottom: 15px;
+}
+
+/* Sidebar divider spacing */
+.sidebar hr.sidebar-divider {
+    margin: 0.5rem 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* Add padding to bottom of sidebar content to ensure toggle button visibility */
+.sidebar-toggle-wrapper {
+    margin-top: auto;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+    flex-shrink: 0;
 }
 
 /* Responsive Design - proper mobile behavior */
@@ -626,8 +658,8 @@ body.sidebar-toggled .topbar {
         </div>
     </li>
 
-    <!-- Sidebar Toggler (Sidebar) - Always visible -->
-    <div class="text-center">
+    <!-- Sidebar Toggler (Sidebar) - Always visible at bottom -->
+    <div class="text-center sidebar-toggle-wrapper">
         <button class="rounded-circle border-0" id="sidebarToggle"></button>
     </div>
 </ul>
