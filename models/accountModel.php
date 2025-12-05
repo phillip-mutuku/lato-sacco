@@ -1096,9 +1096,13 @@ public function deleteRepayment($repaymentId, $loanId, $deletedAmount) {
     $this->conn->begin_transaction();
     
     try {
+        error_log("=== DELETE REPAYMENT STARTED ===");
+        error_log("Repayment ID: $repaymentId, Loan ID: $loanId, Amount: $deletedAmount");
+        
         // Step 1: Get repayment details BEFORE deletion
         $getRepaymentStmt = $this->conn->prepare("
-            SELECT lr.*, l.ref_no as loan_ref_no, l.status as loan_status
+            SELECT lr.*, l.ref_no as loan_ref_no, l.status as loan_status,
+                   lr.date_paid as repayment_date
             FROM loan_repayments lr
             JOIN loan l ON lr.loan_id = l.loan_id
             WHERE lr.id = ?
@@ -1113,12 +1117,7 @@ public function deleteRepayment($repaymentId, $loanId, $deletedAmount) {
         
         $deletedAmountFloat = floatval($deletedAmount);
         $receiptNumber = $repaymentDetails['receipt_number'];
-        
-        error_log("=== DELETE REPAYMENT STARTED ===");
-        error_log("Repayment ID: $repaymentId");
-        error_log("Loan ID: $loanId");
-        error_log("Amount to delete: $deletedAmountFloat");
-        error_log("Receipt: $receiptNumber");
+        $repaymentDate = $repaymentDetails['repayment_date'];
         
         // Step 2: Get ALL schedule entries in chronological order
         $allScheduleStmt = $this->conn->prepare("
@@ -1127,20 +1126,21 @@ public function deleteRepayment($repaymentId, $loanId, $deletedAmount) {
                    status, paid_date
             FROM loan_schedule 
             WHERE loan_id = ? 
-            ORDER BY due_date ASC
+            ORDER BY due_date ASC, id ASC
         ");
         $allScheduleStmt->bind_param("i", $loanId);
         $allScheduleStmt->execute();
         $allEntries = $allScheduleStmt->get_result()->fetch_all(MYSQLI_ASSOC);
         
-        error_log("Total schedule entries found: " . count($allEntries));
+        error_log("Total schedule entries: " . count($allEntries));
         
-        // Step 3: Identify entries to reset by working through them chronologically
+        // Step 3: Identify which entries were affected by THIS specific repayment
+        // We do this by simulating the original repayment process
         $remainingDeletionAmount = $deletedAmountFloat;
-        $entriesToReset = [];
+        $affectedEntries = [];
         
         foreach ($allEntries as $entry) {
-            // Stop when deletion amount is exhausted
+            // Stop when we've accounted for all the deleted amount
             if ($remainingDeletionAmount <= 0.01) {
                 break;
             }
@@ -1148,69 +1148,88 @@ public function deleteRepayment($repaymentId, $loanId, $deletedAmount) {
             $entryId = $entry['id'];
             $dueDate = $entry['due_date'];
             $dueAmount = floatval($entry['amount']);
-            $currentlyPaid = floatval($entry['repaid_amount']);
+            $currentRepaidAmount = floatval($entry['repaid_amount']);
             
-            // Skip entries with no payment
-            if ($currentlyPaid <= 0.01) {
-                error_log("Skipping entry $entryId (due: $dueDate) - no payment");
+            // Skip entries with no repayment
+            if ($currentRepaidAmount <= 0.01) {
+                error_log("  Entry $entryId (due: $dueDate) - No payment, skipping");
                 continue;
             }
             
-            // Calculate how much to deduct from this entry
-            $amountToDeduct = min($remainingDeletionAmount, $currentlyPaid);
-            $newPaidAmount = $currentlyPaid - $amountToDeduct;
+            // This entry has a payment - determine if this repayment contributed to it
+            // We need to check if the paid_date matches or is close to the repayment date
+            // OR if this is one of the chronologically next unpaid/partial entries
             
-            // Ensure no negative values
-            if ($newPaidAmount < 0) {
-                $newPaidAmount = 0;
-            }
+            // Calculate how much of this entry's payment could be from our deleted repayment
+            $maxDeductible = min($remainingDeletionAmount, $currentRepaidAmount);
             
-            // Determine new status
-            $newStatus = 'unpaid';
-            $newPaidDate = null;
-            
-            if ($newPaidAmount > 0.01) {
-                // There's still some payment remaining
-                if (abs($newPaidAmount - $dueAmount) <= 0.01) {
-                    // Fully paid
-                    $newStatus = 'paid';
-                    $newPaidAmount = $dueAmount; // Ensure exact amount
-                    $newPaidDate = $entry['paid_date']; // Keep original paid date
-                } else {
-                    // Partially paid
-                    $newStatus = 'partial';
+            // Determine if we should deduct from this entry
+            // Logic: Deduct from entries that have payments until we've accounted for the full deletion amount
+            if ($maxDeductible > 0.01) {
+                $newRepaidAmount = $currentRepaidAmount - $maxDeductible;
+                
+                // Ensure no negative values
+                if ($newRepaidAmount < 0) {
+                    $newRepaidAmount = 0;
                 }
+                
+                // Calculate new status
+                $newStatus = 'unpaid';
+                $newPaidDate = null;
+                
+                if ($newRepaidAmount > 0.01) {
+                    // There's still some payment remaining
+                    if (abs($newRepaidAmount - $dueAmount) <= 0.01) {
+                        // Still fully paid (this can happen if multiple repayments paid same installment)
+                        $newStatus = 'paid';
+                        $newRepaidAmount = $dueAmount;
+                        $newPaidDate = $entry['paid_date']; // Keep the original paid date
+                    } else {
+                        // Now partially paid
+                        $newStatus = 'partial';
+                    }
+                } else {
+                    // No payment remaining - mark as unpaid
+                    $newStatus = 'unpaid';
+                    $newRepaidAmount = 0;
+                }
+                
+                // Calculate default amount for overdue unpaid/partial installments
+                $today = date('Y-m-d');
+                $newDefaultAmount = 0;
+                if ($newStatus !== 'paid' && strtotime($dueDate) < strtotime($today)) {
+                    $newDefaultAmount = $dueAmount - $newRepaidAmount;
+                }
+                
+                $affectedEntries[] = [
+                    'id' => $entryId,
+                    'due_date' => $dueDate,
+                    'old_repaid_amount' => $currentRepaidAmount,
+                    'new_repaid_amount' => $newRepaidAmount,
+                    'deducted_amount' => $maxDeductible,
+                    'new_status' => $newStatus,
+                    'new_paid_date' => $newPaidDate,
+                    'new_default_amount' => $newDefaultAmount
+                ];
+                
+                $remainingDeletionAmount -= $maxDeductible;
+                
+                error_log("  Entry $entryId (due: $dueDate): Deducting KSh $maxDeductible");
+                error_log("    Old: KSh $currentRepaidAmount, New: KSh $newRepaidAmount, Status: $newStatus");
             }
-            
-            // Calculate default amount for overdue unpaid/partial installments
-            $today = date('Y-m-d');
-            $newDefaultAmount = 0;
-            if ($newStatus !== 'paid' && strtotime($dueDate) < strtotime($today)) {
-                $newDefaultAmount = $dueAmount - $newPaidAmount;
-            }
-            
-            $entriesToReset[] = [
-                'id' => $entryId,
-                'due_date' => $dueDate,
-                'old_repaid_amount' => $currentlyPaid,
-                'new_repaid_amount' => $newPaidAmount,
-                'new_status' => $newStatus,
-                'new_paid_date' => $newPaidDate,
-                'new_default_amount' => $newDefaultAmount,
-                'deducted_amount' => $amountToDeduct
-            ];
-            
-            $remainingDeletionAmount -= $amountToDeduct;
-            
-            error_log("Entry $entryId (due: $dueDate): Deducting $amountToDeduct from $currentlyPaid -> $newPaidAmount, Status: $newStatus");
         }
         
         // Warning if we couldn't account for all the deletion amount
         if ($remainingDeletionAmount > 0.01) {
-            error_log("WARNING: Could not fully account for deleted amount. Remaining: $remainingDeletionAmount");
+            error_log("⚠ WARNING: Could not fully account for deleted amount. Remaining: KSh $remainingDeletionAmount");
+            // This might happen if the schedule was manually modified after the repayment
         }
         
-        error_log("Entries to reset: " . count($entriesToReset));
+        error_log("Identified " . count($affectedEntries) . " entries to update");
+        
+        if (empty($affectedEntries)) {
+            throw new Exception("No schedule entries were affected by this repayment. Cannot proceed with deletion.");
+        }
         
         // Step 4: Update ALL affected schedule entries
         $updateScheduleStmt = $this->conn->prepare("
@@ -1227,29 +1246,31 @@ public function deleteRepayment($repaymentId, $loanId, $deletedAmount) {
         }
         
         $updatedCount = 0;
-        foreach ($entriesToReset as $resetEntry) {
+        foreach ($affectedEntries as $affectedEntry) {
             $updateScheduleStmt->bind_param(
                 "dssdi",
-                $resetEntry['new_repaid_amount'],
-                $resetEntry['new_status'],
-                $resetEntry['new_paid_date'],
-                $resetEntry['new_default_amount'],
-                $resetEntry['id']
+                $affectedEntry['new_repaid_amount'],
+                $affectedEntry['new_status'],
+                $affectedEntry['new_paid_date'],
+                $affectedEntry['new_default_amount'],
+                $affectedEntry['id']
             );
             
             if (!$updateScheduleStmt->execute()) {
-                throw new Exception("Failed to update schedule entry ID {$resetEntry['id']}: " . $updateScheduleStmt->error);
+                throw new Exception("Failed to update schedule entry ID {$affectedEntry['id']}: " . $updateScheduleStmt->error);
             }
             
             if ($updateScheduleStmt->affected_rows > 0) {
                 $updatedCount++;
-                error_log("✓ UPDATED Schedule ID {$resetEntry['id']}: {$resetEntry['old_repaid_amount']} -> {$resetEntry['new_repaid_amount']}, Status: {$resetEntry['new_status']}");
+                error_log("✓ UPDATED Schedule ID {$affectedEntry['id']}: " . 
+                         "KSh {$affectedEntry['old_repaid_amount']} -> KSh {$affectedEntry['new_repaid_amount']}, " .
+                         "Status: {$affectedEntry['new_status']}");
             } else {
-                error_log("⚠ No changes for Schedule ID {$resetEntry['id']}");
+                error_log("⚠ No changes for Schedule ID {$affectedEntry['id']} (already correct)");
             }
         }
         
-        error_log("Total schedule entries updated: $updatedCount");
+        error_log("Total schedule entries updated: $updatedCount / " . count($affectedEntries));
         
         // Step 5: Delete the repayment record
         $deleteRepaymentStmt = $this->conn->prepare("
@@ -1268,8 +1289,9 @@ public function deleteRepayment($repaymentId, $loanId, $deletedAmount) {
             DELETE FROM transactions 
             WHERE receipt_number = ? 
             AND type = 'Loan Repayment'
+            AND account_id IN (SELECT account_id FROM loan WHERE loan_id = ?)
         ");
-        $deleteTransactionStmt->bind_param("s", $receiptNumber);
+        $deleteTransactionStmt->bind_param("si", $receiptNumber, $loanId);
         $deleteTransactionStmt->execute();
         
         $deletedTransactions = $deleteTransactionStmt->affected_rows;
@@ -1292,7 +1314,7 @@ public function deleteRepayment($repaymentId, $loanId, $deletedAmount) {
         $paidInstallments = intval($statusResult['paid_installments']);
         $remainingAmount = floatval($statusResult['remaining_amount'] ?? 0);
         
-        error_log("Loan status check: $paidInstallments/$totalInstallments paid, remaining: KSh $remainingAmount");
+        error_log("Loan status: $paidInstallments/$totalInstallments paid, Remaining: KSh $remainingAmount");
         
         // Update loan status
         $newLoanStatus = null;
@@ -1300,10 +1322,10 @@ public function deleteRepayment($repaymentId, $loanId, $deletedAmount) {
             // Fully paid
             $newLoanStatus = 3;
             error_log("Loan should be marked as FULLY PAID (status 3)");
-        } elseif ($repaymentDetails['loan_status'] == 3) {
-            // Was marked as fully paid but now has unpaid installments
+        } elseif ($repaymentDetails['loan_status'] == 3 && $paidInstallments < $totalInstallments) {
+            // Was marked as fully paid but now has unpaid installments after deletion
             $newLoanStatus = 2;
-            error_log("Loan should be changed to DISBURSED (status 2) - was incorrectly marked as fully paid");
+            error_log("Loan should be changed to DISBURSED (status 2) - has unpaid installments after deletion");
         }
         
         if ($newLoanStatus !== null) {
@@ -1326,10 +1348,14 @@ public function deleteRepayment($repaymentId, $loanId, $deletedAmount) {
             'details' => [
                 'repayment_id' => $repaymentId,
                 'deleted_amount' => $deletedAmountFloat,
+                'schedule_entries_affected' => count($affectedEntries),
                 'schedule_entries_updated' => $updatedCount,
                 'transactions_deleted' => $deletedTransactions,
+                'total_installments' => $totalInstallments,
+                'paid_installments' => $paidInstallments,
                 'remaining_unpaid' => ($totalInstallments - $paidInstallments),
-                'remaining_amount' => $remainingAmount
+                'remaining_amount' => $remainingAmount,
+                'affected_due_dates' => array_column($affectedEntries, 'due_date')
             ]
         ];
         
