@@ -8,6 +8,7 @@ $user_role = isset($_SESSION['role']) ? $_SESSION['role'] : 'user';
 $is_admin = ($user_role === 'admin');
 ?>
 
+
 <style>
 :root {
     --primary-color: #51087E;
